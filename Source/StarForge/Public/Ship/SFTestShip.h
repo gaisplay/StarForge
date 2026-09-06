@@ -1,0 +1,75 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "SFTestShip.generated.h"
+
+class USFShipFrameComponent;
+class UStaticMeshComponent;
+
+/**
+ * Throwaway measurement rig: a boxed room that flies a scripted manoeuvre at
+ * the design's speed and rotation ceilings.
+ *
+ * Motion is kinematic rather than simulated, because the point of the rig is a
+ * repeatable worst case. Chaos gets wired in during the flight phase, once the
+ * question this rig exists to answer has been answered.
+ */
+UCLASS()
+class STARFORGE_API ASFTestShip : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ASFTestShip();
+
+	virtual void Tick(float DeltaSeconds) override;
+
+	/** Boost ceiling from the design, converted to Unreal units: 400 m/s. */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Profile")
+	double PeakSpeedCms = 40000.0;
+
+	/** Pitch and yaw ceiling from the design. */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Profile")
+	double PeakPitchYawRateDegPerSec = 120.0;
+
+	/** Roll ceiling from the design. */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Profile")
+	double PeakRollRateDegPerSec = 180.0;
+
+	/** Seconds for one full sweep of the manoeuvre profile. */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Profile")
+	double ProfilePeriodSeconds = 8.0;
+
+	/** Interior half-extent in centimetres, measured from the pivot. */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Profile")
+	double InteriorHalfExtentCm = 400.0;
+
+	USFShipFrameComponent* GetFrameComponent() const { return Frame; }
+
+	/** Where a passenger should be placed so he starts standing on the floor. */
+	FVector GetInteriorSpawnWorldLocation() const;
+
+	/** This tick's linear acceleration in m/s^2, for the grav-plate readout. */
+	FVector GetLinearAccelMetersPerSecSq() const { return LinearAccelMetersPerSecSq; }
+
+	/** This tick's linear speed in m/s, so the readout shows where in the profile we are. */
+	double GetSpeedMetersPerSec() const { return PreviousVelocityCms.Size() / 100.0; }
+
+private:
+	/** Builds floor and four walls out of engine cubes, so the rig needs no content. */
+	UStaticMeshComponent* AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale);
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USceneComponent> Root;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFShipFrameComponent> Frame;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> Panels;
+
+	double ElapsedSeconds = 0.0;
+	FVector PreviousVelocityCms = FVector::ZeroVector;
+	FVector LinearAccelMetersPerSecSq = FVector::ZeroVector;
+};
