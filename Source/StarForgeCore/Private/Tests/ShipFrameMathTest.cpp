@@ -96,8 +96,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FShipFrameCentripetalTest::RunTest(const FString& Parameters)
 {
-	// Spinning at 2 rad/s about Z, an occupant 5 m out along X feels
-	// omega^2 * r = 20 m/s^2 pulling him outward, i.e. -20 along X.
+	// Spinning at 2 rad/s about Z, an occupant 5 m out along X undergoes
+	// omega^2 * r = 20 m/s^2 of centripetal acceleration, directed back toward
+	// the spin axis: -20 along X. What he subjectively feels is the opposite,
+	// outward direction; only the magnitude matters to the grav-plate check.
 	const FVector NoLinearAccel = FVector::ZeroVector;
 	const FVector Spin(0.0, 0.0, 2.0);
 	const FVector Offset(5.0, 0.0, 0.0);
