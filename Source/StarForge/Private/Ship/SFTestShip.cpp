@@ -8,7 +8,15 @@ namespace
 {
 	/** One engine cube is 100 cm on a side, so scale equals metres. */
 	constexpr double CubeEdgeCm = 100.0;
+	/** Panel thickness as a mesh scale factor, not centimetres: 0.2 x 100 cm = 20 cm. */
 	constexpr double PanelThickness = 0.2;
+
+	/**
+	 * Height above the floor plate at which an occupant is placed, in centimetres.
+	 * Must clear a standard character capsule half-height (88 cm) so the pawn starts
+	 * standing on the plate rather than embedded in it.
+	 */
+	constexpr double SpawnClearanceCm = 100.0;
 }
 
 ASFTestShip::ASFTestShip()
@@ -57,7 +65,7 @@ UStaticMeshComponent* ASFTestShip::AddBoxPanel(FName Name, const FVector& Relati
 FVector ASFTestShip::GetInteriorSpawnWorldLocation() const
 {
 	// Just above the floor plate, on the pivot.
-	const FVector Local(0.0, 0.0, -InteriorHalfExtentCm + 100.0);
+	const FVector Local(0.0, 0.0, -InteriorHalfExtentCm + SpawnClearanceCm);
 	return GetActorTransform().TransformPosition(Local);
 }
 
@@ -83,8 +91,9 @@ void ASFTestShip::Tick(float DeltaSeconds)
 	LinearAccelMetersPerSecSq = (VelocityCms - PreviousVelocityCms) / DeltaSeconds / 100.0;
 	PreviousVelocityCms = VelocityCms;
 
-	// All three angular axes loaded at once, out of phase, so no accidental
-	// symmetry hides a bug.
+	// All three angular axes loaded at once so no accidental symmetry hides a
+	// bug. Pitch and yaw sweep in quadrature; roll is held flat at its ceiling,
+	// which is the harsher case because it never lets up.
 	const FRotator RatePerSecond(
 		PeakPitchYawRateDegPerSec * FMath::Sin(Phase * 0.5),
 		PeakPitchYawRateDegPerSec * FMath::Cos(Phase * 0.5),

@@ -41,8 +41,16 @@ public:
 	UPROPERTY(EditAnywhere, Category = "StarForge|Profile")
 	double ProfilePeriodSeconds = 8.0;
 
-	/** Interior half-extent in centimetres, measured from the pivot. */
-	UPROPERTY(EditAnywhere, Category = "StarForge|Profile")
+	/**
+	 * Interior half-extent in centimetres, measured from the pivot.
+	 *
+	 * Read-only on purpose. The six hull panels bake their transforms from this
+	 * value in the constructor, while the spawn point recomputes from it on every
+	 * call. Editing it on a placed instance would move the spawn without moving
+	 * the walls, leaving the occupant inside a plate with no error raised. Change
+	 * the default here in C++ instead.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "StarForge|Profile")
 	double InteriorHalfExtentCm = 400.0;
 
 	USFShipFrameComponent* GetFrameComponent() const { return Frame; }
