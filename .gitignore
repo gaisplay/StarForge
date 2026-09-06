@@ -1,0 +1,19 @@
+# Unreal Engine generated
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.slnx
+*.vsconfig
+Automation_*.sln
+Automation_*.slnx
+*.xcodeproj
+*.xcworkspace
