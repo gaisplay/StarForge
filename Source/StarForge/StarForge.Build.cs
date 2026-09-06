@@ -14,7 +14,8 @@ public class StarForge : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
-			"EnhancedInput"
+			"EnhancedInput",
+			"StarForgeCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
