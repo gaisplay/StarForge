@@ -12,7 +12,7 @@ class USFShipFrameComponent;
  * A character's motion in one frame is two unrelated things. Being carried by
  * the ship is zero motion relative to the ship, so nothing along that path can
  * legitimately block it -- stock UE sweeps it anyway and collides with the
- * ship's own hull, which at 400 m/s is a three-metre line through a wall. That
+ * ship's own hull, which at 400 m/s is a six-metre line through a wall. That
  * part is done as a teleport here. Walking is a few centimetres against
  * momentarily static geometry, and is left to the stock swept path untouched.
  */
@@ -47,6 +47,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	double GetPeakJitterCm() const { return PeakJitterCm; }
 
+	/**
+	 * Seconds of settled, uncommanded time actually folded into the drift figures.
+	 * A drift of zero means nothing unless this is large: it separates "held
+	 * position for a minute" from "never took a reading".
+	 */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	double GetMeasuredSeconds() const { return MeasuredSeconds; }
+
 	/** Current position in the ship's coordinates, in centimetres. */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	FVector GetLocalLocation() const;
@@ -55,7 +63,7 @@ public:
 
 private:
 	void CarryWithFrame();
-	void UpdateDriftMeasurement();
+	void UpdateDriftMeasurement(float DeltaSeconds);
 
 	TWeakObjectPtr<USFShipFrameComponent> ShipFrame;
 
@@ -71,4 +79,13 @@ private:
 	double DriftCm = 0.0;
 	double PeakDriftCm = 0.0;
 	double PeakJitterCm = 0.0;
+
+	/** Seconds since the player last commanded movement. */
+	double SecondsSinceCommandedInput = 0.0;
+
+	/** Settled time folded into the drift figures so far. */
+	double MeasuredSeconds = 0.0;
+
+	/** False until a baseline has been taken against a live capsule. */
+	bool bBaselineValid = false;
 };

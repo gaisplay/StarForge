@@ -4,6 +4,16 @@
 #include "GameFramework/Controller.h"
 #include "Ship/SFShipFrameComponent.h"
 
+namespace
+{
+	/**
+	 * How long after the player stops commanding movement before drift measurement
+	 * resumes, in seconds. Long enough for his own momentum to brake out, short
+	 * enough that a one-minute standing test is nearly all measurement.
+	 */
+	constexpr double SettleSeconds = 0.5;
+}
+
 USFShipboardMovementComponent::USFShipboardMovementComponent()
 {
 	// The ship rotates the occupant explicitly in CarryWithFrame; letting the
@@ -18,13 +28,14 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 	if (NewFrame)
 	{
 		LastFrameTransform = NewFrame->GetFrameTransform();
-		DriftReferenceLocal = GetLocalLocation();
-		LastLocalLocation = DriftReferenceLocal;
 	}
 
 	DriftCm = 0.0;
 	PeakDriftCm = 0.0;
 	PeakJitterCm = 0.0;
+	MeasuredSeconds = 0.0;
+	SecondsSinceCommandedInput = 0.0;
+	bBaselineValid = false;
 }
 
 FVector USFShipboardMovementComponent::GetLocalLocation() const
@@ -46,6 +57,7 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 	}
 
 	CarryWithFrame();
+	UpdateDriftMeasurement(DeltaSeconds);
 }
 
 void USFShipboardMovementComponent::CarryWithFrame()
@@ -86,21 +98,43 @@ void USFShipboardMovementComponent::CarryWithFrame()
 	// Keep the engine's own base bookkeeping consistent even though the stock
 	// carry path was bypassed.
 	SaveBaseLocation();
-
-	UpdateDriftMeasurement();
 }
 
-void USFShipboardMovementComponent::UpdateDriftMeasurement()
+void USFShipboardMovementComponent::UpdateDriftMeasurement(float DeltaSeconds)
 {
+	// Only commanded input counts as intent. Residual velocity must never excuse a
+	// reading: uncommanded motion is precisely what this instrument exists to catch,
+	// and gating on it let a gross failure suppress its own measurement.
+	if (GetCurrentAcceleration().IsNearlyZero())
+	{
+		SecondsSinceCommandedInput += DeltaSeconds;
+	}
+	else
+	{
+		SecondsSinceCommandedInput = 0.0;
+	}
+
 	const FVector NowLocal = GetLocalLocation();
 
-	const bool bMovingOnPurpose =
-		!GetCurrentAcceleration().IsNearlyZero() || !Velocity.IsNearlyZero(1.0);
-
-	if (bMovingOnPurpose)
+	// The ship's origin is a legal place to stand, so GetLocalLocation cannot signal
+	// failure by returning zero. Refuse to baseline until there is a capsule to
+	// measure, or the first reading would bank the occupant's whole offset from
+	// origin into two peaks that never come back down.
+	if (!bBaselineValid)
 	{
-		// Walking legitimately changes the ship-local position, so re-baseline
-		// instead of counting it as drift.
+		if (UpdatedComponent)
+		{
+			DriftReferenceLocal = NowLocal;
+			LastLocalLocation = NowLocal;
+			bBaselineValid = true;
+		}
+		return;
+	}
+
+	if (SecondsSinceCommandedInput < SettleSeconds)
+	{
+		// His own momentum is still bleeding off. Re-baseline rather than bank
+		// walking as drift, but do not count this tick as measured either.
 		DriftReferenceLocal = NowLocal;
 		LastLocalLocation = NowLocal;
 		DriftCm = 0.0;
@@ -115,4 +149,5 @@ void USFShipboardMovementComponent::UpdateDriftMeasurement()
 	PeakJitterCm = FMath::Max(PeakJitterCm, JitterCm);
 
 	LastLocalLocation = NowLocal;
+	MeasuredSeconds += DeltaSeconds;
 }
