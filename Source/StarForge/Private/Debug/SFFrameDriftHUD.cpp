@@ -22,15 +22,21 @@ void ASFFrameDriftHUD::DrawHUD()
 {
 	Super::DrawHUD();
 
+	double Y = 48.0;
+
 	const ASFCharacter* Occupant = Cast<ASFCharacter>(GetOwningPawn());
 	if (!Occupant)
 	{
+		// A blank screen during a checkpoint run is indistinguishable from a rig that
+		// is simply quiet, so every exit from this function has to say why.
+		DrawLine(TEXT("NO SFCHARACTER POSSESSED - there is no occupant to measure"), Y, FLinearColor::Red);
 		return;
 	}
 
 	const USFShipboardMovementComponent* Movement = Occupant->GetShipboardMovement();
 	if (!Movement)
 	{
+		DrawLine(TEXT("NO SHIPBOARD MOVEMENT COMPONENT - nothing is being measured"), Y, FLinearColor::Red);
 		return;
 	}
 
@@ -38,8 +44,6 @@ void ASFFrameDriftHUD::DrawHUD()
 
 	const USFShipFrameComponent* Frame = Movement->GetShipFrame();
 	const ASFTestShip* Ship = Frame ? Cast<ASFTestShip>(Frame->GetOwner()) : nullptr;
-
-	double Y = 48.0;
 
 	DrawLine(FString::Printf(TEXT("elapsed              %.1f s"), ElapsedSeconds), Y);
 	DrawLine(FString::Printf(TEXT("drift now            %.3f cm"), Movement->GetDriftCm()), Y);
