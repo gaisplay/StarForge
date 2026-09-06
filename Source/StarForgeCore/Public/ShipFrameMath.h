@@ -24,4 +24,26 @@ namespace StarForge::ShipFrame
 		const FTransform& PrevShipWorld,
 		const FTransform& CurrShipWorld,
 		const FTransform& OccupantWorld);
+
+	/**
+	 * Ceiling of the ship's gravity-plate compensation, in m/s^2.
+	 * Below it an occupant walks normally; above it he is knocked off his feet.
+	 * Fixed at 2 g by the vertical slice design.
+	 */
+	inline constexpr double GravPlateLimitMetersPerSecSq = 19.62;
+
+	/**
+	 * Acceleration felt by an occupant standing at OccupantLocalOffset from the
+	 * ship's pivot. Sums the ship's own linear acceleration with the centripetal
+	 * term produced by its rotation.
+	 *
+	 * All three arguments and the result use metres and seconds.
+	 */
+	STARFORGECORE_API FVector ComputeFeltAcceleration(
+		const FVector& ShipLinearAccel,
+		const FVector& ShipAngularVelocityRadPerSec,
+		const FVector& OccupantLocalOffset);
+
+	/** True when the felt acceleration is beyond what the gravity plates absorb. */
+	STARFORGECORE_API bool ExceedsGravPlateLimit(const FVector& FeltAccelMetersPerSecSq);
 }

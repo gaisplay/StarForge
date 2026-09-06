@@ -19,4 +19,21 @@ namespace StarForge::ShipFrame
 	{
 		return LocalToWorld(CurrShipWorld, WorldToLocal(PrevShipWorld, OccupantWorld));
 	}
+
+	FVector ComputeFeltAcceleration(
+		const FVector& ShipLinearAccel,
+		const FVector& ShipAngularVelocityRadPerSec,
+		const FVector& OccupantLocalOffset)
+	{
+		const FVector& Omega = ShipAngularVelocityRadPerSec;
+		const FVector Centripetal =
+			FVector::CrossProduct(Omega, FVector::CrossProduct(Omega, OccupantLocalOffset));
+
+		return ShipLinearAccel + Centripetal;
+	}
+
+	bool ExceedsGravPlateLimit(const FVector& FeltAccelMetersPerSecSq)
+	{
+		return FeltAccelMetersPerSecSq.Size() > GravPlateLimitMetersPerSecSq;
+	}
 }

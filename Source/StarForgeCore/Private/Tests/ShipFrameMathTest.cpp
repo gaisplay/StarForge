@@ -29,7 +29,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FShipFrameCarryRotationTest::RunTest(const FString& Parameters)
 {
 	// Ship yaws 90 degrees about its own pivot; an occupant one metre ahead of the
-	// pivot must end up one metre to the left of it.
+	// pivot must end up one metre to the ship's right, since a +90 degree yaw sends
+	// local forward (+X) onto world +Y.
 	const FTransform PrevShip(FQuat::Identity, FVector::ZeroVector);
 	const FTransform CurrShip(FRotator(0.0, 90.0, 0.0).Quaternion(), FVector::ZeroVector);
 	const FTransform Occupant(FQuat::Identity, FVector(100.0, 0.0, 0.0));
@@ -64,6 +65,66 @@ bool FShipFrameLocalInvarianceTest::RunTest(const FString& Parameters)
 		LocalAfter.GetLocation().Equals(LocalBefore.GetLocation(), 0.01));
 	TestTrue(TEXT("ship-local rotation is preserved"),
 		LocalAfter.GetRotation().Equals(LocalBefore.GetRotation(), 0.0001));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameLocalToWorldTest,
+	"StarForge.Core.ShipFrame.LocalToWorld",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameLocalToWorldTest::RunTest(const FString& Parameters)
+{
+	// Ship sits 10 m out along Y, yawed 90 degrees. A point 2 m ahead of the ship's
+	// nose is therefore 2 m further along world Y.
+	const FTransform ShipWorld(FRotator(0.0, 90.0, 0.0).Quaternion(), FVector(0.0, 1000.0, 0.0));
+	const FTransform OccupantLocal(FQuat::Identity, FVector(200.0, 0.0, 0.0));
+
+	const FTransform World = StarForge::ShipFrame::LocalToWorld(ShipWorld, OccupantLocal);
+
+	TestTrue(TEXT("local offset is rotated by the ship and added to its position"),
+		World.GetLocation().Equals(FVector(0.0, 1200.0, 0.0), 0.01));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameCentripetalTest,
+	"StarForge.Core.ShipFrame.Centripetal",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameCentripetalTest::RunTest(const FString& Parameters)
+{
+	// Spinning at 2 rad/s about Z, an occupant 5 m out along X feels
+	// omega^2 * r = 20 m/s^2 pulling him outward, i.e. -20 along X.
+	const FVector NoLinearAccel = FVector::ZeroVector;
+	const FVector Spin(0.0, 0.0, 2.0);
+	const FVector Offset(5.0, 0.0, 0.0);
+
+	const FVector Felt =
+		StarForge::ShipFrame::ComputeFeltAcceleration(NoLinearAccel, Spin, Offset);
+
+	TestTrue(TEXT("centripetal term points back toward the axis"),
+		Felt.Equals(FVector(-20.0, 0.0, 0.0), 0.001));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameGravPlateLimitTest,
+	"StarForge.Core.ShipFrame.GravPlateLimit",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameGravPlateLimitTest::RunTest(const FString& Parameters)
+{
+	// The design fixes the compensation ceiling at 2 g. Just under it the
+	// occupant keeps his footing; just over it he does not.
+	TestFalse(TEXT("19.0 m/s^2 stays within compensation"),
+		StarForge::ShipFrame::ExceedsGravPlateLimit(FVector(19.0, 0.0, 0.0)));
+
+	TestTrue(TEXT("20.0 m/s^2 exceeds compensation"),
+		StarForge::ShipFrame::ExceedsGravPlateLimit(FVector(20.0, 0.0, 0.0)));
 
 	return true;
 }
