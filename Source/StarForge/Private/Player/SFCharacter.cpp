@@ -34,13 +34,28 @@ void ASFCharacter::BeginPlay()
 	// arrive with docking in the world phase.
 	if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
 	{
+		USFShipFrameComponent* FoundFrame = nullptr;
+
 		for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 		{
 			if (USFShipFrameComponent* Frame = It->FindComponentByClass<USFShipFrameComponent>())
 			{
-				Movement->SetShipFrame(Frame);
+				FoundFrame = Frame;
 				break;
 			}
+		}
+
+		if (FoundFrame)
+		{
+			Movement->SetShipFrame(FoundFrame);
+		}
+		else
+		{
+			// A rig that silently measures nothing is worse than one that fails.
+			UE_LOG(LogTemp, Warning,
+				TEXT("SFCharacter: found no USFShipFrameComponent in the world. The "
+					 "occupant will stand in world space while the ship flies away, and "
+					 "every drift reading will be a zero that means nothing."));
 		}
 	}
 }
@@ -61,9 +76,22 @@ void ASFCharacter::PollMovementInput()
 		return;
 	}
 
-	const FRotator ViewYaw(0.0, PC->GetControlRotation().Yaw, 0.0);
-	const FVector Forward = FRotationMatrix(ViewYaw).GetUnitAxis(EAxis::X);
-	const FVector Right = FRotationMatrix(ViewYaw).GetUnitAxis(EAxis::Y);
+	// The basis has to lie in the ship's floor plane, not the world's. The carry
+	// sets the capsule's rotation to the ship's every tick, so the capsule's own up
+	// vector is the deck normal. A world-level yaw basis would drive the character
+	// into the deck whenever the ship is rolled, and degenerates near 90 degrees.
+	const FVector DeckNormal = GetActorUpVector();
+	const FVector ViewForward = PC->GetControlRotation().Vector();
+
+	FVector Forward = FVector::VectorPlaneProject(ViewForward, DeckNormal).GetSafeNormal();
+	if (Forward.IsNearlyZero())
+	{
+		// Looking straight down at the deck or up at the ceiling leaves nothing to
+		// project; fall back to the way the body is already facing.
+		Forward = GetActorForwardVector();
+	}
+
+	const FVector Right = FVector::CrossProduct(DeckNormal, Forward);
 
 	if (PC->IsInputKeyDown(EKeys::W)) { AddMovementInput(Forward, 1.0); }
 	if (PC->IsInputKeyDown(EKeys::S)) { AddMovementInput(Forward, -1.0); }
