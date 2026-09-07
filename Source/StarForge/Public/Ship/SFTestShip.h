@@ -8,6 +8,7 @@ class USFShipFrameComponent;
 class UStaticMeshComponent;
 class UPointLightComponent;
 class UBoxComponent;
+class USFThrusterArrayComponent;
 
 /**
  * Throwaway measurement rig: a boxed room that flies a scripted manoeuvre at
@@ -62,6 +63,8 @@ public:
 	/** The simulated body. Task 5 applies thrust here. */
 	UBoxComponent* GetHull() const { return Hull; }
 
+	USFThrusterArrayComponent* GetThrusters() const { return Thrusters; }
+
 	/** Where a passenger should be placed so he starts standing on the floor. */
 	FVector GetInteriorSpawnWorldLocation() const;
 
@@ -90,6 +93,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFShipFrameComponent> Frame;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFThrusterArrayComponent> Thrusters;
 
 	/**
 	 * Lights the interior from the room's centre so the walk test is visible at all.

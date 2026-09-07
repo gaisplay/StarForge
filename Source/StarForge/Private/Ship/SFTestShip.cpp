@@ -4,6 +4,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Ship/SFShipFrameComponent.h"
+#include "Ship/SFThrusterArrayComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -85,6 +86,7 @@ ASFTestShip::ASFTestShip()
 	Hull->SetMassOverrideInKg(NAME_None, static_cast<float>(PlaceholderMassKg), true);
 
 	Frame = CreateDefaultSubobject<USFShipFrameComponent>(TEXT("Frame"));
+	Thrusters = CreateDefaultSubobject<USFThrusterArrayComponent>(TEXT("Thrusters"));
 
 	const double Span = InteriorHalfExtentCm / CubeEdgeCm * 2.0;
 	const double Half = InteriorHalfExtentCm;
