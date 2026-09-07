@@ -62,6 +62,19 @@ public:
 
 	StarForge::FShipMassProperties GetMassProperties() const { return MassProperties; }
 
+	/**
+	 * Both throttle arrays are exposed, and which one to read depends on the question.
+	 *
+	 * The target is where the solver's clamp landed this frame, so saturation is a
+	 * property of it and of nothing else: Solve clamps into [0,1], and a demand the
+	 * array cannot meet shows up here as a throttle pinned at one.
+	 *
+	 * The spooled array is where the thrusters actually are, having lagged toward that
+	 * target over several response times. It is the honest answer to "how much thrust
+	 * is on the ship right now", and the wrong answer to "is the array maxed out" --
+	 * it only reaches one long after the saturation began, if the demand holds at all.
+	 */
+	const TArray<double>& GetTargetThrottles() const { return TargetThrottles; }
 	const TArray<double>& GetLastThrottles() const { return LastThrottles; }
 	StarForge::FWrench GetLastDemand() const { return LastDemand; }
 	StarForge::FWrench GetLastAchieved() const { return LastAchieved; }

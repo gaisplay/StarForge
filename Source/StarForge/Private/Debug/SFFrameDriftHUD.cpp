@@ -6,7 +6,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
-#include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTestShip.h"
 #include "Ship/SFThrusterArrayComponent.h"
@@ -273,14 +272,17 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 		ProfileOn != 0 ? TEXT("scripted profile (sf.ShipProfile 1)") : TEXT("thrust (sf.ShipProfile 0)")),
 		Y, ProfileOn != 0 ? FLinearColor::Yellow : FLinearColor::Green);
 
+	// The angular triples carry their axis order on screen. This readout is the only
+	// place a roll/pitch swap becomes visible, and three bare numbers invite reading the
+	// wrong component -- either missing a real swap or inventing one that is not there.
 	const StarForge::FFlightIntent Intent = Ship->GetLastIntent();
-	DrawLine(FString::Printf(TEXT("intent  lin (%.2f %.2f %.2f)  ang (%.2f %.2f %.2f)  assist %s"),
+	DrawLine(FString::Printf(TEXT("intent  lin (%.2f %.2f %.2f)  ang (roll pitch yaw) (%.2f %.2f %.2f)  assist %s"),
 		Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,
 		Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,
 		Intent.bFlightAssistEnabled ? TEXT("on") : TEXT("off")), Y);
 
 	const StarForge::FRigidBodyState State = Array->ReadState();
-	DrawLine(FString::Printf(TEXT("speed   %.1f m/s   angular (%.1f %.1f %.1f) deg/s"),
+	DrawLine(FString::Printf(TEXT("speed   %.1f m/s   angular (roll pitch yaw) (%.1f %.1f %.1f) deg/s"),
 		State.LinearVelocity.Size(),
 		FMath::RadiansToDegrees(State.AngularVelocity.X),
 		FMath::RadiansToDegrees(State.AngularVelocity.Y),
@@ -299,17 +301,36 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 
 	// Saturation is the usual reason a ship will not do what it is told, and it is
 	// invisible without this: the demand looks fine and the ship simply lags.
-	int32 WideOpen = 0;
+	//
+	// Counted over the commanded throttles, not the spooled ones. Saturation is where
+	// the solver's clamp lands, and the spooled value is a first-order lag toward it
+	// that only crosses this threshold after some seven response times -- so reading
+	// the spooled array would leave this line calm through the whole onset of a launch,
+	// which is exactly the moment it exists to catch. An instrument that reads quiet
+	// while the thing it measures is pinned is the drift-of-zero defect again.
+	int32 Commanded = 0;
+	for (double Throttle : Array->GetTargetThrottles())
+	{
+		if (Throttle > 0.999)
+		{
+			++Commanded;
+		}
+	}
+
+	// The spooled count alongside it is not redundant: the gap between the two is the
+	// spool-up itself, and seeing it move is how the response time from spec 5 is
+	// confirmed to be wired in at all.
+	int32 Spooled = 0;
 	for (double Throttle : Array->GetLastThrottles())
 	{
 		if (Throttle > 0.999)
 		{
-			++WideOpen;
+			++Spooled;
 		}
 	}
 
-	const int32 Count = Array->GetLastThrottles().Num();
-	DrawLine(FString::Printf(TEXT("throttles %d of %d wide open%s"),
-		WideOpen, Count, WideOpen > 0 ? TEXT("  -- SATURATED") : TEXT("")),
-		Y, WideOpen > 0 ? FLinearColor::Yellow : FLinearColor::White);
+	const int32 Count = Array->GetTargetThrottles().Num();
+	DrawLine(FString::Printf(TEXT("throttles  commanded %d of %d wide open   spooled %d%s"),
+		Commanded, Count, Spooled, Commanded > 0 ? TEXT("  -- SATURATED") : TEXT("")),
+		Y, Commanded > 0 ? FLinearColor::Yellow : FLinearColor::White);
 }
