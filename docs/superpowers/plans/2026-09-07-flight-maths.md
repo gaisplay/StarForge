@@ -75,7 +75,7 @@ Source/StarForgeCore/
 - Consumes: ничего.
 - Produces: `StarForge::FMatrix6` со статическими `Identity()`, `Zero()`, методами `double& At(int32 Row, int32 Col)`, `double At(int32 Row, int32 Col) const`, `bool TryInvert(FMatrix6& Out) const`, и оператором `FMatrix6 operator*(const FMatrix6&) const`.
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 `Source/StarForgeCore/Private/Tests/SmallMatrixTest.cpp`:
 
@@ -169,7 +169,7 @@ bool FMatrix6SingularIsRejectedTest::RunTest(const FString& Parameters)
 }
 ```
 
-- [ ] **Step 2: Убедиться, что не собирается**
+- [x] **Step 2: Убедиться, что не собирается**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -177,7 +177,7 @@ bool FMatrix6SingularIsRejectedTest::RunTest(const FString& Parameters)
 
 Ожидается: `Cannot open include file: 'SmallMatrix.h'`. Это красное состояние цикла — заголовка ещё нет.
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 `Source/StarForgeCore/Public/SmallMatrix.h`:
 
@@ -349,7 +349,7 @@ namespace StarForge
 }
 ```
 
-- [ ] **Step 4: Собрать и прогнать тесты**
+- [x] **Step 4: Собрать и прогнать тесты**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -361,7 +361,7 @@ namespace StarForge
 
 Ожидается девять пройденных тестов: шесть прежних плюс три новых. **`UnrealEditor-Cmd.exe` обрезает вывод в консоль** — результаты читать из `Saved/Logs/StarForge.log`, строки `Test Completed. Result=` и `TEST COMPLETE. EXIT CODE:`.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add Source/StarForgeCore/Public/SmallMatrix.h Source/StarForgeCore/Private/SmallMatrix.cpp Source/StarForgeCore/Private/Tests/SmallMatrixTest.cpp
@@ -388,7 +388,7 @@ that refuses to build its allocator."
 - Consumes: ничего.
 - Produces: `StarForge::FThrusterDef` (поля `Location`, `Direction`, `MaxThrust`, `ResponseTime`), `StarForge::FShipMassProperties` (поля `Mass`, `CentreOfMass`, `InertiaDiagonal`, `InertiaRotation`), `StarForge::FWrench` (поля `Force`, `Torque`, операторы `+`, `-`, `*`, метод `double Component(int32 Index) const`), функция `StarForge::ComputeThrusterWrench(const FThrusterDef&, const FVector& CentreOfMass) -> FWrench`.
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 `Source/StarForgeCore/Private/Tests/ThrustAllocatorTest.cpp`:
 
@@ -472,7 +472,7 @@ bool FThrusterWrenchRespectsCentreOfMassTest::RunTest(const FString& Parameters)
 }
 ```
 
-- [ ] **Step 2: Убедиться, что не собирается**
+- [x] **Step 2: Убедиться, что не собирается**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -480,7 +480,7 @@ bool FThrusterWrenchRespectsCentreOfMassTest::RunTest(const FString& Parameters)
 
 Ожидается: `Cannot open include file: 'ThrusterDef.h'`.
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 `Source/StarForgeCore/Public/ThrusterDef.h`:
 
@@ -617,7 +617,7 @@ namespace StarForge
 
 Нормализация направления не косметика: набор двигателей приходит из редактируемого ассета, и ненормированный вектор иначе умножил бы тягу на свою длину без всякого предупреждения.
 
-- [ ] **Step 4: Собрать и прогнать тесты**
+- [x] **Step 4: Собрать и прогнать тесты**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -629,7 +629,7 @@ namespace StarForge
 
 Ожидается двенадцать пройденных тестов. Результаты — из `Saved/Logs/StarForge.log`.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add Source/StarForgeCore/Public/ThrusterDef.h Source/StarForgeCore/Private/ThrusterDef.cpp Source/StarForgeCore/Private/Tests/ThrustAllocatorTest.cpp
@@ -658,7 +658,7 @@ lost to gunfire change how the ship flies without anyone programming it."
 - Consumes: `StarForge::FMatrix6` из Task 1; `StarForge::FThrusterDef`, `FWrench`, `ComputeThrusterWrench` из Task 2.
 - Produces: класс `StarForge::FThrustAllocator` с методами `bool Build(const TArray<FThrusterDef>& Thrusters, const FVector& CentreOfMass, double DampingLambda = 0.01)`, `void Solve(const FWrench& Desired, TArray<double>& OutThrottles) const`, `FWrench ComputeAchieved(const TArray<double>& Throttles) const`, `double GetAxisCapability(int32 Axis) const`, `int32 Num() const`, `bool IsBuilt() const`.
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Дописать в конец `Source/StarForgeCore/Private/Tests/ThrustAllocatorTest.cpp`:
 
@@ -872,7 +872,7 @@ bool FThrustAllocatorRejectsDegenerateArrayTest::RunTest(const FString& Paramete
 }
 ```
 
-- [ ] **Step 2: Убедиться, что не собирается**
+- [x] **Step 2: Убедиться, что не собирается**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -880,7 +880,7 @@ bool FThrustAllocatorRejectsDegenerateArrayTest::RunTest(const FString& Paramete
 
 Ожидается: `Cannot open include file: 'ThrustAllocator.h'`.
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 Удалить `Source/StarForgeCore/Private/ThrusterDef.cpp` — его единственная функция переезжает сюда.
 
@@ -1128,7 +1128,7 @@ namespace StarForge
 }
 ```
 
-- [ ] **Step 4: Собрать и прогнать тесты**
+- [x] **Step 4: Собрать и прогнать тесты**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -1142,7 +1142,7 @@ namespace StarForge
 
 Если тест на паразитные составляющие не проходит с небольшим превышением — **не ослабляй допуск**. Порог в 1% взят из §10 спеки, и его нарушение симметричным набором означает ошибку в сборке матрицы, а не слишком строгую проверку.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add Source/StarForgeCore/Public/ThrustAllocator.h Source/StarForgeCore/Private/ThrustAllocator.cpp Source/StarForgeCore/Private/Tests/ThrustAllocatorTest.cpp
@@ -1174,7 +1174,7 @@ the hardest kind of bug to find."
 - Consumes: `StarForge::FWrench`, `FShipMassProperties` из Task 2.
 - Produces: `StarForge::FFlightIntent` (поля `LinearAxis`, `AngularAxis`, `bFlightAssistEnabled`), `StarForge::FFlightLimits` (поля `MaxSpeed`, `MaxAngularSpeed`, `LinearGain`, `AngularGain`), `StarForge::FRigidBodyState` (поля `LinearVelocity`, `AngularVelocity`), функция `StarForge::ComputeDemandedWrench(const FFlightIntent&, const FRigidBodyState&, const FShipMassProperties&, const FFlightLimits&) -> FWrench`.
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 `Source/StarForgeCore/Private/Tests/FlightControllerTest.cpp`:
 
@@ -1367,7 +1367,7 @@ bool FFlightControllerConvergesTest::RunTest(const FString& Parameters)
 }
 ```
 
-- [ ] **Step 2: Убедиться, что не собирается**
+- [x] **Step 2: Убедиться, что не собирается**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -1375,7 +1375,7 @@ bool FFlightControllerConvergesTest::RunTest(const FString& Parameters)
 
 Ожидается: `Cannot open include file: 'FlightController.h'`.
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 `Source/StarForgeCore/Public/FlightController.h`:
 
@@ -1510,7 +1510,7 @@ namespace StarForge
 }
 ```
 
-- [ ] **Step 4: Собрать и прогнать тесты**
+- [x] **Step 4: Собрать и прогнать тесты**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -1522,7 +1522,7 @@ namespace StarForge
 
 Ожидается двадцать два пройденных теста. Результаты — из `Saved/Logs/StarForge.log`.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add Source/StarForgeCore/Public/FlightController.h Source/StarForgeCore/Private/FlightController.cpp Source/StarForgeCore/Private/Tests/FlightControllerTest.cpp
@@ -1551,6 +1551,49 @@ free and every hull turns like a fighter."
 - сборка без предупреждений.
 
 Дальше пишется второй план этапа 2 — мост в Chaos, `UShipDataAsset`, компонент массива двигателей, пост пилота и маршрутизация ввода. Его первой задачей должен быть **повторный замер увода пассажира** после перевода корабля с кинематики на физику: Точка проверки 1 подтверждала перенос на кинематическом корабле, и смена источника трансформа — единственное, что может обесценить тот результат.
+
+## Отклонение от плана, найденное при выполнении
+
+План выполнен целиком, все двадцать два теста проходят, но **Task 3 пришлось
+исправить в двух местах**. Оба дефекта были в самом плане, а не в исполнении.
+
+### Фикстура не могла пройти собственный тест
+
+`MakeSymmetricArray` ставила двигатели только по **+X, +Y, +Z**. Газ физически
+зажат в [0, 1] — двигатель не работает назад, — поэтому такой набор не способен
+дать момент без силы вообще: чтобы обнулить продольную силу, все вносящие вклад
+газы обязаны быть нулём, а вместе с ними обнуляется и момент. Тест
+`PureTorqueMakesNoForce` выдавал 500 Н·м из требуемых 1000 при 125 Н паразитной
+силы против бюджета в 40 Н.
+
+Повернуться, не сдвинувшись, можно только парой сил, а паре нужны два двигателя,
+смотрящих в противоположные стороны. Фикстура теперь несёт на каждом углу
+встречную пару по каждой оси — двадцать четыре двигателя вместо двенадцати.
+Паразитные составляющие при этом падают ровно в ноль, то есть исходный
+комментарий про симметрию был верен, просто набор ему не соответствовал.
+
+### Решатель недодавал восьмую часть тяги
+
+Встречные пары вскрыли второй дефект, уже в алгоритме. Незажатое решение всегда
+предлагает встречному двигателю отрицательный газ; зажим его отбрасывает.
+Пересчёт остатка **по всем** двигателям предлагает то же самое снова, поэтому за
+проход добирается ровно половина недостачи: 1000 → 1500 → 1750 из 2000. Три
+прохода сходятся к семи восьмым любого запроса.
+
+Это не тестовая придирка: пилот, запросивший полный вперёд, всегда получал бы
+87.5 % тяги — по всем осям, без единого места в коде, на которое можно показать.
+
+`Solve` теперь считает остаток **только по незажатым двигателям**. Три прохода из
+спеки при этом дают точное попадание. Цена — обращение 6×6 за проход после того,
+как что-то насытилось, поэтому кэш пседообращения по всему массиву сохранён для
+случая, когда не насытилось ничего. Утверждение в шапке плана, что «в кадре
+остаётся умножение матрицы на вектор», больше неверно и здесь исправлено.
+
+Альтернативы, отклонённые автором спеки: поднять число проходов примерно до
+одиннадцати (правка константы спеки, дороже за кадр) и ослабить тесты под
+фактические 87.5 % (корабль навсегда остаётся недодающим).
+
+---
 
 ## Открытый вопрос к автору спеки
 
