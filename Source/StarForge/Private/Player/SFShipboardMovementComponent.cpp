@@ -3,6 +3,7 @@
 #include "CoreGlobals.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
+#include "HAL/IConsoleManager.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "StarForgeLog.h"
 
@@ -15,6 +16,14 @@ namespace
 	 */
 	constexpr double SettleSeconds = 0.5;
 }
+
+static TAutoConsoleVariable<int32> CVarShipGravity(
+	TEXT("sf.ShipGravity"),
+	1,
+	TEXT("1: align the occupant's gravity with the ship's own down, which is what keeps a rolling deck walkable.\n")
+	TEXT("0: leave gravity pointing at world down, which detaches the occupant within about a quarter second of rolling.\n")
+	TEXT("Set to 0 to run the rig as a negative control and confirm the drift gauge can report a failure at all."),
+	ECVF_Default);
 
 USFShipboardMovementComponent::USFShipboardMovementComponent()
 {
@@ -91,8 +100,14 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 	// second, after which the character falls, loses its base, and the engine stops
 	// calling this function at all -- taking the carry and the whole measurement with
 	// it. Pointing gravity along the ship's own down is what the spec's grav plates
-	// mean in engine terms.
-	SetGravityDirection(-ShipFrame->GetFrameTransform().GetUnitAxis(EAxis::Z));
+	// mean in engine terms. Gated on sf.ShipGravity so the rig can be run as a
+	// negative control: with it off, gravity is left at world down and the deck
+	// detaches the occupant on its own, proving the drift gauge can report a
+	// failure and is not just an instrument that has only ever read zero.
+	if (CVarShipGravity.GetValueOnGameThread() != 0)
+	{
+		SetGravityDirection(-ShipFrame->GetFrameTransform().GetUnitAxis(EAxis::Z));
+	}
 
 	CarryWithFrame();
 	UpdateDriftMeasurement(DeltaSeconds);
@@ -141,15 +156,21 @@ void USFShipboardMovementComponent::CarryWithFrame()
 		/*OutHit=*/nullptr,
 		ETeleportType::TeleportPhysics);
 
+	const FQuat FrameDelta =
+		CurrentFrameTransform.GetRotation() * LastFrameTransform.GetRotation().Inverse();
+
+	// Velocity is frame-relative too, and CMC keeps it in world space. While the
+	// ship turns under an occupant who is walking, his velocity goes on pointing
+	// where the world used to be and his controls skew -- worse the faster he
+	// moves. Position and view were already carried; this is the third of three.
+	Velocity = FrameDelta.RotateVector(Velocity);
+
 	// The view is stored ship-local: the player keeps looking at the same
 	// bulkhead no matter what the ship does, and the stars sweep past outside.
 	if (ACharacter* Owner = Cast<ACharacter>(GetOwner()))
 	{
 		if (AController* Controller = Owner->GetController())
 		{
-			const FQuat FrameDelta =
-				CurrentFrameTransform.GetRotation() * LastFrameTransform.GetRotation().Inverse();
-
 			const FQuat NewView = FrameDelta * Controller->GetControlRotation().Quaternion();
 			Controller->SetControlRotation(NewView.Rotator());
 		}

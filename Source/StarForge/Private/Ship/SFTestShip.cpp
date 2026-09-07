@@ -29,10 +29,13 @@ namespace
 	/**
 	 * Interior light intensity in candelas. The room is a sealed grey box with no
 	 * other light of any kind, so this single source has to read every wall clearly
-	 * on its own; 50000 cd at the room's 20 m attenuation radius is bright enough for
-	 * that without blowing out the white hull panels.
+	 * on its own. The project runs with auto-exposure off
+	 * (r.DefaultFeature.AutoExposure=False in Config/DefaultEngine.ini), so there is
+	 * nothing to compensate and intensity maps straight to screen brightness: 50000 cd
+	 * blew the scene to pure white. 2000 cd reads every wall without doing that -- if
+	 * it looks dim, that is auto-exposure being off, not a mistake in this number.
 	 */
-	constexpr double InteriorLightIntensityCandelas = 50000.0;
+	constexpr double InteriorLightIntensityCandelas = 2000.0;
 
 	/**
 	 * Each basic-shape marker is the engine's 100 cm default asset scaled down to

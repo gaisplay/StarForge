@@ -2,6 +2,7 @@
 
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
+#include "HAL/IConsoleManager.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
 #include "Ship/SFShipFrameComponent.h"
@@ -16,6 +17,19 @@ namespace
 	 * wins and the operator is misled.
 	 */
 	constexpr double MinimumValidMeasurementSeconds = 55.0;
+
+	/**
+	 * Backing panel geometry for the readout. At 50000 cd (see SFTestShip.cpp) the
+	 * scene blew to pure white and every white or green line -- which is most of
+	 * them, since white and green are what a healthy run looks like -- disappeared
+	 * against it. A dark panel behind the text keeps it legible whatever the scene
+	 * does. Sized generously: a panel slightly too large costs nothing, a line
+	 * falling off the bottom of a too-small one is the same defect all over again.
+	 */
+	constexpr float PanelX = 20.0f;
+	constexpr float PanelY = 36.0f;
+	constexpr float PanelWidth = 760.0f;
+	constexpr float PanelHeight = 480.0f;
 }
 
 void ASFFrameDriftHUD::DrawLine(const FString& Text, double& Y, const FLinearColor& Color)
@@ -32,7 +46,23 @@ void ASFFrameDriftHUD::DrawHUD()
 {
 	Super::DrawHUD();
 
+	// Behind everything else: white and green, which is what most lines are on a
+	// healthy run, vanished against the blown-out scene at the old light level.
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), PanelX, PanelY, PanelWidth, PanelHeight);
+
 	double Y = 48.0;
+
+	// sf.ShipGravity is the negative-control switch (see SFShipboardMovementComponent):
+	// with it off, gravity is left at world down and the carry breaks on its own. This
+	// line has to be the first thing drawn, unconditionally, so a control run can never
+	// be mistaken afterward for a real measurement.
+	if (const IConsoleVariable* CVarShipGravity = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipGravity")))
+	{
+		if (CVarShipGravity->GetInt() == 0)
+		{
+			DrawLine(TEXT("NEGATIVE CONTROL - ship gravity disabled, this run is not a measurement"), Y, FLinearColor::Red);
+		}
+	}
 
 	const ASFCharacter* Occupant = Cast<ASFCharacter>(GetOwningPawn());
 	if (!Occupant)
