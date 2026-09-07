@@ -43,6 +43,14 @@ bool USFThrusterArrayComponent::Rebuild()
 
 	FBodyInstance* Instance = Body->GetBodyInstance();
 
+	// Spec 9: the flight model is balanced by editing the asset, not by rebuilding
+	// C++, so the asset's mass has to reach the body. Set before the read below and
+	// not after: Chaos rescales the inertia tensor when mass changes, so reading
+	// first would capture the values belonging to the old mass. Set through the
+	// component rather than the body instance: only this path recomputes the mass
+	// properties, and it is those recomputed values that are read back below.
+	Body->SetMassOverrideInKg(NAME_None, static_cast<float>(ShipData->MassKg), true);
+
 	// Chaos is authoritative here. The asset says what the ship weighs; Chaos works
 	// out how that mass is distributed, and it is Chaos that integrates the motion.
 	const FTransform MassSpace = Instance->GetMassSpaceLocal();
@@ -65,9 +73,13 @@ bool USFThrusterArrayComponent::Rebuild()
 		return false;
 	}
 
+	// Achievable, not the capability sum. The stick is scaled by this figure, and
+	// the sum counts opposed thrusters that can never push the way being asked --
+	// about twice the truth on a balanced array, which saturates the stick at half
+	// travel and leaves its whole upper half doing nothing.
 	for (int32 Axis = 0; Axis < 6; ++Axis)
 	{
-		const double Value = Allocator.GetAxisCapability(Axis);
+		const double Value = Allocator.GetAxisAchievable(Axis);
 		if (Axis < 3)
 		{
 			Capability.Force[Axis] = Value;

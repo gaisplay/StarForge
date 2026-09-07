@@ -45,16 +45,34 @@ namespace StarForge
 		FWrench ComputeAchieved(const TArray<double>& Throttles) const;
 
 		/**
-		 * The most this array could possibly produce on one axis: the sum of what
-		 * every thruster contributes to it, taken in absolute value.
+		 * The scale of this array on one axis: the sum of what every thruster
+		 * contributes to it, taken in absolute value, opposed thrusters included.
 		 *
-		 * Index 0-2 are force axes, 3-5 torque axes. This is the honest scale for
-		 * judging a parasitic component, and it is not the same as running every
-		 * thruster at once -- a symmetric array at full throttle cancels its own
-		 * torque to nothing, so measuring capability that way would compare a
-		 * tolerance against zero.
+		 * Index 0-2 are force axes, 3-5 torque axes. This is a magnitude to judge a
+		 * parasitic component against, not a reachable output -- on a balanced array
+		 * roughly half of that sum faces the wrong way, and running every thruster at
+		 * once cancels the torque to nothing. It is deliberately neither: measuring
+		 * capability by full throttle would compare a tolerance against zero, and
+		 * measuring it by what is reachable would shrink the yardstick along with the
+		 * thing being measured. Anything scaling a demand wants GetAxisAchievable.
 		 */
 		double GetAxisCapability(int32 Axis) const;
+
+		/**
+		 * The most this array can actually deliver on one axis, in either direction.
+		 *
+		 * Only thrusters pushing the way asked for can help -- a throttle cannot go
+		 * negative -- so this sums the positive-direction contributions and the
+		 * negative-direction ones separately and returns the smaller. Taking the
+		 * smaller keeps one number honest for a stick that travels both ways on a
+		 * layout that is not symmetric; the strong direction is then under-promised
+		 * rather than the weak one over-promised.
+		 *
+		 * This is what a demand must be scaled by. Using GetAxisCapability for that
+		 * asks for about twice what a balanced array can produce, so the stick
+		 * saturates at half travel and the upper half of it does nothing.
+		 */
+		double GetAxisAchievable(int32 Axis) const;
 
 		int32 Num() const { return Columns.Num(); }
 		bool IsBuilt() const { return bBuilt; }

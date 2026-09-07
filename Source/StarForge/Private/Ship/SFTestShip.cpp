@@ -89,10 +89,15 @@ namespace
 	constexpr double MarkerOffsetCm = 300.0;
 
 	/**
-	 * Stand-in mass until the ship data asset exists, in kilograms. Large enough
-	 * that a character walking on the deck cannot perturb the measurement.
+	 * Mass the hull carries before a ship data asset is assigned, in kilograms.
+	 * Large enough that a character walking on the deck cannot perturb the drift
+	 * measurement, which is the one thing this rig still has to do without an asset.
+	 *
+	 * Once an asset is assigned, USFThrusterArrayComponent::Rebuild overrides this
+	 * with the asset's MassKg at BeginPlay -- so editing this number only moves the
+	 * assetless rig, and the flight model is balanced in the asset as spec 9 says.
 	 */
-	constexpr double PlaceholderMassKg = 50000.0;
+	constexpr double DefaultHullMassKg = 50000.0;
 }
 
 ASFTestShip::ASFTestShip()
@@ -117,8 +122,9 @@ ASFTestShip::ASFTestShip()
 
 	// Stated rather than derived from the box volume, so the inertia the flight
 	// maths later reads back from Chaos is reproducible instead of depending on a
-	// default density. Task 4 replaces this with the ship data asset.
-	Hull->SetMassOverrideInKg(NAME_None, static_cast<float>(PlaceholderMassKg), true);
+	// default density. The thruster array replaces this with the asset's mass at
+	// BeginPlay whenever one is assigned.
+	Hull->SetMassOverrideInKg(NAME_None, static_cast<float>(DefaultHullMassKg), true);
 
 	Frame = CreateDefaultSubobject<USFShipFrameComponent>(TEXT("Frame"));
 	Thrusters = CreateDefaultSubobject<USFThrusterArrayComponent>(TEXT("Thrusters"));

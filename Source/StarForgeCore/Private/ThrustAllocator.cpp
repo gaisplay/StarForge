@@ -230,6 +230,24 @@ namespace StarForge
 		return Total;
 	}
 
+	double FThrustAllocator::GetAxisAchievable(int32 Axis) const
+	{
+		// Split rather than summed in absolute value: a thruster pointing the wrong
+		// way for the direction being asked about contributes nothing to it, because
+		// its throttle would have to go negative to help.
+		double Positive = 0.0;
+		double Negative = 0.0;
+		for (const FWrench& Column : Columns)
+		{
+			const double Contribution = Column.Component(Axis);
+			Positive += FMath::Max(0.0, Contribution);
+			Negative += FMath::Max(0.0, -Contribution);
+		}
+
+		// The weaker direction, so the figure holds for a stick pushed either way.
+		return FMath::Min(Positive, Negative);
+	}
+
 	FWrench FThrustAllocator::ComputeAchieved(const TArray<double>& Throttles) const
 	{
 		FWrench Total;

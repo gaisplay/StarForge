@@ -73,8 +73,10 @@ namespace StarForge
 	 * makes a heavy ship feel heavy: without it, holding an established spin costs
 	 * nothing and every hull turns like a fighter.
 	 *
-	 * ArrayCapability is the most the thruster array can produce on each axis, and
-	 * it is what the stick is a fraction of when assist is off. It arrives as six
+	 * ArrayCapability is what the stick is a fraction of when assist is off, so it
+	 * must be what the array can actually deliver on each axis: the allocator's
+	 * GetAxisAchievable, not GetAxisCapability. Handing in the latter doubles the
+	 * demand and kills the upper half of the stick's travel. It arrives as six
 	 * numbers rather than as a reference to the solver, so this loop stays ignorant
 	 * of how thrust is distributed.
 	 */

@@ -295,3 +295,66 @@ bool FThrustAllocatorRejectsDegenerateArrayTest::RunTest(const FString& Paramete
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FThrustAllocatorAchievableIsHalfOfCapabilityTest,
+	"StarForge.Core.ThrustAllocator.AchievableIsHalfOfCapability",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FThrustAllocatorAchievableIsHalfOfCapabilityTest::RunTest(const FString& Parameters)
+{
+	// Every corner of this array carries an opposed pair on every axis, so exactly
+	// half of what the capability sum counts faces the wrong way for any one
+	// direction and cannot help: a throttle cannot go negative. Asserted as a
+	// relationship rather than as a number so the test states the reason -- a
+	// different thrust or a fifth corner must not need this edited.
+	StarForge::FThrustAllocator Allocator;
+	TestTrue(TEXT("a symmetric array builds"),
+		Allocator.Build(MakeSymmetricArray(), FVector::ZeroVector));
+
+	for (int32 Axis = 0; Axis < 3; ++Axis)
+	{
+		const double Capability = Allocator.GetAxisCapability(Axis);
+		const double Achievable = Allocator.GetAxisAchievable(Axis);
+
+		TestTrue(*FString::Printf(TEXT("axis %d has some capability to halve"), Axis),
+			Capability > 0.0);
+		TestEqual(*FString::Printf(
+				TEXT("on a balanced array only half the thrusters can push axis %d"), Axis),
+			Achievable, 0.5 * Capability, 1e-9);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FThrustAllocatorAchievableIsNotCapabilityTest,
+	"StarForge.Core.ThrustAllocator.AchievableIsNotCapability",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FThrustAllocatorAchievableIsNotCapabilityTest::RunTest(const FString& Parameters)
+{
+	// The two accessors mean different things and must stay different. Conflating
+	// them is the actual defect this pair of tests guards: scaling a pilot demand by
+	// the capability sum asked for twice what the array could deliver, so the stick
+	// saturated at half travel and its upper half did nothing at all. If a future
+	// change makes these agree, that failure returns silently -- so fail here first.
+	StarForge::FThrustAllocator Allocator;
+	TestTrue(TEXT("a symmetric array builds"),
+		Allocator.Build(MakeSymmetricArray(), FVector::ZeroVector));
+
+	for (int32 Axis = 0; Axis < 6; ++Axis)
+	{
+		const double Capability = Allocator.GetAxisCapability(Axis);
+		const double Achievable = Allocator.GetAxisAchievable(Axis);
+
+		TestTrue(*FString::Printf(
+				TEXT("what axis %d can achieve never exceeds its capability scale"), Axis),
+			Achievable <= Capability + 1e-9);
+		TestTrue(*FString::Printf(
+				TEXT("axis %d must not report its capability sum as achievable"), Axis),
+			Achievable < Capability - 1e-9);
+	}
+
+	return true;
+}
