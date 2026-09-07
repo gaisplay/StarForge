@@ -7,14 +7,17 @@
 class USFShipFrameComponent;
 class UStaticMeshComponent;
 class UPointLightComponent;
+class UBoxComponent;
 
 /**
  * Throwaway measurement rig: a boxed room that flies a scripted manoeuvre at
  * the design's speed and rotation ceilings.
  *
- * Motion is kinematic rather than simulated, because the point of the rig is a
- * repeatable worst case. Chaos gets wired in during the flight phase, once the
- * question this rig exists to answer has been answered.
+ * Motion is driven by commanding the hull body's velocity every tick rather
+ * than by integrating forces, so the manoeuvre stays the exact repeatable
+ * worst case checkpoint 1 was measured against. The transform now comes from
+ * Chaos rather than from setting it directly, which is the one variable this
+ * task changes.
  */
 UCLASS()
 class STARFORGE_API ASFTestShip : public AActor
@@ -56,6 +59,9 @@ public:
 
 	USFShipFrameComponent* GetFrameComponent() const { return Frame; }
 
+	/** The simulated body. Task 5 applies thrust here. */
+	UBoxComponent* GetHull() const { return Hull; }
+
 	/** Where a passenger should be placed so he starts standing on the floor. */
 	FVector GetInteriorSpawnWorldLocation() const;
 
@@ -70,7 +76,7 @@ private:
 	UStaticMeshComponent* AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale);
 
 	/**
-	 * Attaches an already-resolved shape to Root with no collision, so it rides the
+	 * Attaches an already-resolved shape to Hull with no collision, so it rides the
 	 * ship purely as a visual orientation cue and cannot interfere with the walk test
 	 * or the drift measurement. The mesh is resolved by the caller via a static
 	 * ConstructorHelpers::FObjectFinder, same as the hull panels, because each marker
@@ -80,14 +86,14 @@ private:
 		FName Name, UStaticMesh* Mesh, const FVector& RelativeLocation, double UniformScale);
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
-	TObjectPtr<USceneComponent> Root;
+	TObjectPtr<UBoxComponent> Hull;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFShipFrameComponent> Frame;
 
 	/**
 	 * Lights the interior from the room's centre so the walk test is visible at all.
-	 * Attached to Root, so it travels and rotates with the ship like everything else
+	 * Attached to Hull, so it travels and rotates with the ship like everything else
 	 * on board.
 	 */
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")

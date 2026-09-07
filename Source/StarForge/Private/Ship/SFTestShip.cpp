@@ -1,5 +1,6 @@
 #include "Ship/SFTestShip.h"
 
+#include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Ship/SFShipFrameComponent.h"
@@ -50,6 +51,12 @@ namespace
 	 * which sits on the pivot's X/Y column at floor height.
 	 */
 	constexpr double MarkerOffsetCm = 300.0;
+
+	/**
+	 * Stand-in mass until the ship data asset exists, in kilograms. Large enough
+	 * that a character walking on the deck cannot perturb the measurement.
+	 */
+	constexpr double PlaceholderMassKg = 50000.0;
 }
 
 ASFTestShip::ASFTestShip()
@@ -57,8 +64,25 @@ ASFTestShip::ASFTestShip()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PrePhysics;
 
-	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
-	SetRootComponent(Root);
+	Hull = CreateDefaultSubobject<UBoxComponent>(TEXT("Hull"));
+	SetRootComponent(Hull);
+	Hull->SetBoxExtent(FVector(InteriorHalfExtentCm));
+	Hull->SetMobility(EComponentMobility::Movable);
+
+	// Physics only: this box exists to give the body mass and inertia, not to be
+	// walked into. With query collision on, the occupant would be sealed inside a
+	// solid cube instead of the hollow room the panels make.
+	Hull->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+	Hull->SetCollisionObjectType(ECC_WorldDynamic);
+	Hull->SetSimulatePhysics(true);
+
+	// A ship in space does not fall, and the rig has no other use for gravity.
+	Hull->SetEnableGravity(false);
+
+	// Stated rather than derived from the box volume, so the inertia the flight
+	// maths later reads back from Chaos is reproducible instead of depending on a
+	// default density. Task 4 replaces this with the ship data asset.
+	Hull->SetMassOverrideInKg(NAME_None, static_cast<float>(PlaceholderMassKg), true);
 
 	Frame = CreateDefaultSubobject<USFShipFrameComponent>(TEXT("Frame"));
 
@@ -74,10 +98,10 @@ ASFTestShip::ASFTestShip()
 
 	// The room had no light of any kind: a black screen makes the one check that
 	// matters most after drift -- whether the interior holds still in front of the
-	// eyes while the ship rotates -- impossible to perform. Attaching to Root means
+	// eyes while the ship rotates -- impossible to perform. Attaching to Hull means
 	// the light travels and rotates with the ship like everything else on board.
 	InteriorLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("InteriorLight"));
-	InteriorLight->SetupAttachment(Root);
+	InteriorLight->SetupAttachment(Hull);
 	InteriorLight->SetRelativeLocation(FVector::ZeroVector);
 	InteriorLight->SetMobility(EComponentMobility::Movable);
 	InteriorLight->IntensityUnits = ELightUnits::Candelas;
@@ -110,13 +134,18 @@ UStaticMeshComponent* ASFTestShip::AddBoxPanel(FName Name, const FVector& Relati
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 
 	UStaticMeshComponent* Panel = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-	Panel->SetupAttachment(Root);
+	Panel->SetupAttachment(Hull);
 	Panel->SetRelativeLocation(RelativeLocation);
 	Panel->SetRelativeScale3D(RelativeScale);
 	Panel->SetMobility(EComponentMobility::Movable);
-	Panel->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	Panel->SetCollisionObjectType(ECC_WorldDynamic);
 	Panel->SetCollisionResponseToAllChannels(ECR_Block);
+
+	// Query only. These panels hold the occupant up; the hull box is what the
+	// physics solver sees. Leaving physics collision on them risks their being
+	// welded into the hull body, which would make that body shape depend on
+	// component initialisation order.
+	Panel->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 
 	if (CubeMesh.Succeeded())
 	{
@@ -131,7 +160,7 @@ UStaticMeshComponent* ASFTestShip::AddOrientationMarker(
 	FName Name, UStaticMesh* Mesh, const FVector& RelativeLocation, double UniformScale)
 {
 	UStaticMeshComponent* Marker = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-	Marker->SetupAttachment(Root);
+	Marker->SetupAttachment(Hull);
 	Marker->SetRelativeLocation(RelativeLocation);
 	Marker->SetRelativeScale3D(FVector(UniformScale));
 	Marker->SetMobility(EComponentMobility::Movable);
@@ -169,22 +198,32 @@ void ASFTestShip::Tick(float DeltaSeconds)
 
 	const double Phase = 2.0 * UE_DOUBLE_PI * ElapsedSeconds / ProfilePeriodSeconds;
 
-	// A full-amplitude sinusoid along X: speed peaks at the design ceiling and
-	// acceleration reverses hardest at the zero crossings, which is where a
-	// passenger is most likely to be thrown or left behind.
+	// Same profile as the kinematic rig, driven through the physics solver instead
+	// of by moving the transform. Velocity is commanded every tick rather than
+	// integrated from forces: the point of this task is to change one thing only --
+	// where the transform comes from -- so the motion must stay the one the
+	// checkpoint 1 figures were taken against.
 	const FVector VelocityCms(PeakSpeedCms * FMath::Sin(Phase), 0.0, 0.0);
-	AddActorWorldOffset(VelocityCms * DeltaSeconds, /*bSweep=*/false);
+	Hull->SetPhysicsLinearVelocity(VelocityCms);
 
 	LinearAccelMetersPerSecSq = (VelocityCms - PreviousVelocityCms) / DeltaSeconds / 100.0;
 	PreviousVelocityCms = VelocityCms;
 
-	// All three angular axes loaded at once so no accidental symmetry hides a
-	// bug. Pitch and yaw sweep in quadrature; roll is held flat at its ceiling,
-	// which is the harsher case because it never lets up.
-	const FRotator RatePerSecond(
-		PeakPitchYawRateDegPerSec * FMath::Sin(Phase * 0.5),
-		PeakPitchYawRateDegPerSec * FMath::Cos(Phase * 0.5),
-		PeakRollRateDegPerSec);
+	// All three angular axes loaded at once so no accidental symmetry hides a bug.
+	// Pitch and yaw sweep in quadrature; roll is held flat at its ceiling, which is
+	// the harsher case because it never lets up.
+	//
+	// An angular velocity vector is (roll about X, pitch about Y, yaw about Z) --
+	// not the order FRotator prints in. It is commanded in the ship own axes and
+	// rotated into world space, because SetPhysicsAngularVelocityInRadians is world
+	// space while the old AddActorLocalRotation was local.
+	const FVector LocalRateRadPerSec(
+		FMath::DegreesToRadians(PeakRollRateDegPerSec),
+		FMath::DegreesToRadians(PeakPitchYawRateDegPerSec * FMath::Sin(Phase * 0.5)),
+		FMath::DegreesToRadians(PeakPitchYawRateDegPerSec * FMath::Cos(Phase * 0.5)));
 
-	AddActorLocalRotation((RatePerSecond * DeltaSeconds).Quaternion());
+	const FVector WorldRateRadPerSec =
+		GetActorTransform().TransformVectorNoScale(LocalRateRadPerSec);
+
+	Hull->SetPhysicsAngularVelocityInRadians(WorldRateRadPerSec);
 }
