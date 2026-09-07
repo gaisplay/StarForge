@@ -6,6 +6,7 @@
 
 class USFShipFrameComponent;
 class UStaticMeshComponent;
+class UPointLightComponent;
 
 /**
  * Throwaway measurement rig: a boxed room that flies a scripted manoeuvre at
@@ -68,14 +69,35 @@ private:
 	/** Builds floor and four walls out of engine cubes, so the rig needs no content. */
 	UStaticMeshComponent* AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale);
 
+	/**
+	 * Attaches an already-resolved shape to Root with no collision, so it rides the
+	 * ship purely as a visual orientation cue and cannot interfere with the walk test
+	 * or the drift measurement. The mesh is resolved by the caller via a static
+	 * ConstructorHelpers::FObjectFinder, same as the hull panels, because each marker
+	 * needs a different asset and a single shared finder cannot serve more than one path.
+	 */
+	UStaticMeshComponent* AddOrientationMarker(
+		FName Name, UStaticMesh* Mesh, const FVector& RelativeLocation, double UniformScale);
+
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USceneComponent> Root;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFShipFrameComponent> Frame;
 
+	/**
+	 * Lights the interior from the room's centre so the walk test is visible at all.
+	 * Attached to Root, so it travels and rotates with the ship like everything else
+	 * on board.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<UPointLightComponent> InteriorLight;
+
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> Panels;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> OrientationMarkers;
 
 	double ElapsedSeconds = 0.0;
 	FVector PreviousVelocityCms = FVector::ZeroVector;

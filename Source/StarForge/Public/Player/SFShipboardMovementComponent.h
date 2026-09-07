@@ -67,6 +67,23 @@ public:
 	double GetMeasuredSeconds() const { return MeasuredSeconds; }
 
 	/**
+	 * Duration of the longest settled interval that has completed since the frame was
+	 * bound, in seconds. Unlike GetMeasuredSeconds, a restart never touches this: it
+	 * survives the operator moving around after a good stand, so the result he came
+	 * for does not vanish the instant he touches a key.
+	 */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	double GetBestCompletedSeconds() const { return BestCompletedSeconds; }
+
+	/** Peak drift belonging to the interval reported by GetBestCompletedSeconds. */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	double GetBestCompletedPeakDriftCm() const { return BestCompletedPeakDriftCm; }
+
+	/** Peak jitter belonging to the interval reported by GetBestCompletedSeconds. */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	double GetBestCompletedPeakJitterCm() const { return BestCompletedPeakJitterCm; }
+
+	/**
 	 * Engine ticks on which the carry could not run because the occupant had no
 	 * movement base. Anything but zero means the instrument stopped instrumenting
 	 * for a stretch, and is the single most important thing it can report.
@@ -130,6 +147,23 @@ private:
 
 	/** Length of the current unbroken settled interval. */
 	double MeasuredSeconds = 0.0;
+
+	/**
+	 * Next MeasuredSeconds threshold at which the periodic log line fires. Advances
+	 * by ten seconds each time it fires and is reset alongside MeasuredSeconds, so
+	 * the log gets one line per ten seconds of accumulated measured time rather than
+	 * one per tick.
+	 */
+	double NextPeriodicLogSeconds = 10.0;
+
+	/**
+	 * Figures for the longest settled interval completed since the frame was last set.
+	 * A restart of the live interval never touches these -- only SetShipFrame does --
+	 * so a good result outlives the keypress that ends the interval that produced it.
+	 */
+	double BestCompletedSeconds = 0.0;
+	double BestCompletedPeakDriftCm = 0.0;
+	double BestCompletedPeakJitterCm = 0.0;
 
 	/** Engine frame the carry last ran on, used to spot gaps in it. */
 	uint64 LastCarryFrame = 0;

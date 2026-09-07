@@ -1,5 +1,6 @@
 #include "Ship/SFTestShip.h"
 
+#include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -17,6 +18,35 @@ namespace
 	 * standing on the plate rather than embedded in it.
 	 */
 	constexpr double SpawnClearanceCm = 100.0;
+
+	/**
+	 * Attenuation radius for the interior light, in centimetres. The room is 8 m
+	 * (800 cm) across; 2000 cm gives the light enough reach to fall off gently across
+	 * the whole interior instead of clipping hard at the far wall.
+	 */
+	constexpr double InteriorLightRadiusCm = 2000.0;
+
+	/**
+	 * Interior light intensity in candelas. The room is a sealed grey box with no
+	 * other light of any kind, so this single source has to read every wall clearly
+	 * on its own; 50000 cd at the room's 20 m attenuation radius is bright enough for
+	 * that without blowing out the white hull panels.
+	 */
+	constexpr double InteriorLightIntensityCandelas = 50000.0;
+
+	/**
+	 * Each basic-shape marker is the engine's 100 cm default asset scaled down to
+	 * roughly half a metre, so it reads as a small orientation cue rather than
+	 * another wall.
+	 */
+	constexpr double MarkerUniformScale = 0.5;
+
+	/**
+	 * How far a marker sits from the room's centre, in centimetres. Clear of the
+	 * walls (100 cm short of the 400 cm half-extent) and clear of the spawn point,
+	 * which sits on the pivot's X/Y column at floor height.
+	 */
+	constexpr double MarkerOffsetCm = 300.0;
 }
 
 ASFTestShip::ASFTestShip()
@@ -38,6 +68,38 @@ ASFTestShip::ASFTestShip()
 	AddBoxPanel(TEXT("WallXNeg"), FVector(-Half, 0.0, 0.0), FVector(PanelThickness, Span, Span));
 	AddBoxPanel(TEXT("WallYPos"), FVector(0.0, Half, 0.0), FVector(Span, PanelThickness, Span));
 	AddBoxPanel(TEXT("WallYNeg"), FVector(0.0, -Half, 0.0), FVector(Span, PanelThickness, Span));
+
+	// The room had no light of any kind: a black screen makes the one check that
+	// matters most after drift -- whether the interior holds still in front of the
+	// eyes while the ship rotates -- impossible to perform. Attaching to Root means
+	// the light travels and rotates with the ship like everything else on board.
+	InteriorLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("InteriorLight"));
+	InteriorLight->SetupAttachment(Root);
+	InteriorLight->SetRelativeLocation(FVector::ZeroVector);
+	InteriorLight->SetMobility(EComponentMobility::Movable);
+	InteriorLight->IntensityUnits = ELightUnits::Candelas;
+	InteriorLight->SetIntensity(static_cast<float>(InteriorLightIntensityCandelas));
+	InteriorLight->AttenuationRadius = static_cast<float>(InteriorLightRadiusCm);
+	// Shadows from a single centred point light in a sealed 8 m box mostly just
+	// self-shadow the corners nearest it and add nothing to the one thing this rig
+	// needs the light for -- reading the room's orientation at a glance -- so they
+	// are left off to keep the tick budget clean for the measurement itself.
+	InteriorLight->SetCastShadows(false);
+
+	// Six identical grey walls give the eye nothing to judge rotation against.
+	// Distinct silhouettes are used instead of colours: a colour needs a material
+	// parameter name, and a wrong guess there fails silently, which is exactly the
+	// class of defect this branch exists to remove.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> ConeMesh(TEXT("/Engine/BasicShapes/Cone.Cone"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+
+	AddOrientationMarker(TEXT("MarkerSphere"), SphereMesh.Object,
+		FVector(MarkerOffsetCm, 0.0, 0.0), MarkerUniformScale);
+	AddOrientationMarker(TEXT("MarkerCone"), ConeMesh.Object,
+		FVector(0.0, MarkerOffsetCm, 0.0), MarkerUniformScale);
+	AddOrientationMarker(TEXT("MarkerCylinder"), CylinderMesh.Object,
+		FVector(-MarkerOffsetCm, 0.0, 0.0), MarkerUniformScale);
 }
 
 UStaticMeshComponent* ASFTestShip::AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale)
@@ -60,6 +122,28 @@ UStaticMeshComponent* ASFTestShip::AddBoxPanel(FName Name, const FVector& Relati
 
 	Panels.Add(Panel);
 	return Panel;
+}
+
+UStaticMeshComponent* ASFTestShip::AddOrientationMarker(
+	FName Name, UStaticMesh* Mesh, const FVector& RelativeLocation, double UniformScale)
+{
+	UStaticMeshComponent* Marker = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+	Marker->SetupAttachment(Root);
+	Marker->SetRelativeLocation(RelativeLocation);
+	Marker->SetRelativeScale3D(FVector(UniformScale));
+	Marker->SetMobility(EComponentMobility::Movable);
+
+	// Purely a visual orientation cue -- it must not be able to block the walk test
+	// or perturb the drift figure.
+	Marker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	if (Mesh)
+	{
+		Marker->SetStaticMesh(Mesh);
+	}
+
+	OrientationMarkers.Add(Marker);
+	return Marker;
 }
 
 FVector ASFTestShip::GetInteriorSpawnWorldLocation() const

@@ -114,6 +114,37 @@ void ASFFrameDriftHUD::DrawHUD()
 	DrawLine(FString::Printf(TEXT("jitter peak          %.3f cm/tick"),
 		Movement->GetPeakJitterCm()), Y);
 
+	// The live figures above reset the instant the operator commands any movement,
+	// which erases a good result before it can be written down. This block reports
+	// the longest settled interval completed so far instead, and nothing but a new
+	// SetShipFrame call ever clears it, so it survives him walking around afterward.
+	Y += 10.0;
+	DrawLine(TEXT("--- completed result (survives walking) ---"), Y);
+
+	const double BestSeconds = Movement->GetBestCompletedSeconds();
+	const double BestPeakDrift = Movement->GetBestCompletedPeakDriftCm();
+	const bool bBestMeasured = BestSeconds >= MinimumValidMeasurementSeconds;
+	const bool bBestWithinBudget = bBestMeasured && BestPeakDrift <= 1.0;
+
+	const FLinearColor BestColor = bBestWithinBudget
+		? FLinearColor::Green
+		: (bBestMeasured ? FLinearColor::Red : FLinearColor::Yellow);
+
+	DrawLine(
+		FString::Printf(TEXT("best drift peak      %.3f cm   [budget 1.0 cm/min]"), BestPeakDrift),
+		Y,
+		BestColor);
+
+	DrawLine(
+		FString::Printf(TEXT("best measured        %.1f s of settled time"), BestSeconds),
+		Y,
+		bBestMeasured ? FLinearColor::White : FLinearColor::Yellow);
+
+	DrawLine(
+		FString::Printf(TEXT("best jitter peak     %.3f cm/tick"),
+			Movement->GetBestCompletedPeakJitterCm()),
+		Y);
+
 	const FVector Local = Movement->GetLocalLocation();
 	DrawLine(FString::Printf(TEXT("ship-local position  %.1f  %.1f  %.1f cm"),
 		Local.X, Local.Y, Local.Z), Y);

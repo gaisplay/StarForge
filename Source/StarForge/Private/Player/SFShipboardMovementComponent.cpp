@@ -4,6 +4,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "Ship/SFShipFrameComponent.h"
+#include "StarForgeLog.h"
 
 namespace
 {
@@ -44,6 +45,14 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 	bHasCarriedOnce = false;
 
 	RestartMeasurementInterval();
+
+	// The latched result belongs to whichever frame produced it. Binding to a new
+	// (or the same) frame invalidates it, and this is the only place that does --
+	// an ordinary interval restart must never touch it, or the operator's result
+	// would vanish the instant he takes a step.
+	BestCompletedSeconds = 0.0;
+	BestCompletedPeakDriftCm = 0.0;
+	BestCompletedPeakJitterCm = 0.0;
 }
 
 int64 USFShipboardMovementComponent::GetFramesSinceLastCarry() const
@@ -206,10 +215,46 @@ void USFShipboardMovementComponent::UpdateDriftMeasurement(float DeltaSeconds)
 
 	LastLocalLocation = NowLocal;
 	MeasuredSeconds += DeltaSeconds;
+
+	// One line per ten seconds of accumulated measured time, so a run's outcome is
+	// on disk even if nobody transcribes the HUD before it resets. Deliberately not
+	// logged every tick: at 60 Hz that would spam the log without adding anything
+	// the summary line does not already say.
+	while (MeasuredSeconds >= NextPeriodicLogSeconds)
+	{
+		UE_LOG(LogStarForge, Log,
+			TEXT("Shipboard drift: %.1f s settled, drift now %.3f cm, peak drift %.3f cm, ")
+			TEXT("peak jitter %.3f cm/tick, skipped carries %lld"),
+			MeasuredSeconds, DriftCm, PeakDriftCm, PeakJitterCm, SkippedCarryFrames);
+		NextPeriodicLogSeconds += 10.0;
+	}
 }
 
 void USFShipboardMovementComponent::RestartMeasurementInterval()
 {
+	// The interval about to be cleared is complete. Latch it if it beats the best
+	// one seen so far, so the operator's result survives the very keypress that is
+	// about to erase the live figures below. Compared by duration, not recency: a
+	// stray two-second interval right after a good minute must not overwrite it.
+	if (MeasuredSeconds > BestCompletedSeconds)
+	{
+		BestCompletedSeconds = MeasuredSeconds;
+		BestCompletedPeakDriftCm = PeakDriftCm;
+		BestCompletedPeakJitterCm = PeakJitterCm;
+	}
+
+	// A completed interval worth reading is one line on disk, so a run's outcome
+	// can be checked after the fact even if the HUD's live figures were never
+	// written down. Five seconds excludes the routine restarts every settle-and-step
+	// produces, which would otherwise spam the log with nothing worth reading.
+	if (MeasuredSeconds > 5.0)
+	{
+		UE_LOG(LogStarForge, Log,
+			TEXT("Shipboard drift interval complete: %.1f s, peak drift %.3f cm, ")
+			TEXT("peak jitter %.3f cm/tick, skipped carries %lld"),
+			MeasuredSeconds, PeakDriftCm, PeakJitterCm, SkippedCarryFrames);
+	}
+
 	// Peaks and clock go together or not at all. Carrying peaks across a restart
 	// would judge a thirty-second worst case against a minute's budget; carrying
 	// the clock across one would let two short stands add up to a valid reading
@@ -218,4 +263,5 @@ void USFShipboardMovementComponent::RestartMeasurementInterval()
 	PeakDriftCm = 0.0;
 	PeakJitterCm = 0.0;
 	MeasuredSeconds = 0.0;
+	NextPeriodicLogSeconds = 10.0;
 }
