@@ -56,7 +56,9 @@ run. The project logs its own summaries under the `LogStarForge` category.
 
 Two runtime modules, and the split is the single most important structural fact in the repo.
 
-**`StarForgeCore`** depends on `Core` and `CoreUObject` only. **Adding `Engine` to it is an error that destroys the point of the split.** It holds all the maths — reference-frame conversions, and later the thruster efficiency matrix, thrust solver and flight-control loop. No actors, no components, no meshes. The reason is testability: a bug in the thrust solver does not crash or log, it surfaces weeks later as "the ship feels wrong". A headless unit test catches it in a second.
+**`StarForgeCore`** depends on `Core` and `CoreUObject` only. **Adding `Engine` to it is an error that destroys the point of the split.** It holds all the maths — reference-frame conversions, the 6x6 matrix, the thruster
+effectiveness matrix, the thrust allocator and the IFCS flight-control loop. No actors,
+no components, no meshes. The reason is testability: a bug in the thrust solver does not crash or log, it surfaces weeks later as "the ship feels wrong". A headless unit test catches it in a second.
 
 **`StarForge`** is the game module — actors, components, input, UI, AI. It depends on `StarForgeCore`.
 
@@ -93,6 +95,9 @@ These are spec constants, not tuning knobs. Changing one invalidates the measure
 | Roll rate | 180°/s | §7 |
 | Grav-plate compensation ceiling | 2 g = 19.62 m/s² | §6 |
 | Occupant drift budget | ≤ 1 cm per minute, no input | §10 |
+| Solver damping lambda | 0.01 | flight-maths plan |
+| Clamp-and-correct passes | 3 | flight-maths plan |
+| Parasitic wrench tolerance | ≤ 1% of that axis's capability | flight-maths plan |
 
 ## UE 5.8 API notes
 
@@ -119,8 +124,9 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 ## Current state
 
-**Stage 1 is finished and its question is answered.** The branch `feat/frame-spike`
-carries spec stages 0–1, and the checkpoint measurement confirmed motion
+**Stages 0–2's first half are on `main`; there is no feature branch open.**
+
+Stage 1's question is answered. The checkpoint measurement confirmed motion
 decomposition: an occupant held a deck rolling at 180°/s for 57 unbroken seconds
 with drift and jitter below the instrument's resolution, and the interior stayed
 visually still. The plan B in spec §12 is off the table.
@@ -129,19 +135,24 @@ The zero is trustworthy because a negative control earned it: running with
 `sf.ShipGravity 0` dropped the occupant and produced no measurement records at all.
 Figures and control are in `docs/superpowers/notes/2026-09-06-checkpoint-1-results.md`.
 
-**Next action:** execute `docs/superpowers/plans/2026-09-07-flight-maths.md` — the
-first of two stage-2 plans, covering the effectiveness matrix, the thrust allocator
-and the flight controller. All of it is headless-testable. The second plan (Chaos
-bridge, ship data asset, pilot station) is not written yet and **must open with a
-re-measurement of occupant drift**, because the result above was obtained against a
+**The flight maths is built and headless-tested** — 22 tests, `StarForgeCore` still
+free of `Engine`, full recompile without warnings. `SmallMatrix`, `ThrusterDef`,
+`ThrustAllocator` and `FlightController` cover the effectiveness matrix, the damped
+pseudo-inverse thrust allocator and the IFCS loop. **None of it has moved a real
+ship yet** — it has never touched Chaos, an actor or a frame of gameplay.
+
+**Next action:** write the second stage-2 plan — Chaos bridge, `UShipDataAsset`,
+thruster array component, pilot station, input routing. It **must open with a
+re-measurement of occupant drift**, because checkpoint 1 was measured against a
 kinematic ship and moving it onto Chaos changes when its transform updates.
 
-**Read `docs/superpowers/notes/2026-09-07-handoff.md` before touching anything.** It
-carries what neither the code nor the git history says: which decisions are
-load-bearing and must not be tidied away, what only looks verified, and the one
-contradiction in the spec that needs a human decision.
+**Read `docs/superpowers/notes/2026-09-07-handoff-stage-2.md` before touching
+anything.** It carries what neither the code nor the git history says: which
+decisions are load-bearing and must not be tidied away, what only looks verified,
+and the decisions waiting on a human. For the stage 0–1 movement work,
+`docs/superpowers/notes/2026-09-07-handoff.md` remains the authority.
 
-Three things in the code that look like mistakes and are not:
+Things in the code that look like mistakes and are not:
 
 - `SetGravityDirection` along the ship's Z in the shipboard movement component. Without
   it a rolling deck stops being walkable within a quarter second and the carry stops
@@ -151,6 +162,16 @@ Three things in the code that look like mistakes and are not:
 - Camera view limits of `0 / 359.999` rather than `±180`. `FMath::ClampAngle` computes
   its half-width as `ClampAxis(Max - Min) * 0.5`, and `ClampAxis(360)` is zero, so a
   symmetric range pins every angle to 180°.
+- `FThrustAllocator::Solve` recomputing the pseudo-inverse over the thrusters still
+  free to move instead of reusing the cached whole-array one. Reusing it re-proposes
+  a negative throttle for every opposed thruster, the clamp discards it, and three
+  passes converge to seven eighths of every demand — a ship permanently down an
+  eighth of its thrust with nothing in the code to point at.
+- Test thruster arrays carrying **opposed pairs** on every axis. An array pushing only
+  along +X, +Y and +Z cannot produce torque without also shoving the ship, because
+  zeroing the net force zeroes every contributing throttle. Turning without being
+  pushed needs a force couple, and a couple needs two thrusters facing opposite ways.
+  This is a constraint on real ship layouts too, not just on the fixture.
 
 When reading the checkpoint HUD: **check the measured-time line before the drift
 figure.** A drift of zero is what both a perfect minute and a dead instrument look
