@@ -3,10 +3,13 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
+#include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTestShip.h"
+#include "Ship/SFThrusterArrayComponent.h"
 #include "ShipFrameMath.h"
 
 namespace
@@ -25,11 +28,15 @@ namespace
 	 * against it. A dark panel behind the text keeps it legible whatever the scene
 	 * does. Sized generously: a panel slightly too large costs nothing, a line
 	 * falling off the bottom of a too-small one is the same defect all over again.
+	 *
+	 * Raised to 640 when the flight block was added: those lines pushed the readout
+	 * past the old 480 and the last of them fell off the panel, which is the exact
+	 * illegibility the panel was introduced to fix.
 	 */
 	constexpr float PanelX = 20.0f;
 	constexpr float PanelY = 36.0f;
 	constexpr float PanelWidth = 760.0f;
-	constexpr float PanelHeight = 480.0f;
+	constexpr float PanelHeight = 640.0f;
 }
 
 void ASFFrameDriftHUD::DrawLine(const FString& Text, double& Y, const FLinearColor& Color)
@@ -228,4 +235,81 @@ void ASFFrameDriftHUD::DrawHUD()
 			Y,
 			FLinearColor::Red);
 	}
+
+	// The flight numbers share this readout rather than forming a second HUD: the
+	// drift figures matter during flight for the same reasons they mattered standing
+	// still, and two HUDs cannot both be on screen at once.
+	DrawLine(TEXT(""), Y);
+	DrawFlightBlock(Y);
+}
+
+void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
+{
+	const ASFTestShip* Ship = Cast<ASFTestShip>(
+		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+
+	if (!Ship || !Ship->GetThrusters())
+	{
+		DrawLine(TEXT("flight: no ship with a thruster array in the level"), Y, FLinearColor::Red);
+		return;
+	}
+
+	const USFThrusterArrayComponent* Array = Ship->GetThrusters();
+
+	// Said before anything else. An empty flight block looks identical whether the
+	// ship is idle or the array never built, and only this line separates them.
+	if (!Array->IsReady())
+	{
+		DrawLine(TEXT("flight: thruster array NOT built -- ship cannot fly"), Y, FLinearColor::Red);
+		return;
+	}
+
+	const int32 ProfileOn =
+		IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"))
+			? IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"))->GetInt()
+			: 1;
+
+	DrawLine(FString::Printf(TEXT("flight mode: %s"),
+		ProfileOn != 0 ? TEXT("scripted profile (sf.ShipProfile 1)") : TEXT("thrust (sf.ShipProfile 0)")),
+		Y, ProfileOn != 0 ? FLinearColor::Yellow : FLinearColor::Green);
+
+	const StarForge::FFlightIntent Intent = Ship->GetLastIntent();
+	DrawLine(FString::Printf(TEXT("intent  lin (%.2f %.2f %.2f)  ang (%.2f %.2f %.2f)  assist %s"),
+		Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,
+		Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,
+		Intent.bFlightAssistEnabled ? TEXT("on") : TEXT("off")), Y);
+
+	const StarForge::FRigidBodyState State = Array->ReadState();
+	DrawLine(FString::Printf(TEXT("speed   %.1f m/s   angular (%.1f %.1f %.1f) deg/s"),
+		State.LinearVelocity.Size(),
+		FMath::RadiansToDegrees(State.AngularVelocity.X),
+		FMath::RadiansToDegrees(State.AngularVelocity.Y),
+		FMath::RadiansToDegrees(State.AngularVelocity.Z)), Y);
+
+	const StarForge::FWrench Demand = Array->GetLastDemand();
+	const StarForge::FWrench Achieved = Array->GetLastAchieved();
+
+	DrawLine(FString::Printf(TEXT("force   want (%.0f %.0f %.0f)  got (%.0f %.0f %.0f) N"),
+		Demand.Force.X, Demand.Force.Y, Demand.Force.Z,
+		Achieved.Force.X, Achieved.Force.Y, Achieved.Force.Z), Y);
+
+	DrawLine(FString::Printf(TEXT("torque  want (%.0f %.0f %.0f)  got (%.0f %.0f %.0f) Nm"),
+		Demand.Torque.X, Demand.Torque.Y, Demand.Torque.Z,
+		Achieved.Torque.X, Achieved.Torque.Y, Achieved.Torque.Z), Y);
+
+	// Saturation is the usual reason a ship will not do what it is told, and it is
+	// invisible without this: the demand looks fine and the ship simply lags.
+	int32 WideOpen = 0;
+	for (double Throttle : Array->GetLastThrottles())
+	{
+		if (Throttle > 0.999)
+		{
+			++WideOpen;
+		}
+	}
+
+	const int32 Count = Array->GetLastThrottles().Num();
+	DrawLine(FString::Printf(TEXT("throttles %d of %d wide open%s"),
+		WideOpen, Count, WideOpen > 0 ? TEXT("  -- SATURATED") : TEXT("")),
+		Y, WideOpen > 0 ? FLinearColor::Yellow : FLinearColor::White);
 }
