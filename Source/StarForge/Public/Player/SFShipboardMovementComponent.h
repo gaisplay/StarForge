@@ -77,6 +77,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	int64 GetSkippedCarryFrames() const { return SkippedCarryFrames; }
 
+	/**
+	 * Engine frames since the carry last ran, or zero before the first one.
+	 *
+	 * The counter above cannot report a base loss that never ends, because it is
+	 * incremented inside the very function the engine stops calling once the
+	 * occupant comes off the deck. This is read from outside, every frame, so it can.
+	 */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	int64 GetFramesSinceLastCarry() const;
+
 	/** Current position in the ship's coordinates, in centimetres. */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	FVector GetLocalLocation() const;

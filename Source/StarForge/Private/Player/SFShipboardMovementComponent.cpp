@@ -46,6 +46,16 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 	RestartMeasurementInterval();
 }
 
+int64 USFShipboardMovementComponent::GetFramesSinceLastCarry() const
+{
+	if (!bHasCarriedOnce)
+	{
+		return 0;
+	}
+
+	return static_cast<int64>(GFrameCounter) - static_cast<int64>(LastCarryFrame);
+}
+
 FVector USFShipboardMovementComponent::GetLocalLocation() const
 {
 	if (!ShipFrame.IsValid() || !UpdatedComponent)
@@ -92,6 +102,11 @@ void USFShipboardMovementComponent::DetectCarryGap()
 		SkippedCarryFrames += static_cast<int64>(ThisFrame - LastCarryFrame - 1);
 		LastFrameTransform = ShipFrame->GetFrameTransform();
 		bBaselineValid = false;
+
+		// He has just landed, and the velocity that came with it is not drift.
+		// Restart the settle window too, or the next whole interval banks the
+		// landing as a failure.
+		SecondsSinceCommandedInput = 0.0;
 	}
 
 	LastCarryFrame = ThisFrame;

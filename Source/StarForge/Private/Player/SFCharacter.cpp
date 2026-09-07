@@ -69,10 +69,15 @@ void ASFCharacter::BeginPlay()
 			// under a 180 deg/s roll the roll saturates in about half a second and the
 			// ship-local view is lost. An occupant riding a ship has no world horizon to
 			// be kept level against.
-			CameraManager->ViewRollMin = -180.0f;
-			CameraManager->ViewRollMax = 180.0f;
-			CameraManager->ViewPitchMin = -180.0f;
-			CameraManager->ViewPitchMax = 180.0f;
+			// The engine idiom for "unlimited" is 0 .. 359.999 -- how it leaves yaw by
+			// default. Do NOT write -180 .. 180 here: FMath::ClampAngle takes its half
+			// width as ClampAxis(Max - Min) * 0.5, and ClampAxis(360) is Fmod(360, 360)
+			// = 0, so a symmetric range collapses the half width to zero and pins every
+			// angle to 180 degrees -- worse than the clamp it was meant to lift.
+			CameraManager->ViewRollMin = 0.0f;
+			CameraManager->ViewRollMax = 359.999f;
+			CameraManager->ViewPitchMin = 0.0f;
+			CameraManager->ViewPitchMax = 359.999f;
 		}
 	}
 }

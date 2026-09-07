@@ -67,6 +67,17 @@ void ASFFrameDriftHUD::DrawHUD()
 			FLinearColor::Red);
 	}
 
+	// The counter above is incremented from inside the carry, so it can never report
+	// a gap that is still open. This is read from out here, every frame, and does.
+	const int64 FramesSinceCarry = Movement->GetFramesSinceLastCarry();
+	if (FramesSinceCarry > 1)
+	{
+		DrawLine(
+			FString::Printf(TEXT("CARRY NOT RUNNING - %lld frames since the occupant was carried"), FramesSinceCarry),
+			Y,
+			FLinearColor::Red);
+	}
+
 	DrawLine(FString::Printf(TEXT("elapsed              %.1f s"), ElapsedSeconds), Y);
 	DrawLine(FString::Printf(TEXT("drift now            %.3f cm"), Movement->GetDriftCm()), Y);
 
