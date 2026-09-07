@@ -46,7 +46,17 @@ void USFShipFrameComponent::TickComponent(
 
 	if (bHasSample && DeltaTime > UE_SMALL_NUMBER)
 	{
-		const FQuat Delta = Current.GetRotation() * LastSampledTransform.GetRotation().Inverse();
+		FQuat Delta = Current.GetRotation() * LastSampledTransform.GetRotation().Inverse();
+
+		// ToAxisAndAngle reports an angle in [0, 2pi], so a tick that turned the ship
+		// by a hair short of a full revolution comes back as that near-full angle
+		// about the opposite axis instead of the small one it really was. A quaternion
+		// and its negation name the same rotation, so negating when W is negative
+		// picks the shortest arc and pins the angle into [0, pi].
+		if (Delta.W < 0.0)
+		{
+			Delta = -Delta;
+		}
 
 		FVector Axis;
 		double Angle;

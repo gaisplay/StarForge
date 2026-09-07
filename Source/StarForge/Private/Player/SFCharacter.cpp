@@ -1,6 +1,7 @@
 #include "Player/SFCharacter.h"
 
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Player/SFShipboardMovementComponent.h"
@@ -56,6 +57,22 @@ void ASFCharacter::BeginPlay()
 				TEXT("SFCharacter: found no USFShipFrameComponent in the world. The "
 					 "occupant will stand in world space while the ship flies away, and "
 					 "every drift reading will be a zero that means nothing."));
+		}
+	}
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (APlayerCameraManager* CameraManager = PC->PlayerCameraManager)
+		{
+			// ProcessViewRotation clamps roll and pitch to +/-89.9 degrees every tick.
+			// The carry composes the ship's full rotation into the control rotation, so
+			// under a 180 deg/s roll the roll saturates in about half a second and the
+			// ship-local view is lost. An occupant riding a ship has no world horizon to
+			// be kept level against.
+			CameraManager->ViewRollMin = -180.0f;
+			CameraManager->ViewRollMax = 180.0f;
+			CameraManager->ViewPitchMin = -180.0f;
+			CameraManager->ViewPitchMax = 180.0f;
 		}
 	}
 }

@@ -35,25 +35,47 @@ public:
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	double GetDriftCm() const { return DriftCm; }
 
-	/** Worst drift seen since the frame was set, in centimetres. */
+	/**
+	 * Worst drift seen during the current unbroken settled interval, in centimetres.
+	 * It is deliberately not a lifetime worst: the budget it is judged against is
+	 * per minute, so the figure has to describe the same stretch of time as
+	 * GetMeasuredSeconds and no other.
+	 */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	double GetPeakDriftCm() const { return PeakDriftCm; }
 
 	/**
-	 * Largest single-tick jump of the ship-local position while standing still,
-	 * in centimetres. Drift and jitter fail differently: a rig can hold its
-	 * average position perfectly and still shake hard enough to be unusable.
+	 * Largest single-tick jump of the ship-local position during the current
+	 * settled interval, in centimetres. Drift and jitter fail differently: a rig
+	 * can hold its average position perfectly and still shake hard enough to be
+	 * unusable.
 	 */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	double GetPeakJitterCm() const { return PeakJitterCm; }
 
 	/**
-	 * Seconds of settled, uncommanded time actually folded into the drift figures.
-	 * A drift of zero means nothing unless this is large: it separates "held
-	 * position for a minute" from "never took a reading".
+	 * Length of the current unbroken stretch of settled, uncommanded time, in
+	 * seconds. A drift of zero means nothing unless this is large: it separates
+	 * "held position for a minute" from "never took a reading".
+	 *
+	 * One continuous interval, not a sum of several. Summing would let two
+	 * thirty-second stands with a step between them pass a fifty-five-second
+	 * validity gate that neither stand actually met, while each peak beside it
+	 * was only ever a thirty-second figure.
 	 */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	double GetMeasuredSeconds() const { return MeasuredSeconds; }
+
+	/**
+	 * Engine ticks on which the carry could not run because the occupant had no
+	 * movement base. Anything but zero means the instrument stopped instrumenting
+	 * for a stretch, and is the single most important thing it can report.
+	 *
+	 * Counted internally as uint64 but reported as int64, because Blueprint has no
+	 * unsigned 64-bit type and this figure has to reach the readout.
+	 */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	int64 GetSkippedCarryFrames() const { return SkippedCarryFrames; }
 
 	/** Current position in the ship's coordinates, in centimetres. */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
@@ -64,6 +86,19 @@ public:
 private:
 	void CarryWithFrame();
 	void UpdateDriftMeasurement(float DeltaSeconds);
+
+	/**
+	 * Drops the drift figures and the clock together, so the duration reported and
+	 * the peaks reported always describe the same unbroken stretch of settled time.
+	 */
+	void RestartMeasurementInterval();
+
+	/**
+	 * Notices that the engine stopped calling the carry for a while and re-seeds
+	 * from the ship's present pose. Returns nothing; the count it keeps is the
+	 * report.
+	 */
+	void DetectCarryGap();
 
 	TWeakObjectPtr<USFShipFrameComponent> ShipFrame;
 
@@ -83,9 +118,18 @@ private:
 	/** Seconds since the player last commanded movement. */
 	double SecondsSinceCommandedInput = 0.0;
 
-	/** Settled time folded into the drift figures so far. */
+	/** Length of the current unbroken settled interval. */
 	double MeasuredSeconds = 0.0;
+
+	/** Engine frame the carry last ran on, used to spot gaps in it. */
+	uint64 LastCarryFrame = 0;
+
+	/** Total carry ticks missed because the occupant was not attached to the ship. */
+	int64 SkippedCarryFrames = 0;
 
 	/** False until a baseline has been taken against a live capsule. */
 	bool bBaselineValid = false;
+
+	/** False until the carry has run once, so the very first tick is not read as a gap. */
+	bool bHasCarriedOnce = false;
 };

@@ -8,6 +8,16 @@
 #include "Ship/SFTestShip.h"
 #include "ShipFrameMath.h"
 
+namespace
+{
+	/**
+	 * Settled seconds required before any verdict is meaningful. Matches the validity
+	 * gate on the checkpoint results form -- if these two ever disagree, the screen
+	 * wins and the operator is misled.
+	 */
+	constexpr double MinimumValidMeasurementSeconds = 55.0;
+}
+
 void ASFFrameDriftHUD::DrawLine(const FString& Text, double& Y, const FLinearColor& Color)
 {
 	if (Canvas)
@@ -45,14 +55,28 @@ void ASFFrameDriftHUD::DrawHUD()
 	const USFShipFrameComponent* Frame = Movement->GetShipFrame();
 	const ASFTestShip* Ship = Frame ? Cast<ASFTestShip>(Frame->GetOwner()) : nullptr;
 
+	// Ahead of every number, because it is the one line that invalidates all of them:
+	// while the occupant was unbased the carry did not run, so nothing below advanced
+	// and the readout froze on stale values without going red anywhere else.
+	const int64 Skipped = Movement->GetSkippedCarryFrames();
+	if (Skipped > 0)
+	{
+		DrawLine(
+			FString::Printf(TEXT("CARRY SKIPPED %lld ticks - the occupant came unattached"), Skipped),
+			Y,
+			FLinearColor::Red);
+	}
+
 	DrawLine(FString::Printf(TEXT("elapsed              %.1f s"), ElapsedSeconds), Y);
 	DrawLine(FString::Printf(TEXT("drift now            %.3f cm"), Movement->GetDriftCm()), Y);
 
 	// Green is a verdict, so it must not appear until there is something to have a
 	// verdict about. A peak of zero over zero measured seconds is not a pass -- it
 	// is an instrument that never ran, and it looks identical to a perfect result.
+	// The bar is the same one the results form applies, and for the same reason: a
+	// peak drawn from four seconds says nothing about a budget written per minute.
 	const double MeasuredSeconds = Movement->GetMeasuredSeconds();
-	const bool bMeasured = MeasuredSeconds > 1.0;
+	const bool bMeasured = MeasuredSeconds >= MinimumValidMeasurementSeconds;
 	const double PeakDrift = Movement->GetPeakDriftCm();
 	const bool bWithinBudget = bMeasured && PeakDrift <= 1.0;
 
@@ -61,10 +85,16 @@ void ASFFrameDriftHUD::DrawHUD()
 		Y,
 		bWithinBudget ? FLinearColor::Green : (bMeasured ? FLinearColor::Red : FLinearColor::Yellow));
 
+	const FString MeasuredWarning = bMeasured
+		? FString()
+		: FString::Printf(
+			TEXT("   <- NOTHING MEASURED YET (need %.0f s unbroken)"),
+			MinimumValidMeasurementSeconds);
+
 	DrawLine(
 		FString::Printf(TEXT("measured             %.1f s of settled time%s"),
 			MeasuredSeconds,
-			bMeasured ? TEXT("") : TEXT("   <- NOTHING MEASURED YET")),
+			*MeasuredWarning),
 		Y,
 		bMeasured ? FLinearColor::White : FLinearColor::Yellow);
 
@@ -83,12 +113,30 @@ void ASFFrameDriftHUD::DrawHUD()
 			Ship->GetSpeedMetersPerSec()), Y);
 
 		const FVector Omega = Frame->GetAngularVelocityRadPerSec();
-		DrawLine(FString::Printf(TEXT("angular rate         %.1f deg/s   [ceiling 180]"),
-			FMath::RadiansToDegrees(Omega.Size())), Y);
 
-		const FVector LinearAccel = Ship->GetLinearAccelMetersPerSecSq();
+		// The design's 180 deg/s is the roll ceiling alone, but the profile loads all
+		// three axes at once, so |omega| sits above it permanently and a correctly
+		// flown run read as forever over budget. Pitch and yaw sweep in quadrature and
+		// so contribute their full amplitude at every phase; the honest ceiling for a
+		// magnitude is the two combined.
+		const double CombinedCeilingDegPerSec = FMath::Sqrt(
+			FMath::Square(Ship->PeakPitchYawRateDegPerSec) +
+			FMath::Square(Ship->PeakRollRateDegPerSec));
+
+		DrawLine(FString::Printf(TEXT("angular rate         %.1f deg/s   [combined ceiling %.1f]"),
+			FMath::RadiansToDegrees(Omega.Size()), CombinedCeilingDegPerSec), Y);
+
+		// omega x (omega x r) is the centripetal term of one frame only. The angular
+		// velocity and the ship's linear acceleration are both world-space while the
+		// offset is ship-local, so mixing them produced a figure wrong by an amount
+		// that swung with the ship's attitude. Bring the two vectors into the ship.
+		const FTransform FrameTransform = Frame->GetFrameTransform();
+		const FVector LocalOmega = FrameTransform.InverseTransformVectorNoScale(Omega);
+		const FVector LocalAccel = FrameTransform.InverseTransformVectorNoScale(
+			Ship->GetLinearAccelMetersPerSecSq());
+
 		const FVector Felt = StarForge::ShipFrame::ComputeFeltAcceleration(
-			LinearAccel, Omega, Local / 100.0);
+			LocalAccel, LocalOmega, Local / 100.0);
 
 		const bool bKnockdown = StarForge::ShipFrame::ExceedsGravPlateLimit(Felt);
 		DrawLine(

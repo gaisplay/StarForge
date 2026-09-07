@@ -1,5 +1,6 @@
 #include "Player/SFShipboardMovementComponent.h"
 
+#include "CoreGlobals.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "Ship/SFShipFrameComponent.h"
@@ -16,8 +17,13 @@ namespace
 
 USFShipboardMovementComponent::USFShipboardMovementComponent()
 {
-	// The ship rotates the occupant explicitly in CarryWithFrame; letting the
-	// stock yaw-only path run as well would apply the rotation twice.
+	// This flag does nothing on the frame path. CarryWithFrame applies the ship's
+	// rotation itself and never calls Super::UpdateBasedMovement, so the stock
+	// yaw-follow that this flag suppresses cannot run there in the first place.
+	// Where it does take effect is the fallback path, and there it silently drops
+	// view-follow for a character riding an ordinary rotating platform. The rig has
+	// exactly one moving base and it is the ship, so nothing in it reaches that
+	// case; a game with lifts and turntables in it would not get off so lightly.
 	bIgnoreBaseRotation = true;
 }
 
@@ -30,12 +36,14 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 		LastFrameTransform = NewFrame->GetFrameTransform();
 	}
 
-	DriftCm = 0.0;
-	PeakDriftCm = 0.0;
-	PeakJitterCm = 0.0;
-	MeasuredSeconds = 0.0;
 	SecondsSinceCommandedInput = 0.0;
 	bBaselineValid = false;
+
+	LastCarryFrame = 0;
+	SkippedCarryFrames = 0;
+	bHasCarriedOnce = false;
+
+	RestartMeasurementInterval();
 }
 
 FVector USFShipboardMovementComponent::GetLocalLocation() const
@@ -56,8 +64,38 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 		return;
 	}
 
+	DetectCarryGap();
+
+	// CMC decides what is walkable by comparing a floor normal against gravity, and
+	// gravity points at world down until something says otherwise. A deck rolling at
+	// the design's 180 deg/s crosses the 44.8 degree walkable limit in a quarter
+	// second, after which the character falls, loses its base, and the engine stops
+	// calling this function at all -- taking the carry and the whole measurement with
+	// it. Pointing gravity along the ship's own down is what the spec's grav plates
+	// mean in engine terms.
+	SetGravityDirection(-ShipFrame->GetFrameTransform().GetUnitAxis(EAxis::Z));
+
 	CarryWithFrame();
 	UpdateDriftMeasurement(DeltaSeconds);
+}
+
+void USFShipboardMovementComponent::DetectCarryGap()
+{
+	const uint64 ThisFrame = GFrameCounter;
+
+	if (bHasCarriedOnce && ThisFrame > LastCarryFrame + 1)
+	{
+		// The engine stopped calling us for a stretch -- the occupant was not attached.
+		// Carrying through a ship pose that old would map him through hundreds of metres
+		// of stale motion, so re-seed instead and make the gap visible: a skipped carry
+		// is the single most important thing this instrument can report.
+		SkippedCarryFrames += static_cast<int64>(ThisFrame - LastCarryFrame - 1);
+		LastFrameTransform = ShipFrame->GetFrameTransform();
+		bBaselineValid = false;
+	}
+
+	LastCarryFrame = ThisFrame;
+	bHasCarriedOnce = true;
 }
 
 void USFShipboardMovementComponent::CarryWithFrame()
@@ -127,6 +165,7 @@ void USFShipboardMovementComponent::UpdateDriftMeasurement(float DeltaSeconds)
 			DriftReferenceLocal = NowLocal;
 			LastLocalLocation = NowLocal;
 			bBaselineValid = true;
+			RestartMeasurementInterval();
 		}
 		return;
 	}
@@ -134,10 +173,12 @@ void USFShipboardMovementComponent::UpdateDriftMeasurement(float DeltaSeconds)
 	if (SecondsSinceCommandedInput < SettleSeconds)
 	{
 		// His own momentum is still bleeding off. Re-baseline rather than bank
-		// walking as drift, but do not count this tick as measured either.
+		// walking as drift, and drop the interval with it: the peaks are read
+		// beside the duration and judged against a per-minute budget, so the two
+		// have to describe the same unbroken stretch of standing still.
 		DriftReferenceLocal = NowLocal;
 		LastLocalLocation = NowLocal;
-		DriftCm = 0.0;
+		RestartMeasurementInterval();
 		return;
 	}
 
@@ -150,4 +191,16 @@ void USFShipboardMovementComponent::UpdateDriftMeasurement(float DeltaSeconds)
 
 	LastLocalLocation = NowLocal;
 	MeasuredSeconds += DeltaSeconds;
+}
+
+void USFShipboardMovementComponent::RestartMeasurementInterval()
+{
+	// Peaks and clock go together or not at all. Carrying peaks across a restart
+	// would judge a thirty-second worst case against a minute's budget; carrying
+	// the clock across one would let two short stands add up to a valid reading
+	// that neither of them was.
+	DriftCm = 0.0;
+	PeakDriftCm = 0.0;
+	PeakJitterCm = 0.0;
+	MeasuredSeconds = 0.0;
 }
