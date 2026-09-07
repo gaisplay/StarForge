@@ -32,6 +32,12 @@ The engine is a launcher-installed build at `C:\Program Files\Epic Games\UE_5.8`
 
 Run a single test or subtree by narrowing the filter — tests are named hierarchically, e.g. `Automation RunTests StarForge.Core.ShipFrame.CarryRotation`.
 
+**`UnrealEditor-Cmd.exe` truncates its stdout on Windows.** A full test session came
+through as about a kilobyte of console output. Read results from
+`Saved/Logs/StarForge.log` instead, looking for `Test Completed. Result=` and
+`TEST COMPLETE. EXIT CODE:`. A short console capture does not mean the tests did not
+run. The project logs its own summaries under the `LogStarForge` category.
+
 **Play the measurement rig:**
 
 ```bash
@@ -113,11 +119,39 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 ## Current state
 
-The branch `feat/frame-spike` covers spec stages 0–1 (foundation and measurement). Stage 1 ends at a fork: the measurement either confirms motion decomposition or moves the project to the plan B in spec §12. **Do not plan stages 2–4 in detail before that answer exists.**
+**Stage 1 is finished and its question is answered.** The branch `feat/frame-spike`
+carries spec stages 0–1, and the checkpoint measurement confirmed motion
+decomposition: an occupant held a deck rolling at 180°/s for 57 unbroken seconds
+with drift and jitter below the instrument's resolution, and the interior stayed
+visually still. The plan B in spec §12 is off the table.
 
-Two things are deliberately unfinished and cannot be automated:
+The zero is trustworthy because a negative control earned it: running with
+`sf.ShipGravity 0` dropped the occupant and produced no measurement records at all.
+Figures and control are in `docs/superpowers/notes/2026-09-06-checkpoint-1-results.md`.
 
-- `Content/` is empty. The map `/Game/Maps/L_FrameSpike` that `DefaultEngine.ini` points at **does not exist yet** — it must be authored once by hand as an *empty* level. The ship, character and HUD are all assembled in code by `ASFSpikeGameMode::StartPlay`, so an empty level is the correct level.
-- The checkpoint-1 measurement is a manual run. Follow `docs/superpowers/notes/2026-09-06-checkpoint-1-runbook.md`.
+**Next action:** execute `docs/superpowers/plans/2026-09-07-flight-maths.md` — the
+first of two stage-2 plans, covering the effectiveness matrix, the thrust allocator
+and the flight controller. All of it is headless-testable. The second plan (Chaos
+bridge, ship data asset, pilot station) is not written yet and **must open with a
+re-measurement of occupant drift**, because the result above was obtained against a
+kinematic ship and moving it onto Chaos changes when its transform updates.
 
-When reading the checkpoint HUD: **check the measured-time line before the drift figure.** A drift of zero is what both a perfect minute and a dead instrument look like, and only `measured` tells them apart.
+**Read `docs/superpowers/notes/2026-09-07-handoff.md` before touching anything.** It
+carries what neither the code nor the git history says: which decisions are
+load-bearing and must not be tidied away, what only looks verified, and the one
+contradiction in the spec that needs a human decision.
+
+Three things in the code that look like mistakes and are not:
+
+- `SetGravityDirection` along the ship's Z in the shipboard movement component. Without
+  it a rolling deck stops being walkable within a quarter second and the carry stops
+  being called at all.
+- `bSweep = false` on the carry's `MoveUpdatedComponent`. Relative to the ship the
+  occupant has not moved, and a sweep at 400 m/s traces six metres through the hull.
+- Camera view limits of `0 / 359.999` rather than `±180`. `FMath::ClampAngle` computes
+  its half-width as `ClampAxis(Max - Min) * 0.5`, and `ClampAxis(360)` is zero, so a
+  symmetric range pins every angle to 180°.
+
+When reading the checkpoint HUD: **check the measured-time line before the drift
+figure.** A drift of zero is what both a perfect minute and a dead instrument look
+like, and only `measured` tells them apart.
