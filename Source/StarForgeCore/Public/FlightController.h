@@ -19,7 +19,14 @@ namespace StarForge
 		/** Ship-frame axes, each component in [-1, 1]. */
 		FVector LinearAxis = FVector::ZeroVector;
 
-		/** Pitch, yaw and roll, each component in [-1, 1]. */
+		/**
+		 * Angular command as an angular velocity vector: X roll, Y pitch, Z yaw.
+		 * Each component in [-1, 1].
+		 *
+		 * Spec 4 names these pitch, yaw and roll in its prose. That is what they do,
+		 * not the order they sit in -- the order here is the one FVector uses for
+		 * angular velocity everywhere else, including what Chaos hands back.
+		 */
 		FVector AngularAxis = FVector::ZeroVector;
 
 		bool bFlightAssistEnabled = true;
@@ -31,8 +38,16 @@ namespace StarForge
 		/** Metres per second. */
 		double MaxSpeed = 200.0;
 
-		/** Radians per second. */
-		double MaxAngularSpeed = 2.0;
+		/**
+		 * Radians per second, as an angular velocity vector: X roll, Y pitch, Z yaw.
+		 *
+		 * Three numbers, not one. Spec 7 gives roll 180 degrees per second and pitch
+		 * and yaw 120, and a single scalar silently picks one of them for all three.
+		 */
+		FVector MaxAngularSpeed = FVector(
+			UE_DOUBLE_PI,
+			2.0 * UE_DOUBLE_PI / 3.0,
+			2.0 * UE_DOUBLE_PI / 3.0);
 
 		/** How hard the assist corrects a linear velocity error, per second. */
 		double LinearGain = 2.0;
@@ -54,13 +69,19 @@ namespace StarForge
 	/**
 	 * Turns an intent into the force and torque the thrusters should be asked for.
 	 *
-	 * The torque includes Euler's gyroscopic term, omega cross I omega. It is what
+	 * The torque includes Euler gyroscopic term, omega cross I omega. It is what
 	 * makes a heavy ship feel heavy: without it, holding an established spin costs
 	 * nothing and every hull turns like a fighter.
+	 *
+	 * ArrayCapability is the most the thruster array can produce on each axis, and
+	 * it is what the stick is a fraction of when assist is off. It arrives as six
+	 * numbers rather than as a reference to the solver, so this loop stays ignorant
+	 * of how thrust is distributed.
 	 */
 	STARFORGECORE_API FWrench ComputeDemandedWrench(
 		const FFlightIntent& Intent,
 		const FRigidBodyState& State,
 		const FShipMassProperties& Mass,
-		const FFlightLimits& Limits);
+		const FFlightLimits& Limits,
+		const FWrench& ArrayCapability);
 }
