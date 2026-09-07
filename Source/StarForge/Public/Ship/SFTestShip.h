@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "FlightController.h"
 #include "GameFramework/Actor.h"
 #include "SFTestShip.generated.h"
 
@@ -74,7 +75,16 @@ public:
 	/** This tick's linear speed in m/s, so the readout shows where in the profile we are. */
 	double GetSpeedMetersPerSec() const { return PreviousVelocityCms.Size() / 100.0; }
 
+	/** What was last asked of the ship, for the readout. */
+	StarForge::FFlightIntent GetLastIntent() const { return LastIntent; }
+
 private:
+	/** Repeats the checkpoint manoeuvre by commanding velocities directly. */
+	void TickScriptedProfile();
+
+	/** Flies on thrust from the console intent. Needs the step for thruster spool-up. */
+	void TickFlight(double DeltaSeconds);
+
 	/** Builds floor and four walls out of engine cubes, so the rig needs no content. */
 	UStaticMeshComponent* AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale);
 
@@ -114,4 +124,6 @@ private:
 	double ElapsedSeconds = 0.0;
 	FVector PreviousVelocityCms = FVector::ZeroVector;
 	FVector LinearAccelMetersPerSecSq = FVector::ZeroVector;
+
+	StarForge::FFlightIntent LastIntent;
 };

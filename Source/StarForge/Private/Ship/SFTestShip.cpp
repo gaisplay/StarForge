@@ -3,12 +3,47 @@
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "FlightController.h"
+#include "HAL/IConsoleManager.h"
+#include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFThrusterArrayComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
 {
+	/**
+	 * Which way the ship is driven. On, it repeats the scripted checkpoint profile
+	 * with commanded velocities -- the motion the drift figures were taken against.
+	 * Off, it flies on thrust from the intent below.
+	 *
+	 * Defaults on, so the measurement rig stays the measurement rig until somebody
+	 * deliberately asks it to be something else.
+	 */
+	TAutoConsoleVariable<int32> CVarShipProfile(
+		TEXT("sf.ShipProfile"), 1,
+		TEXT("1: fly the scripted checkpoint profile. 0: fly on thrust from sf.Intent.*"),
+		ECVF_Default);
+
+	TAutoConsoleVariable<float> CVarIntentX(TEXT("sf.Intent.X"), 0.0f,
+		TEXT("Linear intent along the ship forward axis, -1 to 1."), ECVF_Default);
+	TAutoConsoleVariable<float> CVarIntentY(TEXT("sf.Intent.Y"), 0.0f,
+		TEXT("Linear intent along the ship right axis, -1 to 1."), ECVF_Default);
+	TAutoConsoleVariable<float> CVarIntentZ(TEXT("sf.Intent.Z"), 0.0f,
+		TEXT("Linear intent along the ship up axis, -1 to 1."), ECVF_Default);
+
+	// Named for what they do, stored in angular velocity order: X roll, Y pitch,
+	// Z yaw. The names and the order agree here so nobody has to remember which.
+	TAutoConsoleVariable<float> CVarIntentRoll(TEXT("sf.Intent.Roll"), 0.0f,
+		TEXT("Roll intent about the ship X axis, -1 to 1."), ECVF_Default);
+	TAutoConsoleVariable<float> CVarIntentPitch(TEXT("sf.Intent.Pitch"), 0.0f,
+		TEXT("Pitch intent about the ship Y axis, -1 to 1."), ECVF_Default);
+	TAutoConsoleVariable<float> CVarIntentYaw(TEXT("sf.Intent.Yaw"), 0.0f,
+		TEXT("Yaw intent about the ship Z axis, -1 to 1."), ECVF_Default);
+
+	TAutoConsoleVariable<int32> CVarIntentAssist(TEXT("sf.Intent.Assist"), 1,
+		TEXT("1: the stick asks for a speed. 0: it asks for thrust."), ECVF_Default);
+
 	/** One engine cube is 100 cm on a side, so scale equals metres. */
 	constexpr double CubeEdgeCm = 100.0;
 	/** Panel thickness as a mesh scale factor, not centimetres: 0.2 x 100 cm = 20 cm. */
@@ -191,41 +226,71 @@ void ASFTestShip::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (DeltaSeconds <= UE_SMALL_NUMBER)
+	if (DeltaSeconds <= UE_SMALL_NUMBER || !Hull)
 	{
 		return;
 	}
 
 	ElapsedSeconds += DeltaSeconds;
 
+	if (CVarShipProfile.GetValueOnGameThread() != 0)
+	{
+		TickScriptedProfile();
+	}
+	else
+	{
+		TickFlight(DeltaSeconds);
+	}
+
+	// Measured from what the body actually did, not from what was commanded. In the
+	// scripted mode the two agree; under thrust they do not, and the grav-plate
+	// readout has to show the ship real acceleration or it is showing nothing.
+	const FVector VelocityCms = Hull->GetPhysicsLinearVelocity();
+	LinearAccelMetersPerSecSq = (VelocityCms - PreviousVelocityCms) / DeltaSeconds / 100.0;
+	PreviousVelocityCms = VelocityCms;
+}
+
+void ASFTestShip::TickScriptedProfile()
+{
 	const double Phase = 2.0 * UE_DOUBLE_PI * ElapsedSeconds / ProfilePeriodSeconds;
 
-	// Same profile as the kinematic rig, driven through the physics solver instead
-	// of by moving the transform. Velocity is commanded every tick rather than
-	// integrated from forces: the point of this task is to change one thing only --
-	// where the transform comes from -- so the motion must stay the one the
-	// checkpoint 1 figures were taken against.
 	const FVector VelocityCms(PeakSpeedCms * FMath::Sin(Phase), 0.0, 0.0);
 	Hull->SetPhysicsLinearVelocity(VelocityCms);
 
-	LinearAccelMetersPerSecSq = (VelocityCms - PreviousVelocityCms) / DeltaSeconds / 100.0;
-	PreviousVelocityCms = VelocityCms;
-
-	// All three angular axes loaded at once so no accidental symmetry hides a bug.
-	// Pitch and yaw sweep in quadrature; roll is held flat at its ceiling, which is
-	// the harsher case because it never lets up.
-	//
-	// An angular velocity vector is (roll about X, pitch about Y, yaw about Z) --
-	// not the order FRotator prints in. It is commanded in the ship own axes and
-	// rotated into world space, because SetPhysicsAngularVelocityInRadians is world
-	// space while the old AddActorLocalRotation was local.
 	const FVector LocalRateRadPerSec(
 		FMath::DegreesToRadians(PeakRollRateDegPerSec),
 		FMath::DegreesToRadians(PeakPitchYawRateDegPerSec * FMath::Sin(Phase * 0.5)),
 		FMath::DegreesToRadians(PeakPitchYawRateDegPerSec * FMath::Cos(Phase * 0.5)));
 
-	const FVector WorldRateRadPerSec =
-		GetActorTransform().TransformVectorNoScale(LocalRateRadPerSec);
+	Hull->SetPhysicsAngularVelocityInRadians(
+		GetActorTransform().TransformVectorNoScale(LocalRateRadPerSec));
+}
 
-	Hull->SetPhysicsAngularVelocityInRadians(WorldRateRadPerSec);
+void ASFTestShip::TickFlight(double DeltaSeconds)
+{
+	if (!Thrusters || !Thrusters->IsReady() || !Thrusters->ShipData)
+	{
+		return;
+	}
+
+	LastIntent.LinearAxis = FVector(
+		CVarIntentX.GetValueOnGameThread(),
+		CVarIntentY.GetValueOnGameThread(),
+		CVarIntentZ.GetValueOnGameThread());
+
+	LastIntent.AngularAxis = FVector(
+		CVarIntentRoll.GetValueOnGameThread(),
+		CVarIntentPitch.GetValueOnGameThread(),
+		CVarIntentYaw.GetValueOnGameThread());
+
+	LastIntent.bFlightAssistEnabled = CVarIntentAssist.GetValueOnGameThread() != 0;
+
+	const StarForge::FWrench Demand = StarForge::ComputeDemandedWrench(
+		LastIntent,
+		Thrusters->ReadState(),
+		Thrusters->GetMassProperties(),
+		Thrusters->ShipData->BuildLimits(),
+		Thrusters->GetArrayCapability());
+
+	Thrusters->ApplyDemand(Demand, DeltaSeconds);
 }
