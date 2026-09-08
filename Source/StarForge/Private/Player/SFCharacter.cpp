@@ -7,7 +7,9 @@
 #include "Player/SFShipboardMovementComponent.h"
 #include "EngineUtils.h"
 #include "Ship/SFShipFrameComponent.h"
+#include "Ship/SFShipStationComponent.h"
 #include "ShipFrameMath.h"
+#include "StarForgeLog.h"
 
 ASFCharacter::ASFCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<USFShipboardMovementComponent>(
@@ -89,10 +91,16 @@ void ASFCharacter::Tick(float DeltaSeconds)
 
 	PollMovementInput();
 	PollLookInput(DeltaSeconds);
+	PollInteract();
 }
 
 void ASFCharacter::PollMovementInput()
 {
+	if (IsSeated())
+	{
+		return;
+	}
+
 	const APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC)
 	{
@@ -124,6 +132,11 @@ void ASFCharacter::PollMovementInput()
 
 void ASFCharacter::PollLookInput(float DeltaSeconds)
 {
+	if (IsSeated())
+	{
+		return;
+	}
+
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC)
 	{
@@ -159,4 +172,145 @@ void ASFCharacter::PollLookInput(float DeltaSeconds)
 		PC->GetControlRotation().Quaternion(), GetActorUpVector(), Yaw, Pitch);
 
 	PC->SetControlRotation(NewView.Rotator());
+}
+
+void ASFCharacter::PollInteract()
+{
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return;
+	}
+
+	// On the edge, not while held: a held key would seat and unseat him every frame,
+	// and the log would fill with a station changing hands sixty times a second.
+	const bool bDown = PC->IsInputKeyDown(EKeys::E);
+	if (bDown && !bInteractWasDown)
+	{
+		ToggleSeat();
+	}
+	bInteractWasDown = bDown;
+}
+
+void ASFCharacter::ToggleSeat()
+{
+	if (SeatedStation)
+	{
+		SeatedStation->Vacate();
+		SeatedStation = nullptr;
+
+		// Walking resumes exactly where he was. He is already in the ship's frame and
+		// the carry has been holding him all along; standing up changes what reads his
+		// input, not where he is.
+		if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
+		{
+			Movement->SetMovementMode(MOVE_Walking);
+		}
+		return;
+	}
+
+	USFShipFrameComponent* Frame = GetShipboardMovement() ? GetShipboardMovement()->GetShipFrame() : nullptr;
+	if (!Frame || !Frame->GetOwner())
+	{
+		return;
+	}
+
+	// The nearest station within reach, so two seats side by side do not fight.
+	USFShipStationComponent* Best = nullptr;
+	double BestDistanceSq = TNumericLimits<double>::Max();
+
+	TArray<USFShipStationComponent*> Stations;
+	Frame->GetOwner()->GetComponents<USFShipStationComponent>(Stations);
+
+	for (USFShipStationComponent* Station : Stations)
+	{
+		if (Station->IsOccupied() || !Station->IsWithinReach(GetActorLocation()))
+		{
+			continue;
+		}
+
+		const FVector SeatWorld =
+			Frame->GetOwner()->GetActorTransform().TransformPosition(Station->GetSeatLocationCm());
+		const double DistanceSq = FVector::DistSquared(SeatWorld, GetActorLocation());
+
+		if (DistanceSq < BestDistanceSq)
+		{
+			BestDistanceSq = DistanceSq;
+			Best = Station;
+		}
+	}
+
+	if (!Best)
+	{
+		UE_LOG(LogStarForge, Display, TEXT("No free station within reach."));
+		return;
+	}
+
+	if (!Best->TryOccupy(this))
+	{
+		return;
+	}
+
+	SeatedStation = Best;
+
+	// Moved into the seat once; from here the carry holds him there, the same carry
+	// that held him standing. A second holding mechanism beside a proven one is a
+	// second place for the two to disagree.
+	const FVector SeatWorld =
+		Frame->GetOwner()->GetActorTransform().TransformPosition(Best->GetSeatLocationCm());
+	SetActorLocation(SeatWorld, /*bSweep=*/false, nullptr, ETeleportType::TeleportPhysics);
+
+	// Not walking while seated. Flying, not the legs, is what his input drives now.
+	if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
+	{
+		Movement->StopMovementImmediately();
+		Movement->SetMovementMode(MOVE_None);
+	}
+}
+
+bool ASFCharacter::ProvideFlightIntent(StarForge::FFlightIntent& Out)
+{
+	// Only while seated. Standing at the console and pressing W is walking, not
+	// flying, and an operator who has left his post must say he is not flying rather
+	// than hand back a centred stick -- with assist on that is an order to stop.
+	if (!IsSeated())
+	{
+		return false;
+	}
+
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return false;
+	}
+
+	double Forward = 0.0;
+	double Right = 0.0;
+	double Up = 0.0;
+
+	if (PC->IsInputKeyDown(EKeys::W)) { Forward += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::S)) { Forward -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::D)) { Right += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::A)) { Right -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::SpaceBar)) { Up += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::LeftControl)) { Up -= 1.0; }
+
+	Out.LinearAxis = FVector(Forward, Right, Up);
+
+	double Roll = 0.0;
+	double Pitch = 0.0;
+	double Yaw = 0.0;
+
+	if (PC->IsInputKeyDown(EKeys::Q)) { Roll -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::R))  { Roll += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::Up)) { Pitch += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::Down)) { Pitch -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::Left)) { Yaw -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::Right)) { Yaw += 1.0; }
+
+	// (X roll, Y pitch, Z yaw), the same order everything else uses.
+	Out.AngularAxis = FVector(Roll, Pitch, Yaw);
+	Out.bFlightAssistEnabled = true;
+
+	return true;
 }

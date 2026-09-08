@@ -2,10 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Ship/SFStationOperator.h"
 #include "SFCharacter.generated.h"
 
 class UCameraComponent;
 class USFShipboardMovementComponent;
+class USFShipStationComponent;
 
 /**
  * First-person occupant used by the measurement rig.
@@ -17,7 +19,7 @@ class USFShipboardMovementComponent;
  * arrives with the flight phase.
  */
 UCLASS()
-class STARFORGE_API ASFCharacter : public ACharacter
+class STARFORGE_API ASFCharacter : public ACharacter, public ISFStationOperator
 {
 	GENERATED_BODY()
 
@@ -29,6 +31,12 @@ public:
 
 	USFShipboardMovementComponent* GetShipboardMovement() const;
 
+	virtual bool ProvideFlightIntent(StarForge::FFlightIntent& Out) override;
+	virtual FString GetOperatorName() const override { return TEXT("player"); }
+
+	bool IsSeated() const { return SeatedStation != nullptr; }
+	USFShipStationComponent* GetSeatedStation() const { return SeatedStation; }
+
 	/** Degrees of view rotation per second of held arrow key. */
 	UPROPERTY(EditAnywhere, Category = "StarForge|Input")
 	double LookRateDegPerSec = 90.0;
@@ -36,7 +44,17 @@ public:
 private:
 	void PollMovementInput();
 	void PollLookInput(float DeltaSeconds);
+	void PollInteract();
+
+	/** Tries to take the nearest station within reach, or leaves the current one. */
+	void ToggleSeat();
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<UCameraComponent> Camera;
+
+	UPROPERTY()
+	TObjectPtr<USFShipStationComponent> SeatedStation;
+
+	/** Edge detection for the interact key: held is not pressed. */
+	bool bInteractWasDown = false;
 };
