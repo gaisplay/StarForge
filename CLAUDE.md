@@ -44,6 +44,28 @@ run. The project logs its own summaries under the `LogStarForge` category.
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" -game -windowed -ResX=1600 -ResY=900
 ```
 
+**Run the rig headlessly and read the result from the log.** This is how the flight
+checks are done without a human at the keyboard: `-benchmark -seconds` gives a fixed
+timestep and, more importantly, a *clean exit* — killing the process instead leaves
+the log buffer unflushed and the file ends at frame zero, which looks exactly like a
+session that never ticked.
+
+```bash
+"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=25 -ExecCmds="sf.FlightLog 1, sf.ShipProfile 0, sf.Intent.X 1" -log
+```
+
+Console variables the rig understands:
+
+| Variable | Default | What it does |
+|---|---|---|
+| `sf.ShipGravity` | 1 | 0 leaves gravity at world down — the negative control that detaches the occupant |
+| `sf.ShipProfile` | 1 | 1 flies the scripted checkpoint manoeuvre, 0 flies on thrust from the intent |
+| `sf.Intent.X/Y/Z` | 0 | Linear intent in ship axes, -1..1 |
+| `sf.Intent.Roll/Pitch/Yaw` | 0 | Angular intent, -1..1, stored as X roll / Y pitch / Z yaw |
+| `sf.Intent.Assist` | 1 | 1 the stick asks for a speed, 0 it asks for thrust |
+| `sf.FlightLog` | 0 | 1 logs the flight readout once a second |
+| `sf.DriftDebug` | 0 | 1 logs carry calls per frame, movement mode, base and ship-local position |
+
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
 
 ```bash
@@ -56,9 +78,9 @@ run. The project logs its own summaries under the `LogStarForge` category.
 
 Two runtime modules, and the split is the single most important structural fact in the repo.
 
-**`StarForgeCore`** depends on `Core` and `CoreUObject` only. **Adding `Engine` to it is an error that destroys the point of the split.** It holds all the maths — reference-frame conversions, the 6x6 matrix, the thruster
-effectiveness matrix, the thrust allocator and the IFCS flight-control loop. No actors,
-no components, no meshes. The reason is testability: a bug in the thrust solver does not crash or log, it surfaces weeks later as "the ship feels wrong". A headless unit test catches it in a second.
+**`StarForgeCore`** depends on `Core` and `CoreUObject` only. **Adding `Engine` to it is an error that destroys the point of the split.** It holds all the maths — reference-frame conversions, first-person look composition,
+the SI/centimetre boundary, the 6x6 matrix, the thruster effectiveness matrix, the
+thrust allocator and the IFCS flight-control loop. No actors, no components, no meshes. The reason is testability: a bug in the thrust solver does not crash or log, it surfaces weeks later as "the ship feels wrong". A headless unit test catches it in a second.
 
 **`StarForge`** is the game module — actors, components, input, UI, AI. It depends on `StarForgeCore`.
 
@@ -124,49 +146,66 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 ## Current state
 
-**Stages 0–2's first half are on `main`; there is no feature branch open.**
+**Stage 2a is finished on the branch `feat/ship-on-chaos`, eleven commits, not merged.**
+36 headless tests, clean build, and the plan's checkpoint 3 met in full.
 
-Stage 1's question is answered. The checkpoint measurement confirmed motion
-decomposition: an occupant held a deck rolling at 180°/s for 57 unbroken seconds
-with drift and jitter below the instrument's resolution, and the interior stayed
-visually still. The plan B in spec §12 is off the table.
+The ship is a Chaos rigid body flown by the maths from `StarForgeCore`. It has a data
+asset (`Content/Ships/DA_TestShip`), a thruster array component that reads mass
+properties back from Chaos, a closed control loop driven by console variables, and a
+flight readout on screen and in the log.
 
-The zero is trustworthy because a negative control earned it: running with
-`sf.ShipGravity 0` dropped the occupant and produced no measurement records at all.
-Figures and control are in `docs/superpowers/notes/2026-09-06-checkpoint-1-results.md`.
+**The risk that made this plan open with a measurement is gone.** Checkpoint 1 was
+earned against a ship that moved by setting its transform; it has now been re-earned
+against a simulated body: ninety unbroken seconds, zero drift, zero jitter, no skipped
+carries, the movement base never once changing. Figures and the negative control are in
+`docs/superpowers/notes/2026-09-08-checkpoint-1-rerun-results.md`.
 
-**The flight maths is built and headless-tested** — 22 tests, `StarForgeCore` still
-free of `Engine`, full recompile without warnings. `SmallMatrix`, `ThrusterDef`,
-`ThrustAllocator` and `FlightController` cover the effectiveness matrix, the damped
-pseudo-inverse thrust allocator and the IFCS loop. **None of it has moved a real
-ship yet** — it has never touched Chaos, an actor or a frame of gameplay.
+**Every flight check passes, and all of them ran headlessly.** Forward thrust reaches
+200.0 m/s and saturates at exactly 800 kN; a full roll settles at exactly 180.0 deg/s on
+the roll axis and a full pitch at exactly 120.0 on pitch, with nothing on the other two;
+a pure torque produces no linear speed; with the scripted profile on, the intent is
+ignored entirely. The hull's inertia reads 533 333 kg m², which is `m(a²+b²)/12` for an
+8 m cube of 50 t to the unit — the SI/centimetre boundary is right end to end.
 
-**Next action:** write the second stage-2 plan — Chaos bridge, `UShipDataAsset`,
-thruster array component, pilot station, input routing. It **must open with a
-re-measurement of occupant drift**, because checkpoint 1 was measured against a
-kinematic ship and moving it onto Chaos changes when its transform updates.
-
-**Read `docs/superpowers/notes/2026-09-07-handoff-stage-2.md` before touching
-anything.** It carries what neither the code nor the git history says: which
-decisions are load-bearing and must not be tidied away, what only looks verified,
-and the decisions waiting on a human. For the stage 0–1 movement work,
-`docs/superpowers/notes/2026-09-07-handoff.md` remains the authority.
+**Next action:** write plan 2b — pilot station, `IStationOperator`, input routing, and
+the grav-plate knockdown. Read
+`docs/superpowers/notes/2026-09-08-handoff-stage-2b.md` first; it carries what neither
+the code nor the git history says.
 
 Things in the code that look like mistakes and are not:
 
 - `SetGravityDirection` along the ship's Z in the shipboard movement component. Without
   it a rolling deck stops being walkable within a quarter second and the carry stops
-  being called at all.
+  being called at all. Proven again on 2026-09-08: with `sf.ShipGravity 0` the occupant
+  went from Floor to WallXNeg to Ceiling inside 202 ms and the engine stopped calling
+  the carry entirely.
 - `bSweep = false` on the carry's `MoveUpdatedComponent`. Relative to the ship the
   occupant has not moved, and a sweep at 400 m/s traces six metres through the hull.
 - Camera view limits of `0 / 359.999` rather than `±180`. `FMath::ClampAngle` computes
   its half-width as `ClampAxis(Max - Min) * 0.5`, and `ClampAxis(360)` is zero, so a
   symmetric range pins every angle to 180°.
-- `FThrustAllocator::Solve` recomputing the pseudo-inverse over the thrusters still
-  free to move instead of reusing the cached whole-array one. Reusing it re-proposes
-  a negative throttle for every opposed thruster, the clamp discards it, and three
-  passes converge to seven eighths of every demand — a ship permanently down an
-  eighth of its thrust with nothing in the code to point at.
+- **Look input going through `StarForge::ShipFrame::ApplyLookStep` rather than
+  `AddPitchInput` / `AddYawInput`.** Those feed `RotationInput`, which `UpdateRotation`
+  adds to the *world* Euler components of the control rotation. The view is carried in
+  the ship's frame, so on a deck rolling at 180 deg/s the axis "look up" moves along
+  precesses continuously and the view sweeps a circle. Yaw turns about the deck normal,
+  pitch about the view's own right axis re-squared against the deck.
+- **The once-per-frame guard in `UpdateDriftMeasurement`.** The engine calls
+  `UpdateBasedMovement` **twice per frame**, and the clock used to add a full delta on
+  each call, so it ran at exactly 2.000 times real time. Every duration this instrument
+  ever reported was double — checkpoint 1's "57.2 s" was 28.6 seconds against a 55 s
+  gate. The carry itself is unharmed by the second call (the ship has not moved between
+  them), so do not "simplify" the guard away.
+- **`SetLinearDamping(0.0)` on the hull.** Chaos defaults a body to 0.01, which is drag.
+  The ship settled at 199.0 m/s instead of 200 with the controller holding 99.5 kN
+  forever to stand still against it. Both damping values are stated explicitly so a
+  change to the project physics settings cannot quietly put the atmosphere back.
+- **Two capability numbers on the allocator, not one.** `GetAxisCapability` sums every
+  thruster's contribution in absolute value and is the right scale for judging a
+  parasitic component. `GetAxisAchievable` takes the smaller of the two directional
+  sums and is the right scale for a stick, because on a balanced array only half the
+  thrusters push a given way. Using the first for the second doubles the figure and
+  kills the top half of the stick travel.
 - Test thruster arrays carrying **opposed pairs** on every axis. An array pushing only
   along +X, +Y and +Z cannot produce torque without also shoving the ship, because
   zeroing the net force zeroes every contributing throttle. Turning without being
@@ -176,3 +215,8 @@ Things in the code that look like mistakes and are not:
 When reading the checkpoint HUD: **check the measured-time line before the drift
 figure.** A drift of zero is what both a perfect minute and a dead instrument look
 like, and only `measured` tells them apart.
+
+**Numbers go in the log, not on a screen.** Both instrument defects found so far — the
+doubled clock and the hull's drag — were caught by comparing logged figures against
+arithmetic, not by looking at the HUD. `sf.FlightLog` and `sf.DriftDebug` exist for
+that, and a figure transcribed from a screen is a figure nobody can check next week.
