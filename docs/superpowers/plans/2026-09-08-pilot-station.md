@@ -769,6 +769,8 @@ void USFPilotStationComponent::TickComponent(
 	ConsoleOperator = CreateDefaultSubobject<USFConsoleOperatorComponent>(TEXT("ConsoleOperator"));
 ```
 
+Сюда же в `SFTestShip.cpp` нужно включение `#include "Units.h"` — кресло выводится из сантиметровых констант корабля через `CmToMetres`, а без этой строки буквальный повтор плана не соберётся.
+
 В `Tick` удалить ветку `TickFlight` целиком — остаётся:
 
 ```cpp
