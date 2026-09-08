@@ -85,6 +85,19 @@ private:
 	/** Flies on thrust from the console intent. Needs the step for thruster spool-up. */
 	void TickFlight(double DeltaSeconds);
 
+	/**
+	 * Writes the flight readout to the log, behind sf.FlightLog.
+	 *
+	 * The on-screen block is for flying by; this is for reading afterwards. The
+	 * drift gauge learned the same lesson the hard way -- a figure transcribed from
+	 * a screen is a figure nobody can check later, and the defect that made every
+	 * duration double was found by comparing logged timestamps, not by looking.
+	 */
+	void LogFlightState(double DeltaSeconds);
+
+	/** Seconds since the last flight log line; only meaningful while sf.FlightLog is on. */
+	double SecondsSinceFlightLog = 0.0;
+
 	/** Builds floor and four walls out of engine cubes, so the rig needs no content. */
 	UStaticMeshComponent* AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale);
 

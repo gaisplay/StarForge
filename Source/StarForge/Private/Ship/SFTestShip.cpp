@@ -8,6 +8,7 @@
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFThrusterArrayComponent.h"
+#include "StarForgeLog.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -43,6 +44,17 @@ namespace
 
 	TAutoConsoleVariable<int32> CVarIntentAssist(TEXT("sf.Intent.Assist"), 1,
 		TEXT("1: the stick asks for a speed. 0: it asks for thrust."), ECVF_Default);
+
+	/**
+	 * Writes one flight readout line a second to the log.
+	 *
+	 * The HUD shows the same numbers, but a number on a screen cannot be checked
+	 * afterwards and cannot be compared against a run from last week. Off by default
+	 * because a real measurement wants a quiet log.
+	 */
+	TAutoConsoleVariable<int32> CVarFlightLog(TEXT("sf.FlightLog"), 0,
+		TEXT("1: log speed, angular rate, demanded against achieved wrench and throttle saturation once a second."),
+		ECVF_Default);
 
 	/** One engine cube is 100 cm on a side, so scale equals metres. */
 	constexpr double CubeEdgeCm = 100.0;
@@ -119,6 +131,14 @@ ASFTestShip::ASFTestShip()
 
 	// A ship in space does not fall, and the rig has no other use for gravity.
 	Hull->SetEnableGravity(false);
+
+	// Nor does it meet air. Chaos defaults a body to 0.01 linear damping, which is a
+	// drag term: it cost the ship the last metre per second of its 200 m/s ceiling
+	// and left the controller holding 99.5 kN forever to stand still against it.
+	// Both are set explicitly rather than left at their defaults, so a change to the
+	// project physics settings cannot quietly put the atmosphere back.
+	Hull->SetLinearDamping(0.0f);
+	Hull->SetAngularDamping(0.0f);
 
 	// Stated rather than derived from the box volume, so the inertia the flight
 	// maths later reads back from Chaos is reproducible instead of depending on a
@@ -318,4 +338,57 @@ void ASFTestShip::TickFlight(double DeltaSeconds)
 		Thrusters->GetArrayCapability());
 
 	Thrusters->ApplyDemand(Demand, DeltaSeconds);
+
+	if (CVarFlightLog.GetValueOnGameThread() != 0)
+	{
+		LogFlightState(DeltaSeconds);
+	}
+}
+
+void ASFTestShip::LogFlightState(double DeltaSeconds)
+{
+	SecondsSinceFlightLog += DeltaSeconds;
+	if (SecondsSinceFlightLog < 1.0)
+	{
+		return;
+	}
+	SecondsSinceFlightLog = 0.0;
+
+	const StarForge::FRigidBodyState State = Thrusters->ReadState();
+	const StarForge::FWrench Demand = Thrusters->GetLastDemand();
+	const StarForge::FWrench Achieved = Thrusters->GetLastAchieved();
+
+	// Counted over the commanded throttles, not the spooled ones: the clamp lands on
+	// the commanded value, so that is where saturation is visible at the moment it
+	// starts rather than seven response times later.
+	int32 Commanded = 0;
+	for (double Throttle : Thrusters->GetTargetThrottles())
+	{
+		if (Throttle > 0.999)
+		{
+			++Commanded;
+		}
+	}
+
+	// Angular velocity is (X roll, Y pitch, Z yaw), and it is printed in that order.
+	// Naming the order in the line matters: a ship that rolls when asked to pitch is
+	// what confusing it produces, and this log is where that would show.
+	UE_LOG(LogStarForge, Log,
+		TEXT("Flight: intent lin (%.2f %.2f %.2f) ang (%.2f %.2f %.2f) assist %d | ")
+		TEXT("speed %.1f m/s, ang roll/pitch/yaw (%.1f %.1f %.1f) deg/s | ")
+		TEXT("force want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) N | ")
+		TEXT("torque want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) Nm | ")
+		TEXT("throttles %d of %d commanded wide open"),
+		LastIntent.LinearAxis.X, LastIntent.LinearAxis.Y, LastIntent.LinearAxis.Z,
+		LastIntent.AngularAxis.X, LastIntent.AngularAxis.Y, LastIntent.AngularAxis.Z,
+		LastIntent.bFlightAssistEnabled ? 1 : 0,
+		State.LinearVelocity.Size(),
+		FMath::RadiansToDegrees(State.AngularVelocity.X),
+		FMath::RadiansToDegrees(State.AngularVelocity.Y),
+		FMath::RadiansToDegrees(State.AngularVelocity.Z),
+		Demand.Force.X, Demand.Force.Y, Demand.Force.Z,
+		Achieved.Force.X, Achieved.Force.Y, Achieved.Force.Z,
+		Demand.Torque.X, Demand.Torque.Y, Demand.Torque.Z,
+		Achieved.Torque.X, Achieved.Torque.Y, Achieved.Torque.Z,
+		Commanded, Thrusters->GetTargetThrottles().Num());
 }
