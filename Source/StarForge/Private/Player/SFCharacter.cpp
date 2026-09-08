@@ -201,11 +201,8 @@ void ASFCharacter::ToggleSeat()
 
 		// Walking resumes exactly where he was. He is already in the ship's frame and
 		// the carry has been holding him all along; standing up changes what reads his
-		// input, not where he is.
-		if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
-		{
-			Movement->SetMovementMode(MOVE_Walking);
-		}
+		// input, not where he is. Nothing to restore on the movement component either:
+		// sitting never took him out of MOVE_Walking, so he never left it.
 		return;
 	}
 
@@ -218,6 +215,11 @@ void ASFCharacter::ToggleSeat()
 	// The nearest station within reach, so two seats side by side do not fight.
 	USFShipStationComponent* Best = nullptr;
 	double BestDistanceSq = TNumericLimits<double>::Max();
+
+	// The winner's seat position is kept from the comparison rather than worked out
+	// again after the seat is taken: one expression, so the place he is measured from
+	// and the place he is moved to cannot drift apart under a later edit.
+	FVector BestSeatWorld = FVector::ZeroVector;
 
 	TArray<USFShipStationComponent*> Stations;
 	Frame->GetOwner()->GetComponents<USFShipStationComponent>(Stations);
@@ -236,6 +238,7 @@ void ASFCharacter::ToggleSeat()
 		if (DistanceSq < BestDistanceSq)
 		{
 			BestDistanceSq = DistanceSq;
+			BestSeatWorld = SeatWorld;
 			Best = Station;
 		}
 	}
@@ -256,15 +259,22 @@ void ASFCharacter::ToggleSeat()
 	// Moved into the seat once; from here the carry holds him there, the same carry
 	// that held him standing. A second holding mechanism beside a proven one is a
 	// second place for the two to disagree.
-	const FVector SeatWorld =
-		Frame->GetOwner()->GetActorTransform().TransformPosition(Best->GetSeatLocationCm());
-	SetActorLocation(SeatWorld, /*bSweep=*/false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorLocation(BestSeatWorld, /*bSweep=*/false, nullptr, ETeleportType::TeleportPhysics);
 
-	// Not walking while seated. Flying, not the legs, is what his input drives now.
+	// Residual velocity is killed, but the movement mode is deliberately left alone.
+	// It has to stay MOVE_Walking: OnMovementModeChanged clears the movement base for
+	// every non-walking mode, and with no base MaybeUpdateBasedMovement never calls
+	// UpdateBasedMovement -- which is the one function this project overrides, and the
+	// only thing that carries an occupant with the ship. MOVE_None is worse still,
+	// since PerformMovement returns before it even reaches that call. Either way the
+	// carry stops: a seated pilot would be left at a fixed world location while the
+	// ship departs at up to 400 m/s, his ship-frame view no longer carried, and
+	// DetectCarryGap would bank the whole absence as skipped carries when he stood.
+	// What stops him walking is IsSeated(), checked at the top of PollMovementInput --
+	// not the movement mode.
 	if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
 	{
 		Movement->StopMovementImmediately();
-		Movement->SetMovementMode(MOVE_None);
 	}
 }
 
