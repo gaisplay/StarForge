@@ -41,6 +41,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "StarForge|Input")
 	double LookRateDegPerSec = 90.0;
 
+	/** Fraction of stick travel treated as centre. Physical sticks rest off-centre. */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Input")
+	double StickDeadZone = 0.1;
+
 private:
 	void PollMovementInput();
 	void PollLookInput(float DeltaSeconds);

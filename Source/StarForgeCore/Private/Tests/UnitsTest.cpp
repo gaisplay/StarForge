@@ -116,3 +116,41 @@ bool FInertiaRotationIsHonouredTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUnitsDeadZoneTest,
+	"StarForge.Core.Units.DeadZone",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FUnitsDeadZoneTest::RunTest(const FString& Parameters)
+{
+	// Inside the zone is nothing at all: a stick resting off-centre must not fly the
+	// ship, and on a physical stick "resting off-centre" is the normal case.
+	TestTrue(TEXT("noise inside the dead zone is discarded"),
+		FMath::IsNearlyZero(StarForge::Units::ApplyDeadZone(0.05, 0.1), 1e-12));
+	TestTrue(TEXT("and it is discarded either way round"),
+		FMath::IsNearlyZero(StarForge::Units::ApplyDeadZone(-0.05, 0.1), 1e-12));
+
+	// Just outside it, the output starts from zero rather than jumping to the
+	// threshold. Returning the raw value would put a step at the most sensitive part
+	// of the travel.
+	TestTrue(TEXT("just past the zone the output is near zero, not near the threshold"),
+		StarForge::Units::ApplyDeadZone(0.11, 0.1) < 0.02);
+
+	// Full travel still means full travel, in both directions.
+	TestTrue(TEXT("full deflection is unchanged"),
+		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(1.0, 0.1), 1.0, 1e-12));
+	TestTrue(TEXT("and full deflection the other way too"),
+		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(-1.0, 0.1), -1.0, 1e-12));
+
+	// Halfway between the threshold and full travel is halfway out, not 0.55.
+	TestTrue(TEXT("the remaining travel is rescaled, not offset"),
+		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(0.55, 0.1), 0.5, 1e-9));
+
+	// A zero dead zone must be a pass-through, so turning the feature off cannot
+	// itself distort the axis.
+	TestTrue(TEXT("a zero dead zone changes nothing"),
+		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(0.37, 0.0), 0.37, 1e-12));
+
+	return true;
+}

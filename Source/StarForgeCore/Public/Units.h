@@ -41,4 +41,17 @@ namespace StarForge::Units
 
 	/** A whole wrench, with the two different factors its halves need. */
 	STARFORGECORE_API FWrench WrenchToUu(const FWrench& Si);
+
+	/**
+	 * Removes a stick's centre slop without putting a step where it was.
+	 *
+	 * Inside the zone the result is zero. Outside it, the remaining travel is
+	 * rescaled back onto the full range, so a stick a hair past the threshold reads a
+	 * hair above zero. Returning the raw value instead would jump straight to the
+	 * threshold -- a step at the most sensitive part of the travel, which a gamepad
+	 * hides and a long-throw stick does not.
+	 *
+	 * Raw and the result are both in [-1, 1]; DeadZone is a fraction of that range.
+	 */
+	STARFORGECORE_API double ApplyDeadZone(double Raw, double DeadZone);
 }

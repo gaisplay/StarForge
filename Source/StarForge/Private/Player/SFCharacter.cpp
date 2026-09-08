@@ -4,12 +4,14 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerInput.h"
 #include "Player/SFShipboardMovementComponent.h"
 #include "EngineUtils.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFShipStationComponent.h"
 #include "ShipFrameMath.h"
 #include "StarForgeLog.h"
+#include "Units.h"
 
 ASFCharacter::ASFCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<USFShipboardMovementComponent>(
@@ -305,8 +307,6 @@ bool ASFCharacter::ProvideFlightIntent(StarForge::FFlightIntent& Out)
 	if (PC->IsInputKeyDown(EKeys::SpaceBar)) { Up += 1.0; }
 	if (PC->IsInputKeyDown(EKeys::LeftControl)) { Up -= 1.0; }
 
-	Out.LinearAxis = FVector(Forward, Right, Up);
-
 	double Roll = 0.0;
 	double Pitch = 0.0;
 	double Yaw = 0.0;
@@ -318,8 +318,34 @@ bool ASFCharacter::ProvideFlightIntent(StarForge::FFlightIntent& Out)
 	if (PC->IsInputKeyDown(EKeys::Left)) { Yaw -= 1.0; }
 	if (PC->IsInputKeyDown(EKeys::Right)) { Yaw += 1.0; }
 
+	const UPlayerInput* Input = PC->PlayerInput;
+
+	auto Axis = [Input](const FKey& Key) -> double
+	{
+		// GetKeyValue gives the analog value for an axis key and 0 or 1 for a button,
+		// so one call covers both without the caller knowing which it asked for.
+		return Input ? static_cast<double>(Input->GetKeyValue(Key)) : 0.0;
+	};
+
+	const double StickX = StarForge::Units::ApplyDeadZone(Axis(EKeys::Gamepad_LeftY), StickDeadZone);
+	const double StickY = StarForge::Units::ApplyDeadZone(Axis(EKeys::Gamepad_LeftX), StickDeadZone);
+	const double StickPitch = StarForge::Units::ApplyDeadZone(Axis(EKeys::Gamepad_RightY), StickDeadZone);
+	const double StickYaw = StarForge::Units::ApplyDeadZone(Axis(EKeys::Gamepad_RightX), StickDeadZone);
+
+	// Keys and stick add rather than replace each other, so a keyboard and a pad work
+	// at once and nobody has to decide which one is in charge; the clamp is what keeps
+	// the sum inside the range the flight loop is entitled to assume.
+	Out.LinearAxis = FVector(
+		FMath::Clamp(Forward + StickX, -1.0, 1.0),
+		FMath::Clamp(Right + StickY, -1.0, 1.0),
+		FMath::Clamp(Up, -1.0, 1.0));
+
 	// (X roll, Y pitch, Z yaw), the same order everything else uses.
-	Out.AngularAxis = FVector(Roll, Pitch, Yaw);
+	Out.AngularAxis = FVector(
+		FMath::Clamp(Roll, -1.0, 1.0),
+		FMath::Clamp(Pitch + StickPitch, -1.0, 1.0),
+		FMath::Clamp(Yaw + StickYaw, -1.0, 1.0));
+
 	Out.bFlightAssistEnabled = true;
 
 	return true;
