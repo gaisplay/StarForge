@@ -46,4 +46,31 @@ namespace StarForge::ShipFrame
 
 	/** True when the felt acceleration is beyond what the gravity plates absorb. */
 	STARFORGECORE_API bool ExceedsGravPlateLimit(const FVector& FeltAccelMetersPerSecSq);
+
+	/**
+	 * One step of first-person look input, taken in the deck's axes rather than the
+	 * world's.
+	 *
+	 * Yaw turns about the deck normal and pitch about the view's own right axis. That
+	 * distinction is the whole point: an occupant standing on a deck turns on the spot
+	 * and nods, and neither of those is a rotation about the world's vertical once the
+	 * ship is rolled. Feeding the engine's AddYawInput and AddPitchInput instead adds
+	 * to the world Euler components of the control rotation, so on a ship rolling at
+	 * 180 deg/s the axis that "look up" moves along precesses continuously and the view
+	 * sweeps a circle.
+	 *
+	 * PitchDegrees is positive looking up, toward DeckUp, and is limited to
+	 * MaxPitchDegrees away from the deck plane so the view stops at the zenith instead
+	 * of tumbling over it. That limit is measured against the deck and not against the
+	 * world horizon, which is why it can coexist with the engine's own pitch clamp
+	 * being deliberately lifted.
+	 *
+	 * Angles are degrees; DeckUp need not be normalised.
+	 */
+	STARFORGECORE_API FQuat ApplyLookStep(
+		const FQuat& CurrentView,
+		const FVector& DeckUp,
+		double YawDegrees,
+		double PitchDegrees,
+		double MaxPitchDegrees = 89.0);
 }

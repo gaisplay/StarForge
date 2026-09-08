@@ -130,3 +130,104 @@ bool FShipFrameGravPlateLimitTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameLookYawTurnsAboutDeckTest,
+	"StarForge.Core.ShipFrame.LookYawTurnsAboutDeck",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameLookYawTurnsAboutDeckTest::RunTest(const FString& Parameters)
+{
+	// Level deck, view along +X. A quarter turn to the right must swing the view
+	// onto +Y and leave it level with the deck.
+	const FQuat Result = StarForge::ShipFrame::ApplyLookStep(
+		FQuat::Identity, FVector::UpVector, 90.0, 0.0);
+
+	TestTrue(TEXT("a right turn swings the view onto +Y"),
+		Result.GetForwardVector().Equals(FVector(0.0, 1.0, 0.0), 1e-6));
+	TestTrue(TEXT("and leaves it level with the deck"),
+		FMath::IsNearlyZero(FVector::DotProduct(Result.GetForwardVector(), FVector::UpVector), 1e-6));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameLookPitchRaisesTowardDeckUpTest,
+	"StarForge.Core.ShipFrame.LookPitchRaisesTowardDeckUp",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameLookPitchRaisesTowardDeckUpTest::RunTest(const FString& Parameters)
+{
+	// Positive pitch means looking up, and up is defined by the deck.
+	const FQuat Result = StarForge::ShipFrame::ApplyLookStep(
+		FQuat::Identity, FVector::UpVector, 0.0, 45.0);
+
+	const FVector Forward = Result.GetForwardVector();
+
+	TestTrue(TEXT("a positive pitch step raises the view toward the deck normal"),
+		FVector::DotProduct(Forward, FVector::UpVector) > 0.5);
+	TestTrue(TEXT("and does not swing it sideways"),
+		FMath::IsNearlyZero(Forward.Y, 1e-6));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameLookPitchOnRolledDeckTest,
+	"StarForge.Core.ShipFrame.LookPitchOnRolledDeck",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameLookPitchOnRolledDeckTest::RunTest(const FString& Parameters)
+{
+	// The defect this test exists for: look input applied in world axes instead of
+	// the deck's. With the ship rolled ninety degrees the world pitch axis is the
+	// occupant's own up-down axis, so "look up" rolled or yawed him instead of
+	// pitching him -- and because the rig rolls continuously at 180 deg/s, the axis
+	// kept precessing and the view swept a circle.
+	//
+	// Ship rolled +90 about its X: the deck normal that was +Z now points along -Y,
+	// and the occupant's right, which was +Y, now points along +Z.
+	const FQuat Rolled = FQuat(FVector::ForwardVector, FMath::DegreesToRadians(90.0));
+	const FVector DeckUp = Rolled.RotateVector(FVector::UpVector);
+	const FVector RightBefore = Rolled.GetRightVector();
+
+	const FQuat Result = StarForge::ShipFrame::ApplyLookStep(Rolled, DeckUp, 0.0, 30.0);
+
+	const FVector Forward = Result.GetForwardVector();
+
+	TestTrue(TEXT("pitch raises the view toward the deck normal, not the world's"),
+		FVector::DotProduct(Forward, DeckUp) > 0.4);
+	TestTrue(TEXT("pitch rotates about the view's own right axis, leaving it fixed"),
+		Result.GetRightVector().Equals(RightBefore, 1e-6));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameLookPitchStopsAtZenithTest,
+	"StarForge.Core.ShipFrame.LookPitchStopsAtZenith",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameLookPitchStopsAtZenithTest::RunTest(const FString& Parameters)
+{
+	// Asking for far more pitch than exists must stop the view at the zenith rather
+	// than tumbling it over the top. The limit is measured against the deck, not the
+	// world horizon -- an occupant on a rolling ship has no world horizon, which is
+	// why the engine's own pitch clamp is deliberately lifted.
+	const FQuat Up = StarForge::ShipFrame::ApplyLookStep(
+		FQuat::Identity, FVector::UpVector, 0.0, 200.0);
+	const FQuat Down = StarForge::ShipFrame::ApplyLookStep(
+		FQuat::Identity, FVector::UpVector, 0.0, -200.0);
+
+	const double UpAngle = FMath::RadiansToDegrees(
+		FMath::Asin(FVector::DotProduct(Up.GetForwardVector(), FVector::UpVector)));
+	const double DownAngle = FMath::RadiansToDegrees(
+		FMath::Asin(FVector::DotProduct(Down.GetForwardVector(), FVector::UpVector)));
+
+	TestTrue(TEXT("looking up stops just short of straight up"),
+		UpAngle > 80.0 && UpAngle <= 89.0 + 1e-6);
+	TestTrue(TEXT("looking down stops just short of straight down"),
+		DownAngle < -80.0 && DownAngle >= -89.0 - 1e-6);
+
+	return true;
+}

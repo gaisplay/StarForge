@@ -7,6 +7,7 @@
 #include "Player/SFShipboardMovementComponent.h"
 #include "EngineUtils.h"
 #include "Ship/SFShipFrameComponent.h"
+#include "ShipFrameMath.h"
 
 ASFCharacter::ASFCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<USFShipboardMovementComponent>(
@@ -131,8 +132,31 @@ void ASFCharacter::PollLookInput(float DeltaSeconds)
 
 	const double Step = LookRateDegPerSec * DeltaSeconds;
 
-	if (PC->IsInputKeyDown(EKeys::Left))  { PC->AddYawInput(-Step); }
-	if (PC->IsInputKeyDown(EKeys::Right)) { PC->AddYawInput(Step); }
-	if (PC->IsInputKeyDown(EKeys::Up))    { PC->AddPitchInput(-Step); }
-	if (PC->IsInputKeyDown(EKeys::Down))  { PC->AddPitchInput(Step); }
+	double Yaw = 0.0;
+	double Pitch = 0.0;
+
+	if (PC->IsInputKeyDown(EKeys::Left))  { Yaw -= Step; }
+	if (PC->IsInputKeyDown(EKeys::Right)) { Yaw += Step; }
+	if (PC->IsInputKeyDown(EKeys::Up))    { Pitch += Step; }
+	if (PC->IsInputKeyDown(EKeys::Down))  { Pitch -= Step; }
+
+	if (FMath::IsNearlyZero(Yaw) && FMath::IsNearlyZero(Pitch))
+	{
+		return;
+	}
+
+	// Deliberately not AddYawInput/AddPitchInput. Those feed RotationInput, which
+	// UpdateRotation adds to the world Euler components of the control rotation --
+	// world pitch about world Y, world yaw about world Z. The view is carried in the
+	// ship's frame, so once the ship is rolled those axes are not the occupant's
+	// up-down and left-right at all, and on a deck rolling at 180 deg/s the axis that
+	// "look up" moves along precesses continuously: holding the key swept the view
+	// round in a circle instead of raising it.
+	//
+	// The capsule is rotated to the ship's every tick by the carry, so its up vector
+	// is the deck normal and is the axis to turn about.
+	const FQuat NewView = StarForge::ShipFrame::ApplyLookStep(
+		PC->GetControlRotation().Quaternion(), GetActorUpVector(), Yaw, Pitch);
+
+	PC->SetControlRotation(NewView.Rotator());
 }
