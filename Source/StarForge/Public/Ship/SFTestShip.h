@@ -29,6 +29,7 @@ class STARFORGE_API ASFTestShip : public AActor
 public:
 	ASFTestShip();
 
+	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
 	/** Boost ceiling from the design, converted to Unreal units: 400 m/s. */

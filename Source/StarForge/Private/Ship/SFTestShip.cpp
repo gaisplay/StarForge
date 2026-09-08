@@ -5,6 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "FlightController.h"
 #include "HAL/IConsoleManager.h"
+#include "PhysicsEngine/PhysicsSettings.h"
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFThrusterArrayComponent.h"
@@ -267,6 +268,25 @@ FVector ASFTestShip::GetInteriorSpawnWorldLocation() const
 	return GetActorTransform().TransformPosition(Local);
 }
 
+void ASFTestShip::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Said once at startup rather than checked by hand, because a hand check is a
+	// check somebody forgets. An asynchronous solver with interpolation is the one
+	// mechanism that can hand GetActorTransform a smoothed value instead of the one
+	// physics computed, and every drift figure this rig has ever produced rests on
+	// that not happening.
+	const IConsoleVariable* AsyncMode =
+		IConsoleManager::Get().FindConsoleVariable(TEXT("p.Chaos.Solver.AsyncPhysicsBlockMode"));
+
+	UE_LOG(LogStarForge, Display,
+		TEXT("Physics: async block mode %s, substepping %s. Drift figures are only "
+			 "comparable across runs where these match."),
+		AsyncMode ? *FString::FromInt(AsyncMode->GetInt()) : TEXT("(cvar absent)"),
+		UPhysicsSettings::Get()->bSubstepping ? TEXT("on") : TEXT("off"));
+}
+
 void ASFTestShip::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -358,15 +378,25 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	const StarForge::FWrench Demand = Thrusters->GetLastDemand();
 	const StarForge::FWrench Achieved = Thrusters->GetLastAchieved();
 
-	// Counted over the commanded throttles, not the spooled ones: the clamp lands on
-	// the commanded value, so that is where saturation is visible at the moment it
-	// starts rather than seven response times later.
+	// Two counts, not one. The commanded array is where Solve's clamp lands, so it
+	// shows saturation the moment it starts. The spooled array is where the thrusters
+	// actually are, so the gap between the two IS the spool-up -- the thing
+	// ResponseTime does and that nothing has ever observed doing it.
 	int32 Commanded = 0;
 	for (double Throttle : Thrusters->GetTargetThrottles())
 	{
 		if (Throttle > 0.999)
 		{
 			++Commanded;
+		}
+	}
+
+	int32 Spooled = 0;
+	for (double Throttle : Thrusters->GetLastThrottles())
+	{
+		if (Throttle > 0.999)
+		{
+			++Spooled;
 		}
 	}
 
@@ -378,7 +408,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		TEXT("speed %.1f m/s, ang roll/pitch/yaw (%.1f %.1f %.1f) deg/s | ")
 		TEXT("force want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) N | ")
 		TEXT("torque want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) Nm | ")
-		TEXT("throttles %d of %d commanded wide open"),
+		TEXT("throttles %d of %d commanded, %d spooled"),
 		LastIntent.LinearAxis.X, LastIntent.LinearAxis.Y, LastIntent.LinearAxis.Z,
 		LastIntent.AngularAxis.X, LastIntent.AngularAxis.Y, LastIntent.AngularAxis.Z,
 		LastIntent.bFlightAssistEnabled ? 1 : 0,
@@ -390,5 +420,5 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		Achieved.Force.X, Achieved.Force.Y, Achieved.Force.Z,
 		Demand.Torque.X, Demand.Torque.Y, Demand.Torque.Z,
 		Achieved.Torque.X, Achieved.Torque.Y, Achieved.Torque.Z,
-		Commanded, Thrusters->GetTargetThrottles().Num());
+		Commanded, Thrusters->GetTargetThrottles().Num(), Spooled);
 }
