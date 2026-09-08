@@ -82,6 +82,30 @@ public:
 	UPROPERTY(EditAnywhere, Category = "StarForge|Limits")
 	double AngularGain = 3.0;
 
+	/**
+	 * Replaces Thrusters with the standard symmetric test layout: four corners, six
+	 * thrusters each, one along every signed axis. Twenty-four records of four fields.
+	 *
+	 * It exists because hand-entering those twenty-four records invites a sign typo,
+	 * and a sign typo does not announce itself -- it produces a ship that flies subtly
+	 * wrong while looking correctly authored in the details panel.
+	 *
+	 * The opposed pairs are not decoration. A throttle is confined to [0, 1] because a
+	 * thruster cannot run backwards, so an array pushing only along +X, +Y and +Z
+	 * cannot produce torque without also shoving the ship: zeroing the net force zeroes
+	 * every contributing throttle and takes the moment with it. Turning in place needs
+	 * a force couple, and a couple needs two thrusters facing opposite ways.
+	 * FThrustAllocator::Build rejects an array that cannot span all six axes, so a
+	 * hand-authored layout that misses this does not fly at all.
+	 *
+	 * This is the same layout the headless solver tests are built on, so a rig filled
+	 * by this button flies the arrangement the maths was verified against.
+	 *
+	 * MassKg and the limits are left alone -- the button fills the array and nothing else.
+	 */
+	UFUNCTION(CallInEditor, Category = "StarForge|Ship")
+	void PopulateSymmetricLayout();
+
 	/** The thruster set in the form the solver wants: SI, normalised directions. */
 	TArray<StarForge::FThrusterDef> BuildThrusters() const;
 

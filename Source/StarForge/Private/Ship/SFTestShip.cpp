@@ -129,6 +129,25 @@ ASFTestShip::ASFTestShip()
 	Frame = CreateDefaultSubobject<USFShipFrameComponent>(TEXT("Frame"));
 	Thrusters = CreateDefaultSubobject<USFThrusterArrayComponent>(TEXT("Thrusters"));
 
+	// The ship data asset is wired here rather than assigned on a placed actor
+	// because there is no placed actor to assign it on: L_FrameSpike is deliberately
+	// empty and ASFSpikeGameMode::StartPlay spawns this rig from StaticClass(). With
+	// nothing in the level, the property could never be authored, so the thruster
+	// array failed Rebuild() with "no ship data asset" every run and the ship could
+	// not fly at all. Resolving it in the constructor also means creating the asset
+	// costs a restart rather than a recompile.
+	//
+	// Guarded by Succeeded() to match the mesh finders below: the asset does not
+	// exist yet, and an unresolved finder simply leaves ShipData null, which the
+	// array already reports in red on the readout instead of crashing.
+	static ConstructorHelpers::FObjectFinder<USFShipDataAsset> ShipDataAsset(
+		TEXT("/Game/Ships/DA_TestShip.DA_TestShip"));
+
+	if (ShipDataAsset.Succeeded())
+	{
+		Thrusters->ShipData = ShipDataAsset.Object;
+	}
+
 	const double Span = InteriorHalfExtentCm / CubeEdgeCm * 2.0;
 	const double Half = InteriorHalfExtentCm;
 
