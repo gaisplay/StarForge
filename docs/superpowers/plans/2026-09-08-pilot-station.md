@@ -757,9 +757,14 @@ void USFPilotStationComponent::TickComponent(
 ```cpp
 	PilotStation = CreateDefaultSubobject<USFPilotStationComponent>(TEXT("PilotStation"));
 
-	// A metre and a half above the deck at the pivot: inside the room, reachable from
-	// the spawn point, and clear of the orientation markers.
-	PilotStation->SeatLocationMetres = FVector(0.0, 0.0, -2.5);
+	// Exactly the height a standing occupant already occupies, from the same two
+	// constants as GetInteriorSpawnWorldLocation. A seat above standing height leaves
+	// no walkable floor under the teleported capsule, so PhysWalking drops him into
+	// MOVE_Falling, which clears the movement base, and with no base the engine stops
+	// calling UpdateBasedMovement -- the ship leaves without him. It hides at rest,
+	// where he just falls the gap and lands.
+	PilotStation->SeatLocationMetres = FVector(
+		0.0, 0.0, StarForge::Units::CmToMetres(-InteriorHalfExtentCm + SpawnClearanceCm));
 
 	ConsoleOperator = CreateDefaultSubobject<USFConsoleOperatorComponent>(TEXT("ConsoleOperator"));
 ```

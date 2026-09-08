@@ -12,6 +12,7 @@
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFThrusterArrayComponent.h"
 #include "StarForgeLog.h"
+#include "Units.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -140,9 +141,24 @@ ASFTestShip::ASFTestShip()
 
 	PilotStation = CreateDefaultSubobject<USFPilotStationComponent>(TEXT("PilotStation"));
 
-	// A metre and a half above the deck at the pivot: inside the room, reachable from
-	// the spawn point, and clear of the orientation markers.
-	PilotStation->SeatLocationMetres = FVector(0.0, 0.0, -2.5);
+	// Exactly the height a standing occupant already occupies, taken from the same two
+	// constants as GetInteriorSpawnWorldLocation so the seat and the spawn point cannot
+	// drift apart -- and deliberately not a hand-picked "looks about right" figure.
+	//
+	// Seating moves the character there in one teleport, so a seat above standing
+	// height leaves no walkable floor under his capsule: FindFloor sweeps only
+	// max(2 * MAX_FLOOR_DIST, MaxStepHeight + MAX_FLOOR_DIST), about 47 cm on the
+	// default capsule, and finding nothing PhysWalking drops him into MOVE_Falling.
+	// A falling character clears its movement base, and with no base the engine stops
+	// calling UpdateBasedMovement -- the one override that carries an occupant with
+	// the ship. The ship then leaves without him. The earlier -2.5 m sat 52 cm too
+	// high and hid at rest, because standing still he simply falls the gap and lands;
+	// only at speed does the ship depart in the frames he spends off the deck.
+	//
+	// The conversion to the property's metres goes through StarForge::Units like every
+	// other crossing of that boundary; the two constants are the ship's own centimetres.
+	PilotStation->SeatLocationMetres = FVector(
+		0.0, 0.0, StarForge::Units::CmToMetres(-InteriorHalfExtentCm + SpawnClearanceCm));
 
 	ConsoleOperator = CreateDefaultSubobject<USFConsoleOperatorComponent>(TEXT("ConsoleOperator"));
 
