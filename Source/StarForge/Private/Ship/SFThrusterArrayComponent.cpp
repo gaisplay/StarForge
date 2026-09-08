@@ -143,14 +143,21 @@ void USFThrusterArrayComponent::ClearDemand()
 	LastDemand = StarForge::FWrench();
 	LastAchieved = StarForge::FWrench();
 
+	// Both arrays, not just the commanded one. An earlier version left the spooled
+	// throttles alone on the theory that they wind down through the lag by themselves
+	// -- they do not: that lag lives in ApplyDemand, which is exactly what stops being
+	// called when nobody is commanding. They would freeze at their last value and
+	// print as thrusters still open on a ship nobody is flying, which is the same
+	// stale reading this function exists to remove.
 	for (double& Throttle : TargetThrottles)
 	{
 		Throttle = 0.0;
 	}
 
-	// The spooled throttles are deliberately left alone: they describe where the
-	// thrusters physically got to, and they wind down through the lag in ApplyDemand
-	// on their own. Zeroing them here would claim they had already closed.
+	for (double& Throttle : LastThrottles)
+	{
+		Throttle = 0.0;
+	}
 }
 
 void USFThrusterArrayComponent::ApplyDemand(const StarForge::FWrench& DemandShipFrame, double DeltaSeconds)
