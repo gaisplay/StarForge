@@ -6,6 +6,8 @@
 #include "FlightController.h"
 #include "HAL/IConsoleManager.h"
 #include "PhysicsEngine/PhysicsSettings.h"
+#include "Ship/SFConsoleOperatorComponent.h"
+#include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFThrusterArrayComponent.h"
@@ -149,6 +151,14 @@ ASFTestShip::ASFTestShip()
 
 	Frame = CreateDefaultSubobject<USFShipFrameComponent>(TEXT("Frame"));
 	Thrusters = CreateDefaultSubobject<USFThrusterArrayComponent>(TEXT("Thrusters"));
+
+	PilotStation = CreateDefaultSubobject<USFPilotStationComponent>(TEXT("PilotStation"));
+
+	// A metre and a half above the deck at the pivot: inside the room, reachable from
+	// the spawn point, and clear of the orientation markers.
+	PilotStation->SeatLocationMetres = FVector(0.0, 0.0, -2.5);
+
+	ConsoleOperator = CreateDefaultSubobject<USFConsoleOperatorComponent>(TEXT("ConsoleOperator"));
 
 	// The ship data asset is wired here rather than assigned on a placed actor
 	// because there is no placed actor to assign it on: L_FrameSpike is deliberately
@@ -302,9 +312,13 @@ void ASFTestShip::Tick(float DeltaSeconds)
 	{
 		TickScriptedProfile();
 	}
-	else
+
+	// In both modes, not only under thrust. In the scripted one the line shows a post
+	// nobody is commanding while the ship still moves, which is worth seeing: it is
+	// the difference between "the loop is quiet" and "the loop is not running".
+	if (CVarFlightLog.GetValueOnGameThread() != 0)
 	{
-		TickFlight(DeltaSeconds);
+		LogFlightState(DeltaSeconds);
 	}
 
 	// Measured from what the body actually did, not from what was commanded. In the
@@ -331,40 +345,6 @@ void ASFTestShip::TickScriptedProfile()
 		GetActorTransform().TransformVectorNoScale(LocalRateRadPerSec));
 }
 
-void ASFTestShip::TickFlight(double DeltaSeconds)
-{
-	if (!Thrusters || !Thrusters->IsReady() || !Thrusters->ShipData)
-	{
-		return;
-	}
-
-	LastIntent.LinearAxis = FVector(
-		CVarIntentX.GetValueOnGameThread(),
-		CVarIntentY.GetValueOnGameThread(),
-		CVarIntentZ.GetValueOnGameThread());
-
-	LastIntent.AngularAxis = FVector(
-		CVarIntentRoll.GetValueOnGameThread(),
-		CVarIntentPitch.GetValueOnGameThread(),
-		CVarIntentYaw.GetValueOnGameThread());
-
-	LastIntent.bFlightAssistEnabled = CVarIntentAssist.GetValueOnGameThread() != 0;
-
-	const StarForge::FWrench Demand = StarForge::ComputeDemandedWrench(
-		LastIntent,
-		Thrusters->ReadState(),
-		Thrusters->GetMassProperties(),
-		Thrusters->ShipData->BuildLimits(),
-		Thrusters->GetArrayCapability());
-
-	Thrusters->ApplyDemand(Demand, DeltaSeconds);
-
-	if (CVarFlightLog.GetValueOnGameThread() != 0)
-	{
-		LogFlightState(DeltaSeconds);
-	}
-}
-
 void ASFTestShip::LogFlightState(double DeltaSeconds)
 {
 	SecondsSinceFlightLog += DeltaSeconds;
@@ -373,6 +353,32 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		return;
 	}
 	SecondsSinceFlightLog = 0.0;
+
+	// The log is now written in both modes, so it can be reached before the array has
+	// built -- which the flight branch used to make impossible. Said out loud rather
+	// than skipped: a flight log that simply stops printing reads like a quiet ship,
+	// and the whole point of writing these numbers down is that a silent instrument
+	// must never be mistakable for a calm one.
+	if (!Thrusters || !Thrusters->IsReady())
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Flight: thruster array NOT built -- no flight numbers to report."));
+		return;
+	}
+
+	// Read from the post rather than kept here. The ship no longer runs the loop and
+	// so no longer knows what was asked of it; the station that does is the only
+	// honest source for this line.
+	StarForge::FFlightIntent Intent;
+	if (PilotStation)
+	{
+		Intent = PilotStation->GetLastIntent();
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Flight: no pilot station -- the intent below is nobody's."));
+	}
 
 	const StarForge::FRigidBodyState State = Thrusters->ReadState();
 	const StarForge::FWrench Demand = Thrusters->GetLastDemand();
@@ -409,9 +415,9 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		TEXT("force want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) N | ")
 		TEXT("torque want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) Nm | ")
 		TEXT("throttles %d of %d commanded, %d spooled"),
-		LastIntent.LinearAxis.X, LastIntent.LinearAxis.Y, LastIntent.LinearAxis.Z,
-		LastIntent.AngularAxis.X, LastIntent.AngularAxis.Y, LastIntent.AngularAxis.Z,
-		LastIntent.bFlightAssistEnabled ? 1 : 0,
+		Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,
+		Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,
+		Intent.bFlightAssistEnabled ? 1 : 0,
 		State.LinearVelocity.Size(),
 		FMath::RadiansToDegrees(State.AngularVelocity.X),
 		FMath::RadiansToDegrees(State.AngularVelocity.Y),

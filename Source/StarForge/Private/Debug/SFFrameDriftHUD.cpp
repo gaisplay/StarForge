@@ -6,6 +6,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
+#include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTestShip.h"
 #include "Ship/SFThrusterArrayComponent.h"
@@ -275,11 +276,26 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 	// The angular triples carry their axis order on screen. This readout is the only
 	// place a roll/pitch swap becomes visible, and three bare numbers invite reading the
 	// wrong component -- either missing a real swap or inventing one that is not there.
-	const StarForge::FFlightIntent Intent = Ship->GetLastIntent();
-	DrawLine(FString::Printf(TEXT("intent  lin (%.2f %.2f %.2f)  ang (roll pitch yaw) (%.2f %.2f %.2f)  assist %s"),
-		Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,
-		Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,
-		Intent.bFlightAssistEnabled ? TEXT("on") : TEXT("off")), Y);
+	//
+	// The intent comes from the pilot station now, because the ship no longer runs the
+	// control loop and no longer knows what was asked of it. A missing station is said
+	// in red rather than skipped, for the same reason the "array NOT built" line above
+	// is: a readout that goes quiet when the thing it measures disappears is
+	// indistinguishable from one reporting a ship at rest.
+	const USFPilotStationComponent* Pilot = Ship->GetPilotStation();
+
+	if (!Pilot)
+	{
+		DrawLine(TEXT("intent  -- ship has no pilot station, nothing is flying it"), Y, FLinearColor::Red);
+	}
+	else
+	{
+		const StarForge::FFlightIntent Intent = Pilot->GetLastIntent();
+		DrawLine(FString::Printf(TEXT("intent  lin (%.2f %.2f %.2f)  ang (roll pitch yaw) (%.2f %.2f %.2f)  assist %s"),
+			Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,
+			Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,
+			Intent.bFlightAssistEnabled ? TEXT("on") : TEXT("off")), Y);
+	}
 
 	const StarForge::FRigidBodyState State = Array->ReadState();
 	DrawLine(FString::Printf(TEXT("speed   %.1f m/s   angular (roll pitch yaw) (%.1f %.1f %.1f) deg/s"),
