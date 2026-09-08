@@ -1,0 +1,33 @@
+[2026.09.08-08.25.28:527][  0]LogStarForge: Error: Thruster array has no ship data asset; the ship will not fly.
+[2026.09.08-08.25.34:198][719]LogStarForge: Shipboard drift: 10.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.25.39:199][964]LogStarForge: Shipboard drift: 20.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.25.44:199][204]LogStarForge: Shipboard drift: 30.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.25.49:199][441]LogStarForge: Shipboard drift: 40.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.25.54:198][683]LogStarForge: Shipboard drift: 50.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.25.59:198][919]LogStarForge: Shipboard drift: 60.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.25.59:992][274]LogStarForge: Shipboard drift interval complete: 61.6 s, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.26.26:191][631]LogStarForge: Shipboard drift: 10.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.26.31:191][822]LogStarForge: Shipboard drift: 20.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.26.36:192][ 43]LogStarForge: Shipboard drift: 30.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.26.41:192][267]LogStarForge: Shipboard drift: 40.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.26.46:192][496]LogStarForge: Shipboard drift: 50.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.26.49:640][ 28]LogStarForge: Shipboard drift interval complete: 56.9 s, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.27.12:775][ 19]LogStarForge: Shipboard drift interval complete: 8.7 s, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.27.32:049][407]LogStarForge: Shipboard drift: 10.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.27.37:049][619]LogStarForge: Shipboard drift: 20.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.27.42:048][852]LogStarForge: Shipboard drift: 30.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.27.47:048][ 88]LogStarForge: Shipboard drift: 40.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.27.52:047][324]LogStarForge: Shipboard drift: 50.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.27.57:048][558]LogStarForge: Shipboard drift: 60.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.02:048][784]LogStarForge: Shipboard drift: 70.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.07:048][ 17]LogStarForge: Shipboard drift: 80.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.12:046][230]LogStarForge: Shipboard drift: 90.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.17:048][451]LogStarForge: Shipboard drift: 100.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.22:048][681]LogStarForge: Shipboard drift: 110.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.27:048][913]LogStarForge: Shipboard drift: 120.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.32:047][142]LogStarForge: Shipboard drift: 130.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.37:048][326]LogStarForge: Shipboard drift: 140.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.42:048][528]LogStarForge: Shipboard drift: 150.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.47:048][708]LogStarForge: Shipboard drift: 160.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.52:152][207]LogStarForge: Shipboard drift: 170.1 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
+[2026.09.08-08.28.57:048][816]LogStarForge: Shipboard drift: 180.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0
