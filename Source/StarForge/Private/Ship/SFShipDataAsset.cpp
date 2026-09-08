@@ -18,6 +18,12 @@ namespace
 
 void USFShipDataAsset::PopulateSymmetricLayout()
 {
+	// The details panel wraps a CallInEditor press in a transaction but never calls
+	// Modify() on the object itself, so without this the transaction records an empty
+	// change: Ctrl+Z does not undo the fill, and the package is never marked dirty --
+	// closing the editor throws all twenty-four thrusters away without a save prompt.
+	Modify();
+
 	// Replaces rather than appends. Pressing the button twice must leave the asset in
 	// the same state as pressing it once, or a second press silently doubles every
 	// thruster and with it the ship's whole thrust budget.
@@ -53,6 +59,16 @@ void USFShipDataAsset::PopulateSymmetricLayout()
 			Thrusters.Add(Spec);
 		}
 	}
+
+#if WITH_EDITOR
+	// Nothing broadcasts a property change for a function call, so the details panel
+	// keeps drawing the old array: the button looks like it did nothing at all.
+	PostEditChange();
+#endif
+
+	// Modify() only dirties the package inside a transaction. Saying so here as well
+	// keeps the asterisk and the Save dialog honest whichever way the call arrived.
+	MarkPackageDirty();
 }
 
 TArray<StarForge::FThrusterDef> USFShipDataAsset::BuildThrusters() const
