@@ -48,6 +48,14 @@ public:
 	/** The seat in the ship's frame, in centimetres, which is what the engine wants. */
 	FVector GetSeatLocationCm() const;
 
+	/**
+	 * The interact radius, in centimetres. Each authored-in-metres quantity crosses
+	 * the unit boundary in exactly one place; a second raw multiply elsewhere is how
+	 * a factor of a hundred ends up applied twice without anything crashing or
+	 * logging.
+	 */
+	double GetInteractRadiusCm() const;
+
 	/** True when a world-space point is close enough to the seat to take it. */
 	bool IsWithinReach(const FVector& OccupantWorldLocation) const;
 

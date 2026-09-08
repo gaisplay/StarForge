@@ -51,7 +51,17 @@ FVector USFShipStationComponent::GetSeatLocationCm() const
 {
 	// The one conversion. Everything above this line is SI, everything the engine
 	// receives below it is centimetres.
-	return SeatLocationMetres * StarForge::Units::CmPerMetre;
+	return FVector(
+		StarForge::Units::MetresToCm(SeatLocationMetres.X),
+		StarForge::Units::MetresToCm(SeatLocationMetres.Y),
+		StarForge::Units::MetresToCm(SeatLocationMetres.Z));
+}
+
+double USFShipStationComponent::GetInteractRadiusCm() const
+{
+	// The one conversion for this quantity, mirroring GetSeatLocationCm -- a second
+	// raw multiply anywhere else is a stray factor of a hundred waiting to happen.
+	return StarForge::Units::MetresToCm(InteractRadiusMetres);
 }
 
 bool USFShipStationComponent::IsWithinReach(const FVector& OccupantWorldLocation) const
@@ -63,7 +73,7 @@ bool USFShipStationComponent::IsWithinReach(const FVector& OccupantWorldLocation
 	}
 
 	const FVector SeatWorld = Owner->GetActorTransform().TransformPosition(GetSeatLocationCm());
-	const double RadiusCm = InteractRadiusMetres * StarForge::Units::CmPerMetre;
+	const double RadiusCm = GetInteractRadiusCm();
 
 	return FVector::DistSquared(SeatWorld, OccupantWorldLocation) <= RadiusCm * RadiusCm;
 }

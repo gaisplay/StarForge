@@ -362,6 +362,14 @@ public:
 	/** The seat in the ship's frame, in centimetres, which is what the engine wants. */
 	FVector GetSeatLocationCm() const;
 
+	/**
+	 * The interact radius, in centimetres. Each authored-in-metres quantity crosses
+	 * the unit boundary in exactly one place; a second raw multiply elsewhere is how
+	 * a factor of a hundred ends up applied twice without anything crashing or
+	 * logging.
+	 */
+	double GetInteractRadiusCm() const;
+
 	/** True when a world-space point is close enough to the seat to take it. */
 	bool IsWithinReach(const FVector& OccupantWorldLocation) const;
 
@@ -427,7 +435,17 @@ FVector USFShipStationComponent::GetSeatLocationCm() const
 {
 	// The one conversion. Everything above this line is SI, everything the engine
 	// receives below it is centimetres.
-	return SeatLocationMetres * StarForge::Units::CmPerMetre;
+	return FVector(
+		StarForge::Units::MetresToCm(SeatLocationMetres.X),
+		StarForge::Units::MetresToCm(SeatLocationMetres.Y),
+		StarForge::Units::MetresToCm(SeatLocationMetres.Z));
+}
+
+double USFShipStationComponent::GetInteractRadiusCm() const
+{
+	// The one conversion for this quantity, mirroring GetSeatLocationCm -- a second
+	// raw multiply anywhere else is a stray factor of a hundred waiting to happen.
+	return StarForge::Units::MetresToCm(InteractRadiusMetres);
 }
 
 bool USFShipStationComponent::IsWithinReach(const FVector& OccupantWorldLocation) const
@@ -439,7 +457,7 @@ bool USFShipStationComponent::IsWithinReach(const FVector& OccupantWorldLocation
 	}
 
 	const FVector SeatWorld = Owner->GetActorTransform().TransformPosition(GetSeatLocationCm());
-	const double RadiusCm = InteractRadiusMetres * StarForge::Units::CmPerMetre;
+	const double RadiusCm = GetInteractRadiusCm();
 
 	return FVector::DistSquared(SeatWorld, OccupantWorldLocation) <= RadiusCm * RadiusCm;
 }
