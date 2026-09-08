@@ -27,7 +27,7 @@ namespace
 
 USFConsoleOperatorComponent::USFConsoleOperatorComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
 }
 
 void USFConsoleOperatorComponent::BeginPlay()
@@ -45,6 +45,41 @@ void USFConsoleOperatorComponent::BeginPlay()
 		{
 			Pilot->TryOccupy(this);
 		}
+	}
+}
+
+void USFConsoleOperatorComponent::TickComponent(
+	float DeltaTime,
+	ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	USFPilotStationComponent* Pilot = Owner->FindComponentByClass<USFPilotStationComponent>();
+	if (!Pilot)
+	{
+		return;
+	}
+
+	// This is the whole point of ticking: sf.ConsoleOperator has to work as a runtime
+	// switch, not just a startup default. -ExecCmds runs after BeginPlay, so reading
+	// the cvar once at startup can never be toggled by a person typing at the console.
+	const bool bWantsSeat = CVarConsoleOperator.GetValueOnGameThread() != 0;
+	const bool bHoldsSeat = Pilot->GetOperator().GetObject() == this;
+
+	if (bWantsSeat && !Pilot->IsOccupied())
+	{
+		Pilot->TryOccupy(this);
+	}
+	else if (!bWantsSeat && bHoldsSeat)
+	{
+		Pilot->Vacate();
 	}
 }
 

@@ -13,9 +13,11 @@
  * ISFStationOperator that is not a person, which is the claim spec 4 rests on. If
  * the ship can be flown by this without noticing, it can be flown by automation.
  *
- * It takes the pilot station at BeginPlay and gives it up the moment somebody sits
- * down, so "who is flying" always has a name rather than being an unowned branch
- * that steers.
+ * It takes the pilot station at BeginPlay and holds it for as long as
+ * `sf.ConsoleOperator` stays on, yielding it the moment that variable goes to zero.
+ * A person takes the seat by turning the variable off first; the seat does not swap
+ * hands on its own, so "who is flying" always has a name rather than being an
+ * unowned branch that steers.
  */
 UCLASS(ClassGroup = (StarForge), meta = (BlueprintSpawnableComponent))
 class STARFORGE_API USFConsoleOperatorComponent : public UActorComponent, public ISFStationOperator
@@ -26,6 +28,10 @@ public:
 	USFConsoleOperatorComponent();
 
 	virtual void BeginPlay() override;
+	virtual void TickComponent(
+		float DeltaTime,
+		ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
 
 	virtual bool ProvideFlightIntent(StarForge::FFlightIntent& Out) override;
 	virtual FString GetOperatorName() const override { return TEXT("console"); }
