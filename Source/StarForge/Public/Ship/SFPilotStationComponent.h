@@ -35,6 +35,15 @@ public:
 	/** What was last asked of the ship, for the readout. */
 	StarForge::FFlightIntent GetLastIntent() const { return LastIntent; }
 
+	/**
+	 * Who is flying, by name, or "unoccupied".
+	 *
+	 * The readout has to answer that question. An intent printed without one is a
+	 * stick position with nobody's hand on it, which is exactly how a readout comes
+	 * to look calm while nothing is happening.
+	 */
+	FString GetOperatorDisplayName() const;
+
 private:
 	UPROPERTY()
 	TObjectPtr<USFThrusterArrayComponent> Thrusters;

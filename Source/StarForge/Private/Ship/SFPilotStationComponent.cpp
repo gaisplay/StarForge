@@ -34,6 +34,11 @@ void USFPilotStationComponent::BeginPlay()
 	}
 }
 
+FString USFPilotStationComponent::GetOperatorDisplayName() const
+{
+	return IsOccupied() ? Operator->GetOperatorName() : TEXT("unoccupied");
+}
+
 void USFPilotStationComponent::TickComponent(
 	float DeltaTime,
 	ELevelTick TickType,
@@ -43,6 +48,14 @@ void USFPilotStationComponent::TickComponent(
 
 	if (!Thrusters || !Thrusters->IsReady() || !Thrusters->ShipData || !IsOccupied())
 	{
+		// Nobody is flying, so the last thing anybody asked for is not what is being
+		// asked for now. Left standing it would print as a live stick position on a
+		// ship nobody is commanding.
+		LastIntent = StarForge::FFlightIntent();
+		if (Thrusters)
+		{
+			Thrusters->ClearDemand();
+		}
 		return;
 	}
 
@@ -51,6 +64,8 @@ void USFPilotStationComponent::TickComponent(
 	StarForge::FFlightIntent Intent;
 	if (!Operator->ProvideFlightIntent(Intent))
 	{
+		LastIntent = StarForge::FFlightIntent();
+		Thrusters->ClearDemand();
 		return;
 	}
 

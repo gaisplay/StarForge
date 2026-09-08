@@ -138,6 +138,21 @@ StarForge::FRigidBodyState USFThrusterArrayComponent::ReadState() const
 	return State;
 }
 
+void USFThrusterArrayComponent::ClearDemand()
+{
+	LastDemand = StarForge::FWrench();
+	LastAchieved = StarForge::FWrench();
+
+	for (double& Throttle : TargetThrottles)
+	{
+		Throttle = 0.0;
+	}
+
+	// The spooled throttles are deliberately left alone: they describe where the
+	// thrusters physically got to, and they wind down through the lag in ApplyDemand
+	// on their own. Zeroing them here would claim they had already closed.
+}
+
 void USFThrusterArrayComponent::ApplyDemand(const StarForge::FWrench& DemandShipFrame, double DeltaSeconds)
 {
 	if (!bReady)

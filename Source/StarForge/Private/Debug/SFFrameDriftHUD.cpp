@@ -290,7 +290,16 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 	}
 	else
 	{
+		// Who is flying comes first, and an unoccupied post says so in yellow. A stick
+		// position printed without a name beside it is the same defect as a drift of
+		// zero printed without a measured time: it reads calm whether or not anything
+		// is happening.
 		const StarForge::FFlightIntent Intent = Pilot->GetLastIntent();
+		const bool bOccupied = Pilot->IsOccupied();
+
+		DrawLine(FString::Printf(TEXT("flown by %s"), *Pilot->GetOperatorDisplayName()),
+			Y, bOccupied ? FLinearColor::Green : FLinearColor::Yellow);
+
 		DrawLine(FString::Printf(TEXT("intent  lin (%.2f %.2f %.2f)  ang (roll pitch yaw) (%.2f %.2f %.2f)  assist %s"),
 			Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,
 			Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,

@@ -29,24 +29,10 @@ namespace
 		TEXT("1: fly the scripted checkpoint profile. 0: fly on thrust from sf.Intent.*"),
 		ECVF_Default);
 
-	TAutoConsoleVariable<float> CVarIntentX(TEXT("sf.Intent.X"), 0.0f,
-		TEXT("Linear intent along the ship forward axis, -1 to 1."), ECVF_Default);
-	TAutoConsoleVariable<float> CVarIntentY(TEXT("sf.Intent.Y"), 0.0f,
-		TEXT("Linear intent along the ship right axis, -1 to 1."), ECVF_Default);
-	TAutoConsoleVariable<float> CVarIntentZ(TEXT("sf.Intent.Z"), 0.0f,
-		TEXT("Linear intent along the ship up axis, -1 to 1."), ECVF_Default);
-
-	// Named for what they do, stored in angular velocity order: X roll, Y pitch,
-	// Z yaw. The names and the order agree here so nobody has to remember which.
-	TAutoConsoleVariable<float> CVarIntentRoll(TEXT("sf.Intent.Roll"), 0.0f,
-		TEXT("Roll intent about the ship X axis, -1 to 1."), ECVF_Default);
-	TAutoConsoleVariable<float> CVarIntentPitch(TEXT("sf.Intent.Pitch"), 0.0f,
-		TEXT("Pitch intent about the ship Y axis, -1 to 1."), ECVF_Default);
-	TAutoConsoleVariable<float> CVarIntentYaw(TEXT("sf.Intent.Yaw"), 0.0f,
-		TEXT("Yaw intent about the ship Z axis, -1 to 1."), ECVF_Default);
-
-	TAutoConsoleVariable<int32> CVarIntentAssist(TEXT("sf.Intent.Assist"), 1,
-		TEXT("1: the stick asks for a speed. 0: it asks for thrust."), ECVF_Default);
+	// The sf.Intent.* variables moved to SFConsoleOperatorComponent.cpp, which is the
+	// only thing that reads them now that the flight loop lives in the post. Declaring
+	// them here and resolving them there by name meant a failed lookup returned zero,
+	// and a zeroed axis is a centred stick, which with assist on orders a stop.
 
 	/**
 	 * Writes one flight readout line a second to the log.
@@ -370,9 +356,11 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	// so no longer knows what was asked of it; the station that does is the only
 	// honest source for this line.
 	StarForge::FFlightIntent Intent;
+	FString FlyingBy = TEXT("no pilot station");
 	if (PilotStation)
 	{
 		Intent = PilotStation->GetLastIntent();
+		FlyingBy = PilotStation->GetOperatorDisplayName();
 	}
 	else
 	{
@@ -410,11 +398,12 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	// Naming the order in the line matters: a ship that rolls when asked to pitch is
 	// what confusing it produces, and this log is where that would show.
 	UE_LOG(LogStarForge, Log,
-		TEXT("Flight: intent lin (%.2f %.2f %.2f) ang (%.2f %.2f %.2f) assist %d | ")
+		TEXT("Flight: flown by %s | intent lin (%.2f %.2f %.2f) ang (%.2f %.2f %.2f) assist %d | ")
 		TEXT("speed %.1f m/s, ang roll/pitch/yaw (%.1f %.1f %.1f) deg/s | ")
 		TEXT("force want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) N | ")
 		TEXT("torque want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) Nm | ")
 		TEXT("throttles %d of %d commanded, %d spooled"),
+		*FlyingBy,
 		Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,
 		Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,
 		Intent.bFlightAssistEnabled ? 1 : 0,

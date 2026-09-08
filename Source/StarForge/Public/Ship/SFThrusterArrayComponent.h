@@ -57,6 +57,17 @@ public:
 	 */
 	void ApplyDemand(const StarForge::FWrench& DemandShipFrame, double DeltaSeconds);
 
+	/**
+	 * Forgets the last demand, so the readout stops reporting one.
+	 *
+	 * Called by a station that is not flying. Without it the last wrench anybody asked
+	 * for stays in these accessors for as long as nobody asks for another, and the
+	 * readout prints a live-looking twenty meganewtons beside the word "unoccupied".
+	 * A stale reading and a real one look identical, which is the failure this project
+	 * keeps catching.
+	 */
+	void ClearDemand();
+
 	/** The most this array can produce on each axis. What assist-off is a fraction of. */
 	StarForge::FWrench GetArrayCapability() const { return Capability; }
 
