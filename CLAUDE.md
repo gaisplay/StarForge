@@ -65,6 +65,7 @@ Console variables the rig understands:
 | `sf.Intent.Assist` | 1 | 1 the stick asks for a speed, 0 it asks for thrust |
 | `sf.FlightLog` | 0 | 1 logs the flight readout once a second |
 | `sf.DriftDebug` | 0 | 1 logs carry calls per frame, movement mode, base and ship-local position |
+| `sf.TargetDrone` | 1 | 0 withdraws the rig's target drone; the turret must then report no target rather than aim at the origin |
 
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
 

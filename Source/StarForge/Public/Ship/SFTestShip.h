@@ -12,6 +12,7 @@ class UBoxComponent;
 class USFThrusterArrayComponent;
 class USFPilotStationComponent;
 class USFConsoleOperatorComponent;
+class ASFTargetDrone;
 
 /**
  * Throwaway measurement rig: a boxed room that flies a scripted manoeuvre at
@@ -70,6 +71,9 @@ public:
 	USFThrusterArrayComponent* GetThrusters() const { return Thrusters; }
 
 	USFPilotStationComponent* GetPilotStation() const { return PilotStation; }
+
+	/** What the gunner post's automation tracks. Spawned by BeginPlay; null if that failed. */
+	ASFTargetDrone* GetTargetDrone() const { return TargetDrone; }
 
 	/** Where a passenger should be placed so he starts standing on the floor. */
 	FVector GetInteriorSpawnWorldLocation() const;
@@ -132,6 +136,9 @@ private:
 	 */
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<UPointLightComponent> InteriorLight;
+
+	UPROPERTY()
+	TObjectPtr<ASFTargetDrone> TargetDrone;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> Panels;

@@ -3,6 +3,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/World.h"
 #include "FlightController.h"
 #include "HAL/IConsoleManager.h"
 #include "PhysicsEngine/PhysicsSettings.h"
@@ -10,6 +11,7 @@
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
+#include "Ship/SFTargetDrone.h"
 #include "Ship/SFThrusterArrayComponent.h"
 #include "StarForgeLog.h"
 #include "Units.h"
@@ -297,6 +299,30 @@ void ASFTestShip::BeginPlay()
 			 "comparable across runs where these match."),
 		AsyncMode ? *FString::FromInt(AsyncMode->GetInt()) : TEXT("(cvar absent)"),
 		UPhysicsSettings::Get()->bSubstepping ? TEXT("on") : TEXT("off"));
+
+	// The rig assembles itself, so the thing the turret tracks is spawned here rather
+	// than placed: L_FrameSpike is empty by design. Anchored to this ship's position so
+	// it stays in range whichever way the ship is driven, and in world axes so it does
+	// not turn with the ship, which is what makes a rolling hull a test of the aim.
+	//
+	// Deferred, because the drone's BeginPlay logs its anchor and takes its first
+	// position from it, and a spawn that finishes before SetAnchor would log "the world
+	// origin" for a drone that is about to be anchored to this ship.
+	FTransform DroneSpawn = GetActorTransform();
+	DroneSpawn.SetScale3D(FVector::OneVector);
+	TargetDrone = GetWorld()->SpawnActorDeferred<ASFTargetDrone>(
+		ASFTargetDrone::StaticClass(), DroneSpawn, this, nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (TargetDrone)
+	{
+		TargetDrone->SetAnchor(this);
+		TargetDrone->FinishSpawning(DroneSpawn);
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Error, TEXT("Target drone failed to spawn; the turret will have nothing to track."));
+	}
 }
 
 void ASFTestShip::Tick(float DeltaSeconds)
