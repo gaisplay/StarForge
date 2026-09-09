@@ -27,6 +27,7 @@ public:
 	explicit ASFCharacter(const FObjectInitializer& ObjectInitializer);
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 
 	USFShipboardMovementComponent* GetShipboardMovement() const;

@@ -377,6 +377,14 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	{
 		Intent = PilotStation->GetLastIntent();
 		FlyingBy = PilotStation->GetOperatorDisplayName();
+
+		// Occupied and declining is not occupied and at rest, and the zeroed intent
+		// below cannot tell them apart -- it is identical in both. Said in the name,
+		// because this line is the one that gets compared against a run from last week.
+		if (PilotStation->IsOccupied() && !PilotStation->IsOperatorFlying())
+		{
+			FlyingBy += TEXT(" (standing down)");
+		}
 	}
 	else
 	{

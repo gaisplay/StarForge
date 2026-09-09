@@ -44,9 +44,24 @@ public:
 	 */
 	FString GetOperatorDisplayName() const;
 
+	/**
+	 * Whether the post actually commanded the ship on the last tick.
+	 *
+	 * Occupancy alone cannot answer it. An operator that declines -- because the rig
+	 * is flying its scripted profile, or because he has stood up from the seat but
+	 * still holds it -- leaves a zeroed intent behind, which is byte for byte what a
+	 * centred stick on a ship at rest leaves behind. Without this flag the readout
+	 * prints the two identically, and "the loop is not running" reads as "the loop is
+	 * quiet" -- the same defect as a drift of zero printed with no measured time.
+	 */
+	bool IsOperatorFlying() const { return bOperatorFlying; }
+
 private:
 	UPROPERTY()
 	TObjectPtr<USFThrusterArrayComponent> Thrusters;
 
 	StarForge::FFlightIntent LastIntent;
+
+	/** Set only where an intent was actually provided; cleared on every other path. */
+	bool bOperatorFlying = false;
 };

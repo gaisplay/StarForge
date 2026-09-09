@@ -35,4 +35,17 @@ public:
 
 	virtual bool ProvideFlightIntent(StarForge::FFlightIntent& Out) override;
 	virtual FString GetOperatorName() const override { return TEXT("console"); }
+
+private:
+	/** Whether a request for the seat has already been made against the holder below. */
+	bool bAskedForSeat = false;
+
+	/**
+	 * Who held the post the last time this component asked for it.
+	 *
+	 * The pair exists so a refusal is logged once per change of holder rather than
+	 * once per frame. Weak, because the holder can be destroyed while we are refused
+	 * by it, and a dead holder is a changed one -- worth asking again.
+	 */
+	TWeakObjectPtr<UObject> LastSeatHolder;
 };

@@ -296,9 +296,22 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 		// is happening.
 		const StarForge::FFlightIntent Intent = Pilot->GetLastIntent();
 		const bool bOccupied = Pilot->IsOccupied();
+		const bool bFlying = Pilot->IsOperatorFlying();
 
-		DrawLine(FString::Printf(TEXT("flown by %s"), *Pilot->GetOperatorDisplayName()),
-			Y, bOccupied ? FLinearColor::Green : FLinearColor::Yellow);
+		// Three states, three colours. An occupied post that is declining leaves a
+		// zeroed intent behind, which is the same reading a centred stick leaves on a
+		// ship at rest; printed green with no qualifier the two are indistinguishable,
+		// and the one that means "the loop is not running" is the one worth seeing.
+		// Orange, so it is neither the green of a post that is flying nor the yellow of
+		// one nobody is at.
+		const FLinearColor FlownByColour = !bOccupied
+			? FLinearColor::Yellow
+			: (bFlying ? FLinearColor::Green : FLinearColor(1.0f, 0.45f, 0.0f));
+
+		DrawLine(FString::Printf(TEXT("flown by %s%s"),
+			*Pilot->GetOperatorDisplayName(),
+			(bOccupied && !bFlying) ? TEXT(" (standing down)") : TEXT("")),
+			Y, FlownByColour);
 
 		DrawLine(FString::Printf(TEXT("intent  lin (%.2f %.2f %.2f)  ang (roll pitch yaw) (%.2f %.2f %.2f)  assist %s"),
 			Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,

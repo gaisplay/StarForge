@@ -1,9 +1,46 @@
 #include "Ship/SFPilotStationComponent.h"
 
 #include "GameFramework/Actor.h"
+#include "HAL/IConsoleManager.h"
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFThrusterArrayComponent.h"
 #include "StarForgeLog.h"
+
+namespace
+{
+	/**
+	 * True while the rig is flying its own scripted manoeuvre.
+	 *
+	 * sf.ShipProfile is declared by the rig, so it is reached from here by name. The
+	 * lookup is cached and complains once if it fails, because the answer matters: a
+	 * silent false would let the post fly during a scripted run.
+	 *
+	 * The test lives on the station rather than on any one operator because it has to
+	 * bind every operator -- console, player or automation. Put on one of them, the
+	 * others walk straight past it, which is what happened: sf.ConsoleOperator 0 plus
+	 * a player in the seat re-opened the failure through the player's door.
+	 */
+	bool IsScriptedProfileRunning()
+	{
+		static IConsoleVariable* Profile =
+			IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"));
+
+		if (!Profile)
+		{
+			static bool bComplained = false;
+			if (!bComplained)
+			{
+				bComplained = true;
+				UE_LOG(LogStarForge, Error,
+					TEXT("sf.ShipProfile not found; the pilot station cannot tell whether the rig is "
+						 "flying itself and will assume it is not."));
+			}
+			return false;
+		}
+
+		return Profile->GetInt() != 0;
+	}
+}
 
 USFPilotStationComponent::USFPilotStationComponent()
 {
@@ -52,10 +89,26 @@ void USFPilotStationComponent::TickComponent(
 		// asked for now. Left standing it would print as a live stick position on a
 		// ship nobody is commanding.
 		LastIntent = StarForge::FFlightIntent();
+		bOperatorFlying = false;
 		if (Thrusters)
 		{
 			Thrusters->ClearDemand();
 		}
+		return;
+	}
+
+	// Not while the rig flies itself, and regardless of who holds the seat. The
+	// scripted profile writes the hull's linear AND angular velocity directly, so a
+	// wrench applied in the same frame is fighting an assignment it cannot win -- and
+	// the manoeuvre every recorded drift figure was measured against stops being that
+	// manoeuvre. Nothing orders the two against each other in TG_PrePhysics either, so
+	// which of them the frame ends on is not even decided. Declining is also the plain
+	// truth: nobody in that seat is flying this ship.
+	if (IsScriptedProfileRunning())
+	{
+		LastIntent = StarForge::FFlightIntent();
+		bOperatorFlying = false;
+		Thrusters->ClearDemand();
 		return;
 	}
 
@@ -65,11 +118,13 @@ void USFPilotStationComponent::TickComponent(
 	if (!Operator->ProvideFlightIntent(Intent))
 	{
 		LastIntent = StarForge::FFlightIntent();
+		bOperatorFlying = false;
 		Thrusters->ClearDemand();
 		return;
 	}
 
 	LastIntent = Intent;
+	bOperatorFlying = true;
 
 	const StarForge::FWrench Demand = StarForge::ComputeDemandedWrench(
 		Intent,

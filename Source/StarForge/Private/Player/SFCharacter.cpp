@@ -87,6 +87,22 @@ void ASFCharacter::BeginPlay()
 	}
 }
 
+void ASFCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// A station holds its operator by pointer, and a destroyed character never lets go
+	// of one on its own: the post would read as occupied by a pawn that no longer
+	// exists, refuse every later operator by that name, and fly nothing -- an
+	// unoccupied seat that reports itself taken. Standing up on the way out costs one
+	// branch and removes the whole class of it.
+	if (SeatedStation)
+	{
+		SeatedStation->Vacate();
+		SeatedStation = nullptr;
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void ASFCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);

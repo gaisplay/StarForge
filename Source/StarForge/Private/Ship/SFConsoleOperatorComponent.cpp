@@ -32,34 +32,6 @@ namespace
 		TEXT("1: the stick asks for a speed. 0: it asks for thrust."), ECVF_Default);
 
 	/**
-	 * True while the rig is flying its own scripted manoeuvre.
-	 *
-	 * sf.ShipProfile belongs to the ship, so it is reached by name from here. The
-	 * lookup is cached and complains once if it fails, because the answer matters: a
-	 * silent false would let this operator fly during a scripted run.
-	 */
-	bool IsScriptedProfileRunning()
-	{
-		static IConsoleVariable* Profile =
-			IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"));
-
-		if (!Profile)
-		{
-			static bool bComplained = false;
-			if (!bComplained)
-			{
-				bComplained = true;
-				UE_LOG(LogStarForge, Error,
-					TEXT("sf.ShipProfile not found; the console operator cannot tell whether the "
-						 "rig is flying itself and will assume it is not."));
-			}
-			return false;
-		}
-
-		return Profile->GetInt() != 0;
-	}
-
-	/**
 	 * Whether the console operator takes the pilot seat at startup.
 	 *
 	 * On by default, because the headless flight checks depend on somebody flying.
@@ -76,8 +48,10 @@ USFConsoleOperatorComponent::USFConsoleOperatorComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 
-	// Before physics, and so before the pilot station's own tick, which is where a
-	// seat change has to be visible in the same frame it happens rather than the next.
+	// Before physics. Being in the same group as the pilot station orders nothing
+	// between the two, so BeginPlay adds the station's tick prerequisite explicitly --
+	// that, not this line, is what puts this tick first, which is where a seat change
+	// has to be visible in the same frame it happens rather than the next.
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
 }
 
@@ -85,18 +59,28 @@ void USFConsoleOperatorComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
+	AActor* Owner = GetOwner();
+	USFPilotStationComponent* Pilot =
+		Owner ? Owner->FindComponentByClass<USFPilotStationComponent>() : nullptr;
+
+	if (!Pilot)
+	{
+		return;
+	}
+
+	// Makes the ordering the constructor's comment claims actually true. TG_PrePhysics
+	// orders neither component against the other, and the station is constructed first,
+	// so without this the real order is the reverse of what is wanted: a seat change
+	// made here would be seen by the station a frame late, and for that frame the post
+	// would still be flying on behalf of an operator that had just given it up.
+	Pilot->AddTickPrerequisiteComponent(this);
+
 	if (CVarConsoleOperator.GetValueOnGameThread() == 0)
 	{
 		return;
 	}
 
-	if (AActor* Owner = GetOwner())
-	{
-		if (USFPilotStationComponent* Pilot = Owner->FindComponentByClass<USFPilotStationComponent>())
-		{
-			Pilot->TryOccupy(this);
-		}
-	}
+	Pilot->TryOccupy(this);
 }
 
 void USFConsoleOperatorComponent::TickComponent(
@@ -122,30 +106,46 @@ void USFConsoleOperatorComponent::TickComponent(
 	// switch, not just a startup default. -ExecCmds runs after BeginPlay, so reading
 	// the cvar once at startup can never be toggled by a person typing at the console.
 	const bool bWantsSeat = CVarConsoleOperator.GetValueOnGameThread() != 0;
-	const bool bHoldsSeat = Pilot->GetOperator().GetObject() == this;
+	UObject* Holder = Pilot->GetOperator().GetObject();
+	const bool bHoldsSeat = Holder == this;
 
-	if (bWantsSeat && !Pilot->IsOccupied())
+	if (bWantsSeat && !bHoldsSeat)
 	{
-		Pilot->TryOccupy(this);
+		// Asked for even when the post is visibly taken, so the refusal in TryOccupy is
+		// heard. Pre-checking IsOccupied() here meant an operator turned on against a
+		// seated player waited in perfect silence, which from the log is exactly what a
+		// component that never ticked looks like.
+		//
+		// Once per change of holder, though, not once per frame: the refusal is a
+		// standing condition, and a standing condition logged at sixty hertz buries
+		// every other line in the file. A new holder is new news and is said again.
+		if (!bAskedForSeat || LastSeatHolder.Get() != Holder)
+		{
+			bAskedForSeat = true;
+			LastSeatHolder = Holder;
+			Pilot->TryOccupy(this);
+		}
 	}
-	else if (!bWantsSeat && bHoldsSeat)
+	else
 	{
-		Pilot->Vacate();
+		// Either we hold it or we no longer want it; the next refusal is fresh news.
+		bAskedForSeat = false;
+		LastSeatHolder = nullptr;
+
+		if (!bWantsSeat && bHoldsSeat)
+		{
+			Pilot->Vacate();
+		}
 	}
 }
 
 bool USFConsoleOperatorComponent::ProvideFlightIntent(StarForge::FFlightIntent& Out)
 {
-	// Not flying while the rig flies itself. Returning a zeroed intent instead would
-	// be a command to stop, and the station would apply braking force and torque to a
-	// hull whose velocity the scripted profile is setting directly -- so the manoeuvre
-	// every recorded drift figure was measured against would no longer be that
-	// manoeuvre. Declining is also simply the truth: the console is not flying.
-	if (IsScriptedProfileRunning())
-	{
-		return false;
-	}
-
+	// The "not while the rig flies itself" test used to be here and is now on the pilot
+	// station, where it binds every operator instead of this one. It is also the only
+	// thing this component ever knew about the rig's console variables, and the next
+	// plan reuses this component: an operator that flies from cvars has no business
+	// knowing that a throwaway measurement rig exists.
 	Out.LinearAxis = FVector(
 		CVarIntentX.GetValueOnGameThread(),
 		CVarIntentY.GetValueOnGameThread(),
