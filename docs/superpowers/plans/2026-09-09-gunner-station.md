@@ -726,14 +726,14 @@ namespace StarForge::Turret
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "F:/UEProject/StarForge/StarForge.uproject" -ExecCmds="Automation RunTests StarForge.Core;Quit" -unattended -nopause -nullrhi -nosplash -log
 ```
 
-В `Saved/Logs/StarForge.log` ожидается **47** строк `Test Completed. Result={Success}` (37 прежних плюс десять новых) и ни одной `Result={Fail}`. Считать так:
+В `Saved/Logs/StarForge.log` ожидается **50** строк `Test Completed. Result={Success}` (37 прежних плюс тринадцать новых) и ни одной `Result={Fail}`. Считать так:
 
 ```bash
 grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log
 grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log
 ```
 
-Ожидается `47` и `0`. Проверить, что зависимости `StarForgeCore` не изменились: `git diff Source/StarForgeCore/StarForgeCore.Build.cs` пуст.
+Ожидается `50` и `0`. Проверить, что зависимости `StarForgeCore` не изменились: `git diff Source/StarForgeCore/StarForgeCore.Build.cs` пуст.
 
 - [ ] **Step 7: Коммит**
 
@@ -2527,7 +2527,7 @@ grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log
 grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log
 ```
 
-Ожидается **52** и `0`: 47 после задачи 1 плюс пять.
+Ожидается **55** и `0`: 50 после задачи 1 плюс пять.
 
 - [ ] **Step 5: Коммит**
 
@@ -3340,7 +3340,7 @@ FString USFShipboardMovementComponent::DescribeFooting() const
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
 ```
 
-Головные тесты не трогались; их 52 остаются 52 — проверить один раз командой из «Как проверяется».
+Головные тесты не трогались; их 55 остаются 55 — проверить один раз командой из «Как проверяется».
 
 **Прогон A — тяга, механика включена, ничего не происходит (25 с).** Рецепт по умолчанию из `CLAUDE.md`; R8(а) — он обязан объяснить себя.
 
@@ -3534,7 +3534,7 @@ MSG
 ````markdown
 # Точка проверки 5 — порядок действий (пост канонира и сбивание с ног)
 
-План «в» собран, 52 головных теста проходят, все headless-проверки пройдены на
+План «в» собран, 55 головных тестов проходят, все headless-проверки пройдены на
 фиксированных 60 fps (см. [бланк](2026-09-09-checkpoint-5-results.md), раздел
 «Что уже проверено без рук»). Осталось то, чего журнал не умеет: **согласна ли
 картинка с числами, и как ощущается сбивание с ног.**
@@ -3557,7 +3557,7 @@ MSG
 | Ветка та | `git branch --show-current` → `feat/gunner-station` |
 | Коммит | `git rev-parse --short HEAD` → записать в бланк |
 | Дерево чистое | `git status --short` — пусто |
-| Тесты | 52 строки `Result={Success}` в `Saved/Logs/StarForge.log` после команды из `CLAUDE.md` |
+| Тесты | 55 строк `Result={Success}` в `Saved/Logs/StarForge.log` после команды из `CLAUDE.md` |
 
 Если сомневаешься в сборке — пересобрать:
 
@@ -3785,7 +3785,7 @@ left by automation.`, панель `gunned by unoccupied` жёлтым, `turret 
 
 | Проверка | Факт |
 |---|---|
-| Головные тесты, `StarForgeCore` только на `Core`/`CoreUObject` | 52 / 52 |
+| Головные тесты, `StarForgeCore` только на `Core`/`CoreUObject` | 55 / 55 |
 | Мишень спавнится, `sf.TargetDrone 0` убирает её | строки `spawned … present`, `WITHDRAWN` |
 | Пост канонира без оператора | `gunned by unoccupied … UNCOMMANDED` |
 | Автоматика ведёт по хронологии | `ON TARGET` на 1/5/10/25 с, `CANNOT BEAR` на 15/20 с, `aim` = пеленгу в 0.5° |
@@ -3939,7 +3939,7 @@ MSG
 
 После задачи 9 — по runbook, руками. Проверить перед слиянием:
 
-- 52 головных теста проходят из консоли, без редактора; `StarForgeCore` по-прежнему зависит только от `Core` и `CoreUObject`; сборка без предупреждений;
+- 55 головных тестов проходят из консоли, без редактора; `StarForgeCore` по-прежнему зависит только от `Core` и `CoreUObject`; сборка без предупреждений;
 - в журнале видно **два поста и двух операторов**, ни один из которых не человек, — `taken by console` и `taken by automation` рядом;
 - ствол поворачивается туда, куда говорит индикатор, и против вращения корпуса;
 - уроненного **продолжает нести**: ни одной `Carry NOT RUNNING`, `skipped carries 0` во всех журналах с включённой механикой;

@@ -207,6 +207,97 @@ bool FTurretStepReportsOnTargetTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FTurretStepIsOnTargetJustInsideTheToleranceTest,
+	"StarForge.Core.Turret.StepIsOnTargetJustInsideTheTolerance",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FTurretStepIsOnTargetJustInsideTheToleranceTest::RunTest(const FString& Parameters)
+{
+	// Every other fixture here that reaches OnTarget lands on the bearing exactly,
+	// which leaves the tolerance itself unbound: any value from a hair's breadth to
+	// several degrees would read the same. It is the one number that decides what the
+	// gunner's readout is willing to call calm, so it is pinned from both sides --
+	// from inside here, from outside in the test below.
+	//
+	// The rate limit is what parks the barrel short of the bearing: 1.9 degrees to
+	// travel and 1.5 in a frame leaves four tenths of a degree of error on each axis,
+	// inside the fixture's half-degree tolerance and nowhere near zero.
+	StarForge::Turret::FTurretAim Current;
+	Current.YawRad = 8.1 * Deg;
+	Current.PitchRad = 8.1 * Deg;
+	StarForge::Turret::FTurretAim Bearing;
+	Bearing.YawRad = 10.0 * Deg;
+	Bearing.PitchRad = 10.0 * Deg;
+
+	const StarForge::Turret::FAimStep Step =
+		StarForge::Turret::StepAim(Current, Bearing, MakeLimits(), Frame);
+
+	TestTrue(TEXT("yaw stops four tenths of a degree short of the bearing"),
+		FMath::IsNearlyEqual(Step.Aim.YawRad, 9.6 * Deg, 1e-9));
+	TestTrue(TEXT("pitch stops four tenths of a degree short of the bearing"),
+		FMath::IsNearlyEqual(Step.Aim.PitchRad, 9.6 * Deg, 1e-9));
+	TestTrue(TEXT("and an error inside the tolerance reads as on target"),
+		Step.State == StarForge::Turret::EAimState::OnTarget);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FTurretStepIsSlewingJustOutsideTheToleranceTest,
+	"StarForge.Core.Turret.StepIsSlewingJustOutsideTheTolerance",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FTurretStepIsSlewingJustOutsideTheToleranceTest::RunTest(const FString& Parameters)
+{
+	// The other side of the same number, and the side that costs something when it is
+	// wrong. A tolerance widened by a bad conversion -- degrees handed over as radians
+	// turns half a degree into twenty-eight -- prints a calm readout for a barrel
+	// pointing well away from the target, and nothing goes red to say otherwise. Two
+	// tenths of a degree further out than the test above is the whole difference
+	// between the two answers.
+	//
+	// Each axis is taken outside the tolerance while the other sits exactly on the
+	// bearing, so the number is bound on both and neither half of the conjunction in
+	// StepAim can be dropped without a failure here.
+	const StarForge::Turret::FTurretLimits Limits = MakeLimits();
+
+	StarForge::Turret::FTurretAim Bearing;
+	Bearing.YawRad = 10.0 * Deg;
+	Bearing.PitchRad = 10.0 * Deg;
+
+	// 2.1 degrees to travel and 1.5 in a frame: six tenths of a degree left over.
+	StarForge::Turret::FTurretAim YawShort;
+	YawShort.YawRad = 7.9 * Deg;
+	YawShort.PitchRad = 10.0 * Deg;
+
+	const StarForge::Turret::FAimStep YawStep =
+		StarForge::Turret::StepAim(YawShort, Bearing, Limits, Frame);
+
+	TestTrue(TEXT("yaw stops six tenths of a degree short of the bearing"),
+		FMath::IsNearlyEqual(YawStep.Aim.YawRad, 9.4 * Deg, 1e-9));
+	TestTrue(TEXT("with pitch already on the bearing"),
+		FMath::IsNearlyEqual(YawStep.Aim.PitchRad, 10.0 * Deg, 1e-9));
+	TestTrue(TEXT("and a yaw error outside the tolerance is still slewing"),
+		YawStep.State == StarForge::Turret::EAimState::Slewing);
+
+	StarForge::Turret::FTurretAim PitchShort;
+	PitchShort.YawRad = 10.0 * Deg;
+	PitchShort.PitchRad = 7.9 * Deg;
+
+	const StarForge::Turret::FAimStep PitchStep =
+		StarForge::Turret::StepAim(PitchShort, Bearing, Limits, Frame);
+
+	TestTrue(TEXT("pitch stops six tenths of a degree short of the bearing"),
+		FMath::IsNearlyEqual(PitchStep.Aim.PitchRad, 9.4 * Deg, 1e-9));
+	TestTrue(TEXT("with yaw already on the bearing"),
+		FMath::IsNearlyEqual(PitchStep.Aim.YawRad, 10.0 * Deg, 1e-9));
+	TestTrue(TEXT("and a pitch error outside the tolerance is still slewing"),
+		PitchStep.State == StarForge::Turret::EAimState::Slewing);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FTurretStepAtTheStopIsNotOnTargetTest,
 	"StarForge.Core.Turret.StepAtTheStopIsNotOnTarget",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
@@ -258,6 +349,55 @@ bool FTurretStepSaysCannotBearFromTheFirstStepTest::RunTest(const FString& Param
 
 	TestTrue(TEXT("the barrel does not go below the floor stop"), FMath::IsNearlyEqual(Parked.Aim.PitchRad, -30.0 * Deg, 1e-9));
 	TestTrue(TEXT("and still cannot bear"), Parked.State == StarForge::Turret::EAimState::CannotBear);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FTurretStepYawTakesTheLongWayRoundThroughZeroTest,
+	"StarForge.Core.Turret.StepYawTakesTheLongWayRoundThroughZero",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FTurretStepYawTakesTheLongWayRoundThroughZeroTest::RunTest(const FString& Parameters)
+{
+	// The header promises yaw always moves through zero, and no other fixture crosses
+	// the wrap, so nothing held the code to it: replacing the step's difference with an
+	// unwound shortest arc would leave every other test in this file green and break
+	// the mount. With the stop at exactly pi -- documented legal -- the shortest arc
+	// from -179 to +179 runs the wrong way, off the back of the mount, and the stop
+	// clamp pins the barrel on -180 where it sits reporting Slewing for ever while the
+	// target is in plain view.
+	StarForge::Turret::FTurretLimits Limits = MakeLimits();
+	Limits.MaxYawRad = UE_DOUBLE_PI;
+
+	StarForge::Turret::FTurretAim Bearing;
+	Bearing.YawRad = 179.0 * Deg;
+
+	StarForge::Turret::FAimStep Step;
+	Step.Aim.YawRad = -179.0 * Deg;
+
+	// One step is enough to tell the two rules apart: through zero the barrel comes up
+	// to -177.5, the shortest arc sends it down onto the -180 stop.
+	Step = StarForge::Turret::StepAim(Step.Aim, Bearing, Limits, Frame);
+
+	TestTrue(TEXT("the first step moves yaw toward zero, not toward the stop"),
+		FMath::IsNearlyEqual(Step.Aim.YawRad, -177.5 * Deg, 1e-9));
+	TestTrue(TEXT("and the long way round is a slew, not a refusal"),
+		Step.State == StarForge::Turret::EAimState::Slewing);
+
+	// And it gets there. 358 degrees at 90 a second is 3.978 s, which at 1.5 degrees a
+	// frame is 238 whole steps and a short last one: 239 frames at the rig's 60 fps,
+	// one of which has already been taken above.
+	constexpr int32 FramesTheLongWayRound = 239;
+	for (int32 FrameIndex = 1; FrameIndex < FramesTheLongWayRound; ++FrameIndex)
+	{
+		Step = StarForge::Turret::StepAim(Step.Aim, Bearing, Limits, Frame);
+	}
+
+	TestTrue(TEXT("after 239 frames the barrel is on the bearing at +179"),
+		FMath::IsNearlyEqual(Step.Aim.YawRad, 179.0 * Deg, 1e-9));
+	TestTrue(TEXT("and reports on target rather than stuck against a stop"),
+		Step.State == StarForge::Turret::EAimState::OnTarget);
 
 	return true;
 }
