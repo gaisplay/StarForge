@@ -146,8 +146,9 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 ## Current state
 
-**Stage 2 is finished and merged to `main`.** Thirty-four commits, merged as
-`8ffa63b`; the branch `feat/ship-on-chaos` is gone. 37 headless tests, clean build.
+**Stage 2 is finished, merged, and its branch deleted. All of it is on `main`**, as
+merge commit `8ffa63b` over thirty-four commits. 37 headless tests, clean build.
+There is no stage-2 branch left to look for.
 
 The ship is a Chaos rigid body flown by the maths from `StarForgeCore`. It has a data
 asset (`Content/Ships/DA_TestShip`), a thruster array component that reads mass

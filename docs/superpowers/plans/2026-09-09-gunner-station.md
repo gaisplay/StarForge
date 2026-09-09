@@ -138,7 +138,7 @@ docs/superpowers/notes/
 
 | Задача | Чем |
 |---|---|
-| 1. Математика наведения | 10 головных тестов, красный шаг — реальная сборка |
+| 1. Математика наведения | 13 головных тестов (10 по шагам ниже плюс три, добавленных на ревью), красный шаг — реальная сборка |
 | 2. Мишень | Headless: строка спавна; `sf.TargetDrone 0` — строка «withdrawn» |
 | 3. Намерение турели и исполнитель | Сборка; headless: строка крепления при старте |
 | 4. Пост канонира и индикаторы | Headless: `Station 'gunner'` не занят, турель `UNCOMMANDED` |
@@ -726,7 +726,7 @@ namespace StarForge::Turret
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "F:/UEProject/StarForge/StarForge.uproject" -ExecCmds="Automation RunTests StarForge.Core;Quit" -unattended -nopause -nullrhi -nosplash -log
 ```
 
-В `Saved/Logs/StarForge.log` ожидается **50** строк `Test Completed. Result={Success}` (37 прежних плюс тринадцать новых) и ни одной `Result={Fail}`. Считать так:
+В `Saved/Logs/StarForge.log` ожидается **50** строк `Test Completed. Result={Success}` (37 прежних плюс тринадцать новых: десять из шагов ниже и три, добавленных на ревью задачи 1 — StepIsOnTargetJustInsideTheTolerance, StepIsSlewingJustOutsideTheTolerance, StepYawTakesTheLongWayRoundThroughZero) и ни одной `Result={Fail}`. Считать так:
 
 ```bash
 grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log
