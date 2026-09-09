@@ -264,14 +264,25 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 		return;
 	}
 
-	const int32 ProfileOn =
-		IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"))
-			? IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"))->GetInt()
-			: 1;
+	// A missing variable used to be reported as its default, so a build without
+	// sf.ShipProfile printed "scripted profile (sf.ShipProfile 1)" -- a value nobody
+	// had read, in the confident shape of one that had been. It is said as unknown
+	// instead, in red, because not knowing which mode the ship is in makes every
+	// figure below it unattributable to a mode.
+	const IConsoleVariable* Profile =
+		IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"));
 
-	DrawLine(FString::Printf(TEXT("flight mode: %s"),
-		ProfileOn != 0 ? TEXT("scripted profile (sf.ShipProfile 1)") : TEXT("thrust (sf.ShipProfile 0)")),
-		Y, ProfileOn != 0 ? FLinearColor::Yellow : FLinearColor::Green);
+	if (!Profile)
+	{
+		DrawLine(TEXT("flight mode: UNKNOWN -- sf.ShipProfile not found"), Y, FLinearColor::Red);
+	}
+	else
+	{
+		const bool bProfileOn = Profile->GetInt() != 0;
+		DrawLine(FString::Printf(TEXT("flight mode: %s"),
+			bProfileOn ? TEXT("scripted profile (sf.ShipProfile 1)") : TEXT("thrust (sf.ShipProfile 0)")),
+			Y, bProfileOn ? FLinearColor::Yellow : FLinearColor::Green);
+	}
 
 	// The angular triples carry their axis order on screen. This readout is the only
 	// place a roll/pitch swap becomes visible, and three bare numbers invite reading the
