@@ -3,7 +3,6 @@
 #include "GameFramework/Actor.h"
 #include "HAL/IConsoleManager.h"
 #include "Ship/SFPilotStationComponent.h"
-#include "StarForgeLog.h"
 
 namespace
 {
@@ -111,6 +110,22 @@ void USFConsoleOperatorComponent::TickComponent(
 
 	if (bWantsSeat && !bHoldsSeat)
 	{
+		if (!Holder)
+		{
+			// A free post is asked for every frame until it is held, and never through
+			// the limiter. TryOccupy against an empty station succeeds and logs no
+			// refusal, so there is nothing here to rate-limit; the limiter exists only
+			// for the standing condition of being refused by somebody.
+			//
+			// Routing this case through it was a way to lose the seat for the rest of
+			// the session. The limiter remembers the holder weakly, so a destroyed one
+			// reads back as null -- which is also what a free seat reads as. The two
+			// compared equal, the ask was never repeated, and the empty post stayed
+			// empty in silence.
+			bAskedForSeat = false;
+			LastSeatHolder = nullptr;
+			Pilot->TryOccupy(this);
+		}
 		// Asked for even when the post is visibly taken, so the refusal in TryOccupy is
 		// heard. Pre-checking IsOccupied() here meant an operator turned on against a
 		// seated player waited in perfect silence, which from the log is exactly what a
@@ -119,7 +134,7 @@ void USFConsoleOperatorComponent::TickComponent(
 		// Once per change of holder, though, not once per frame: the refusal is a
 		// standing condition, and a standing condition logged at sixty hertz buries
 		// every other line in the file. A new holder is new news and is said again.
-		if (!bAskedForSeat || LastSeatHolder.Get() != Holder)
+		else if (!bAskedForSeat || LastSeatHolder.Get() != Holder)
 		{
 			bAskedForSeat = true;
 			LastSeatHolder = Holder;

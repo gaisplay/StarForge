@@ -56,6 +56,17 @@ public:
 	 */
 	bool IsOperatorFlying() const { return bOperatorFlying; }
 
+	/**
+	 * Whether the station has lost its way of telling the scripted profile is running.
+	 *
+	 * sf.ShipProfile is a debug variable, so a missing one must not ground the ship --
+	 * the station goes on flying and assumes the rig is not flying itself. But that
+	 * assumption is exactly the one that lets a scripted run and a commanded run be
+	 * applied to the same hull in the same frame, so the doubt is published rather
+	 * than swallowed: the display name says so, and the HUD colours the line for it.
+	 */
+	bool IsScriptedProfileStateUnknown() const { return bScriptedProfileUnknown; }
+
 private:
 	UPROPERTY()
 	TObjectPtr<USFThrusterArrayComponent> Thrusters;
@@ -64,4 +75,7 @@ private:
 
 	/** Set only where an intent was actually provided; cleared on every other path. */
 	bool bOperatorFlying = false;
+
+	/** Refreshed at the top of every tick, ahead of any early return. */
+	bool bScriptedProfileUnknown = false;
 };

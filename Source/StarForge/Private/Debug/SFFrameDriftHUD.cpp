@@ -298,15 +298,22 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 		const bool bOccupied = Pilot->IsOccupied();
 		const bool bFlying = Pilot->IsOperatorFlying();
 
-		// Three states, three colours. An occupied post that is declining leaves a
-		// zeroed intent behind, which is the same reading a centred stick leaves on a
-		// ship at rest; printed green with no qualifier the two are indistinguishable,
-		// and the one that means "the loop is not running" is the one worth seeing.
-		// Orange, so it is neither the green of a post that is flying nor the yellow of
-		// one nobody is at.
-		const FLinearColor FlownByColour = !bOccupied
-			? FLinearColor::Yellow
-			: (bFlying ? FLinearColor::Green : FLinearColor(1.0f, 0.45f, 0.0f));
+		// Four states, four colours, and the first of them outranks the rest: a station
+		// that cannot see sf.ShipProfile does not know whether the rig is flying itself,
+		// so whatever else this line would have said about it is said by an instrument
+		// that is admittedly broken. Red, because it is the only one of the four that
+		// is a defect rather than a state of the ship.
+		//
+		// The other three: an occupied post that is declining leaves a zeroed intent
+		// behind, which is the same reading a centred stick leaves on a ship at rest;
+		// printed green with no qualifier the two are indistinguishable, and the one
+		// that means "the loop is not running" is the one worth seeing. Orange, so it is
+		// neither the green of a post that is flying nor the yellow of one nobody is at.
+		const FLinearColor FlownByColour = Pilot->IsScriptedProfileStateUnknown()
+			? FLinearColor::Red
+			: (!bOccupied
+				? FLinearColor::Yellow
+				: (bFlying ? FLinearColor::Green : FLinearColor(1.0f, 0.45f, 0.0f)));
 
 		DrawLine(FString::Printf(TEXT("flown by %s%s"),
 			*Pilot->GetOperatorDisplayName(),

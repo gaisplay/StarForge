@@ -37,15 +37,18 @@ public:
 	virtual FString GetOperatorName() const override { return TEXT("console"); }
 
 private:
-	/** Whether a request for the seat has already been made against the holder below. */
+	/** Whether a refusal has already been heard from the holder below. */
 	bool bAskedForSeat = false;
 
 	/**
-	 * Who held the post the last time this component asked for it.
+	 * Who refused the post the last time this component asked for it.
 	 *
 	 * The pair exists so a refusal is logged once per change of holder rather than
-	 * once per frame. Weak, because the holder can be destroyed while we are refused
-	 * by it, and a dead holder is a changed one -- worth asking again.
+	 * once per frame. It governs refused asks only: a free seat is taken every frame
+	 * until it is held, decided before this pair is consulted. That order is the
+	 * whole point -- the pointer is weak, so a destroyed holder reads back as null,
+	 * which is indistinguishable from an empty post, and a limiter asked to tell
+	 * those apart would sit out an empty seat forever.
 	 */
 	TWeakObjectPtr<UObject> LastSeatHolder;
 };

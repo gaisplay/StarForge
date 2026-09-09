@@ -15,15 +15,23 @@ namespace
 	 * lookup is cached and complains once if it fails, because the answer matters: a
 	 * silent false would let the post fly during a scripted run.
 	 *
+	 * Failing closed is not the alternative -- that would make the ship permanently
+	 * unflyable over a missing debug variable. So the failure is carried out through
+	 * bOutKnown instead, and from there into the readout: the one line a person
+	 * compares against last week's run has to say the instrument is not sure, or a
+	 * reopened Critical prints as a perfectly calm green.
+	 *
 	 * The test lives on the station rather than on any one operator because it has to
 	 * bind every operator -- console, player or automation. Put on one of them, the
 	 * others walk straight past it, which is what happened: sf.ConsoleOperator 0 plus
 	 * a player in the seat re-opened the failure through the player's door.
 	 */
-	bool IsScriptedProfileRunning()
+	bool IsScriptedProfileRunning(bool& bOutKnown)
 	{
 		static IConsoleVariable* Profile =
 			IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"));
+
+		bOutKnown = Profile != nullptr;
 
 		if (!Profile)
 		{
@@ -73,7 +81,12 @@ void USFPilotStationComponent::BeginPlay()
 
 FString USFPilotStationComponent::GetOperatorDisplayName() const
 {
-	return IsOccupied() ? Operator->GetOperatorName() : TEXT("unoccupied");
+	const FString Name = IsOccupied() ? Operator->GetOperatorName() : TEXT("unoccupied");
+
+	// The doubt rides along in the name because the name is what both readouts print,
+	// and a degraded instrument that only says so once at startup is a degraded
+	// instrument nobody reading the run will know about.
+	return bScriptedProfileUnknown ? Name + TEXT(" (profile unknown)") : Name;
 }
 
 void USFPilotStationComponent::TickComponent(
@@ -82,6 +95,13 @@ void USFPilotStationComponent::TickComponent(
 	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// Read before anything can return early, so the readout tells the truth about the
+	// instrument whether or not anybody is in the seat. The pointer behind it is
+	// resolved once, so this costs an integer read per frame.
+	bool bProfileKnown = true;
+	const bool bScriptedProfile = IsScriptedProfileRunning(bProfileKnown);
+	bScriptedProfileUnknown = !bProfileKnown;
 
 	if (!Thrusters || !Thrusters->IsReady() || !Thrusters->ShipData || !IsOccupied())
 	{
@@ -104,7 +124,7 @@ void USFPilotStationComponent::TickComponent(
 	// manoeuvre. Nothing orders the two against each other in TG_PrePhysics either, so
 	// which of them the frame ends on is not even decided. Declining is also the plain
 	// truth: nobody in that seat is flying this ship.
-	if (IsScriptedProfileRunning())
+	if (bScriptedProfile)
 	{
 		LastIntent = StarForge::FFlightIntent();
 		bOperatorFlying = false;

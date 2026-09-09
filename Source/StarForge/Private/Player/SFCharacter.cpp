@@ -94,9 +94,19 @@ void ASFCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	// exists, refuse every later operator by that name, and fly nothing -- an
 	// unoccupied seat that reports itself taken. Standing up on the way out costs one
 	// branch and removes the whole class of it.
+	//
+	// Only the post this character actually holds, though. Nothing today can seat him
+	// on a station held by somebody else, but Vacate does not ask who it is throwing
+	// out, so the invariant is spelled here rather than left to stay true by luck.
+	// The pointer is dropped either way: a seat we do not hold is not one to keep a
+	// claim on.
 	if (SeatedStation)
 	{
-		SeatedStation->Vacate();
+		if (SeatedStation->GetOperator().GetObject() == this)
+		{
+			SeatedStation->Vacate();
+		}
+
 		SeatedStation = nullptr;
 	}
 
