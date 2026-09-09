@@ -726,11 +726,11 @@ namespace StarForge::Turret
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "F:/UEProject/StarForge/StarForge.uproject" -ExecCmds="Automation RunTests StarForge.Core;Quit" -unattended -nopause -nullrhi -nosplash -log
 ```
 
-В `Saved/Logs/StarForge.log` ожидается **47** строк `Test Completed. Result=Passed` (37 прежних плюс десять новых) и ни одной `Result=Failed`. Считать так:
+В `Saved/Logs/StarForge.log` ожидается **47** строк `Test Completed. Result={Success}` (37 прежних плюс десять новых) и ни одной `Result={Fail}`. Считать так:
 
 ```bash
-grep -c "Test Completed. Result=Passed" Saved/Logs/StarForge.log
-grep -c "Test Completed. Result=Failed" Saved/Logs/StarForge.log
+grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log
+grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log
 ```
 
 Ожидается `47` и `0`. Проверить, что зависимости `StarForgeCore` не изменились: `git diff Source/StarForgeCore/StarForgeCore.Build.cs` пуст.
@@ -2523,8 +2523,8 @@ bool FShipFrameFootingRelapseRestartsTheDelayTest::RunTest(const FString& Parame
 ```
 
 ```bash
-grep -c "Test Completed. Result=Passed" Saved/Logs/StarForge.log
-grep -c "Test Completed. Result=Failed" Saved/Logs/StarForge.log
+grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log
+grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log
 ```
 
 Ожидается **52** и `0`: 47 после задачи 1 плюс пять.
@@ -3557,7 +3557,7 @@ MSG
 | Ветка та | `git branch --show-current` → `feat/gunner-station` |
 | Коммит | `git rev-parse --short HEAD` → записать в бланк |
 | Дерево чистое | `git status --short` — пусто |
-| Тесты | 52 строки `Result=Passed` в `Saved/Logs/StarForge.log` после команды из `CLAUDE.md` |
+| Тесты | 52 строки `Result={Success}` в `Saved/Logs/StarForge.log` после команды из `CLAUDE.md` |
 
 Если сомневаешься в сборке — пересобрать:
 
