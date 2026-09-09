@@ -8,6 +8,7 @@
 #include "HAL/IConsoleManager.h"
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "Ship/SFConsoleOperatorComponent.h"
+#include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
@@ -60,6 +61,9 @@ namespace
 	 * standing on the plate rather than embedded in it.
 	 */
 	constexpr double SpawnClearanceCm = 100.0;
+
+	/** How far aft of the pilot's seat the gunner sits, in centimetres. See the constructor. */
+	constexpr double GunnerSeatAftCm = 150.0;
 
 	/**
 	 * Attenuation radius for the interior light, in centimetres. The room is 8 m
@@ -173,6 +177,21 @@ ASFTestShip::ASFTestShip()
 		0.0, 0.0, StarForge::Units::CmToMetres(-InteriorHalfExtentCm + SpawnClearanceCm));
 
 	ConsoleOperator = CreateDefaultSubobject<USFConsoleOperatorComponent>(TEXT("ConsoleOperator"));
+
+	GunnerStation = CreateDefaultSubobject<USFGunnerStationComponent>(TEXT("GunnerStation"));
+
+	// A metre and a half aft of the pilot, at exactly the pilot's height and for the
+	// same reason (see PilotStation above: a seat above standing height drops him into
+	// MOVE_Falling and the carry stops). Aft rather than beside so the roll axis, which
+	// runs along X, stays overhead: at (-1.5, 0, -3) he is the same three metres from
+	// it as in the pilot's seat. Within the 2 m interact radius of the spawn point, so
+	// "nearest free seat" decides between the two and neither is out of reach from
+	// where a person starts. The capsule (radius 34) spans X -184..-116; the aft wall's
+	// inner face is at -390, and the cylinder marker at (-300, 0, 0) is three metres up.
+	GunnerStation->SeatLocationMetres = FVector(
+		StarForge::Units::CmToMetres(-GunnerSeatAftCm),
+		0.0,
+		StarForge::Units::CmToMetres(-InteriorHalfExtentCm + SpawnClearanceCm));
 
 	// The ship data asset is wired here rather than assigned on a placed actor
 	// because there is no placed actor to assign it on: L_FrameSpike is deliberately
@@ -433,6 +452,46 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		return;
 	}
 	SecondsSinceFlightLog = 0.0;
+
+	// The turret reports before the thruster check: a ship whose array never built can
+	// still lay a turret, and a line that vanishes with the array would look like a
+	// turret that stopped.
+	if (GunnerStation && GunnerStation->GetTurret())
+	{
+		const USFTurretComponent* GunnerTurret = GunnerStation->GetTurret();
+		const StarForge::FTurretIntent TurretIntent = GunnerStation->GetLastIntent();
+
+		FString GunnedBy = GunnerStation->GetOperatorDisplayName();
+		if (GunnerStation->IsOccupied() && !GunnerStation->IsOperatorGunning())
+		{
+			GunnedBy += TEXT(" (standing down)");
+		}
+
+		const FString Target = TurretIntent.bHasTarget
+			? FString::Printf(TEXT("(%.0f %.0f %.0f) cm"),
+				TurretIntent.TargetWorldLocation.X,
+				TurretIntent.TargetWorldLocation.Y,
+				TurretIntent.TargetWorldLocation.Z)
+			: FString(TEXT("none"));
+
+		const StarForge::Turret::FTurretAim Bearing = GunnerTurret->GetLastBearing();
+		const FString BearingText = GunnerTurret->HasBearing()
+			? FString::Printf(TEXT("yaw %.1f pitch %.1f deg"),
+				FMath::RadiansToDegrees(Bearing.YawRad), FMath::RadiansToDegrees(Bearing.PitchRad))
+			: FString(TEXT("none"));
+
+		const StarForge::Turret::FTurretAim Aim = GunnerTurret->GetAim();
+
+		UE_LOG(LogStarForge, Log,
+			TEXT("Turret: gunned by %s | target %s firing %d | bearing %s | aim yaw %.1f pitch %.1f deg | %s"),
+			*GunnedBy, *Target, TurretIntent.bFiring ? 1 : 0, *BearingText,
+			FMath::RadiansToDegrees(Aim.YawRad), FMath::RadiansToDegrees(Aim.PitchRad),
+			USFTurretComponent::StateName(GunnerTurret->GetState()));
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Warning, TEXT("Turret: no gunner station or no turret -- nothing is aiming."));
+	}
 
 	// The log is now written in both modes, so it can be reached before the array has
 	// built -- which the flight branch used to make impossible. Said out loud rather

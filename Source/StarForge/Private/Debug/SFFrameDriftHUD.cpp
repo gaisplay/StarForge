@@ -6,11 +6,14 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
+#include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTestShip.h"
 #include "Ship/SFThrusterArrayComponent.h"
+#include "Ship/SFTurretComponent.h"
 #include "ShipFrameMath.h"
+#include "TurretMath.h"
 
 namespace
 {
@@ -32,11 +35,17 @@ namespace
 	 * Raised to 640 when the flight block was added: those lines pushed the readout
 	 * past the old 480 and the last of them fell off the panel, which is the exact
 	 * illegibility the panel was introduced to fix.
+	 *
+	 * Raised again to 760 for the gunner block. A healthy run is 23 lines at 22 px from
+	 * a 48 px top with one 10 px gap, so the last line's text ends near 564 against a
+	 * panel bottom of 796; the three red diagnostic lines above add 66 more, and the
+	 * knockdown's footing line is still to come. A line falling off the bottom is the
+	 * defect this panel exists to prevent.
 	 */
 	constexpr float PanelX = 20.0f;
 	constexpr float PanelY = 36.0f;
 	constexpr float PanelWidth = 760.0f;
-	constexpr float PanelHeight = 640.0f;
+	constexpr float PanelHeight = 760.0f;
 }
 
 void ASFFrameDriftHUD::DrawLine(const FString& Text, double& Y, const FLinearColor& Color)
@@ -241,6 +250,7 @@ void ASFFrameDriftHUD::DrawHUD()
 	// still, and two HUDs cannot both be on screen at once.
 	DrawLine(TEXT(""), Y);
 	DrawFlightBlock(Y);
+	DrawGunnerBlock(Y);
 }
 
 void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
@@ -389,4 +399,61 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 	DrawLine(FString::Printf(TEXT("throttles  commanded %d of %d wide open   spooled %d%s"),
 		Commanded, Count, Spooled, Commanded > 0 ? TEXT("  -- SATURATED") : TEXT("")),
 		Y, Commanded > 0 ? FLinearColor::Yellow : FLinearColor::White);
+}
+
+void ASFFrameDriftHUD::DrawGunnerBlock(double& Y)
+{
+	const ASFTestShip* Ship = Cast<ASFTestShip>(
+		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+	const USFGunnerStationComponent* Gunner = Ship ? Ship->GetGunnerStation() : nullptr;
+	const USFTurretComponent* Turret = Gunner ? Gunner->GetTurret() : nullptr;
+
+	// Red, for the same reason the flight block says "array NOT built" in red: a block
+	// that goes quiet when the thing it reports disappears is indistinguishable from
+	// one reporting a turret at rest.
+	if (!Gunner || !Turret)
+	{
+		DrawLine(TEXT("gunner  -- ship has no gunner station or no turret, nothing is aiming"), Y, FLinearColor::Red);
+		return;
+	}
+
+	// Who holds the post comes first, with the same three colours the pilot line uses:
+	// yellow for nobody, orange for somebody who is declining, green for somebody gunning.
+	const bool bOccupied = Gunner->IsOccupied();
+	const bool bGunning = Gunner->IsOperatorGunning();
+	const FLinearColor GunnedByColour = !bOccupied
+		? FLinearColor::Yellow
+		: (bGunning ? FLinearColor::Green : FLinearColor(1.0f, 0.45f, 0.0f));
+
+	DrawLine(FString::Printf(TEXT("gunned by %s%s"),
+		*Gunner->GetOperatorDisplayName(),
+		(bOccupied && !bGunning) ? TEXT(" (standing down)") : TEXT("")),
+		Y, GunnedByColour);
+
+	const StarForge::Turret::FTurretAim Aim = Turret->GetAim();
+	const StarForge::Turret::FTurretAim Bearing = Turret->GetLastBearing();
+	const FString BearingText = Turret->HasBearing()
+		? FString::Printf(TEXT("yaw %.1f pitch %.1f"),
+			FMath::RadiansToDegrees(Bearing.YawRad), FMath::RadiansToDegrees(Bearing.PitchRad))
+		: FString(TEXT("none"));
+
+	// Green only for on target. A turret at its stop is orange, not green, because its
+	// angle alone would read as on target; no target and no command are yellow, the
+	// colour of a post nobody is at.
+	FLinearColor StateColour = FLinearColor::White;
+	switch (Turret->GetState())
+	{
+	case ESFTurretState::OnTarget: StateColour = FLinearColor::Green; break;
+	case ESFTurretState::CannotBear: StateColour = FLinearColor(1.0f, 0.45f, 0.0f); break;
+	case ESFTurretState::NoTarget:
+	case ESFTurretState::Uncommanded: StateColour = FLinearColor::Yellow; break;
+	default: break;
+	}
+
+	DrawLine(FString::Printf(TEXT("turret  aim yaw %.1f pitch %.1f deg   bearing %s   %s   firing %s"),
+		FMath::RadiansToDegrees(Aim.YawRad), FMath::RadiansToDegrees(Aim.PitchRad),
+		*BearingText,
+		USFTurretComponent::StateName(Turret->GetState()),
+		Turret->IsFiring() ? TEXT("on") : TEXT("off")),
+		Y, StateColour);
 }

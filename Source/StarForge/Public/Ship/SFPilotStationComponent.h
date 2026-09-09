@@ -36,13 +36,12 @@ public:
 	StarForge::FFlightIntent GetLastIntent() const { return LastIntent; }
 
 	/**
-	 * Who is flying, by name, or "unoccupied".
-	 *
-	 * The readout has to answer that question. An intent printed without one is a
-	 * stick position with nobody's hand on it, which is exactly how a readout comes
-	 * to look calm while nothing is happening.
+	 * The base name, with the state of this station's own instrument appended: a
+	 * station that cannot see sf.ShipProfile says so here, because the name is what
+	 * both readouts print and a degraded instrument that only says so once at startup
+	 * is one nobody reading the run will know about.
 	 */
-	FString GetOperatorDisplayName() const;
+	virtual FString GetOperatorDisplayName() const override;
 
 	/**
 	 * Whether the post actually commanded the ship on the last tick.

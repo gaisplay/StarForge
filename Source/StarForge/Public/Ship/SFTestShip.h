@@ -12,6 +12,7 @@ class UPointLightComponent;
 class UBoxComponent;
 class USFThrusterArrayComponent;
 class USFPilotStationComponent;
+class USFGunnerStationComponent;
 class USFConsoleOperatorComponent;
 class USFTurretComponent;
 class ASFTargetDrone;
@@ -74,6 +75,8 @@ public:
 
 	USFPilotStationComponent* GetPilotStation() const { return PilotStation; }
 
+	USFGunnerStationComponent* GetGunnerStation() const { return GunnerStation; }
+
 	USFTurretComponent* GetTurret() const { return Turret; }
 
 	/** What the gunner post's automation tracks. Spawned by BeginPlay; null if that failed. */
@@ -129,6 +132,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFPilotStationComponent> PilotStation;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFGunnerStationComponent> GunnerStation;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFConsoleOperatorComponent> ConsoleOperator;

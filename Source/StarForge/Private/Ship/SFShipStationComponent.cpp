@@ -47,6 +47,11 @@ void USFShipStationComponent::Vacate()
 	Operator = nullptr;
 }
 
+FString USFShipStationComponent::GetOperatorDisplayName() const
+{
+	return IsOccupied() ? Operator->GetOperatorName() : TEXT("unoccupied");
+}
+
 FVector USFShipStationComponent::GetSeatLocationCm() const
 {
 	// The one conversion. Everything above this line is SI, everything the engine
