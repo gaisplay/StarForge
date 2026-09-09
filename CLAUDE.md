@@ -146,31 +146,45 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 ## Current state
 
-**Stage 2a is finished on the branch `feat/ship-on-chaos`, eleven commits, not merged.**
-36 headless tests, clean build, and the plan's checkpoint 3 met in full.
+**Stage 2 is finished and merged to `main`.** Thirty-four commits, merged as
+`8ffa63b`; the branch `feat/ship-on-chaos` is gone. 37 headless tests, clean build.
 
 The ship is a Chaos rigid body flown by the maths from `StarForgeCore`. It has a data
 asset (`Content/Ships/DA_TestShip`), a thruster array component that reads mass
-properties back from Chaos, a closed control loop driven by console variables, and a
-flight readout on screen and in the log.
+properties back from Chaos, a closed control loop, and a flight readout on screen and
+in the log. The loop is owned by `USFPilotStationComponent`, which asks whoever holds
+the post for an intent through `ISFStationOperator` — the console operator and the
+player are two implementations of that one interface, and the station cannot tell them
+apart. That indifference is the load-bearing claim of spec §4; a second station in the
+next plan tests it.
 
-**The risk that made this plan open with a measurement is gone.** Checkpoint 1 was
-earned against a ship that moved by setting its transform; it has now been re-earned
-against a simulated body: ninety unbroken seconds, zero drift, zero jitter, no skipped
-carries, the movement base never once changing. Figures and the negative control are in
+**The risk that made stage 2a open with a measurement is gone.** Checkpoint 1 was
+earned against a ship that moved by setting its transform; it was re-earned against a
+simulated body: ninety unbroken seconds, zero drift, zero jitter, no skipped carries,
+the movement base never once changing. Figures and the negative control are in
 `docs/superpowers/notes/2026-09-08-checkpoint-1-rerun-results.md`.
 
 **Every flight check passes, and all of them ran headlessly.** Forward thrust reaches
 200.0 m/s and saturates at exactly 800 kN; a full roll settles at exactly 180.0 deg/s on
 the roll axis and a full pitch at exactly 120.0 on pitch, with nothing on the other two;
-a pure torque produces no linear speed; with the scripted profile on, the intent is
-ignored entirely. The hull's inertia reads 533 333 kg m², which is `m(a²+b²)/12` for an
-8 m cube of 50 t to the unit — the SI/centimetre boundary is right end to end.
+a pure torque produces no linear speed; with the scripted profile on, the station stands
+down and commands nothing. The hull's inertia reads 533 333 kg m², which is
+`m(a²+b²)/12` for an 8 m cube of 50 t to the unit — the SI/centimetre boundary is right
+end to end.
 
-**Next action:** write plan 2b — pilot station, `IStationOperator`, input routing, and
-the grav-plate knockdown. Read
-`docs/superpowers/notes/2026-09-08-handoff-stage-2b.md` first; it carries what neither
-the code nor the git history says.
+**What no machine has checked.** Nobody has actually sat down. No surviving log records
+a seat taken by a player, because a headless run has no hands: the seating path, braking
+on a released stick, walking under thrust, and the whole gamepad branch are compiled,
+reviewed and reasoned about, not observed. The runbook and the form for that sitting are
+`docs/superpowers/notes/2026-09-09-checkpoint-4-runbook.md` and `-results.md`. Two of its
+warnings cannot come from the instrument: sitting down is a single teleport the drift
+gauge does not know about, so taking the seat from a standstill prints the distance to
+the chair as drift — press the key on the move; and the interior flies with the occupant,
+so a ship turning at 180 deg/s changes nothing on screen, which is the design working and
+reads like nothing happening.
+
+**Next action:** checkpoint 4 by hand, then plan «в» — turret, gunner station, an
+automation operator, and the grav-plate knockdown.
 
 Things in the code that look like mistakes and are not:
 

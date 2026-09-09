@@ -103,7 +103,7 @@ Headless-прогон, которым пользуется весь план:
 - Consumes: `USFThrusterArrayComponent::GetTargetThrottles()`, `GetLastThrottles()`.
 - Produces: ничего для следующих задач.
 
-- [ ] **Step 1: Записывать настройку асинхронной физики при старте**
+- [x] **Step 1: Записывать настройку асинхронной физики при старте**
 
 Долг: `p.Chaos.Solver.AsyncPhysicsBlockMode` ни разу не проверялся, хотя стоял в плане. Асинхронный солвер с интерполяцией — единственный механизм, которым `GetActorTransform()` может вернуть сглаженное значение вместо посчитанного, и это обесценило бы любой замер увода. Проверка руками забывается; запись при старте — нет.
 
@@ -138,7 +138,7 @@ void ASFTestShip::BeginPlay()
 
 `HAL/IConsoleManager.h` и `StarForgeLog.h` уже подключены.
 
-- [ ] **Step 2: Сделать раскрутку двигателей видимой в журнале**
+- [x] **Step 2: Сделать раскрутку двигателей видимой в журнале**
 
 Долг: `ResponseTime` применяется, но никто ни разу не наблюдал задержку. В полётную строку пишется только число газов, зажатых **по команде**; фактические, загазованные с задержкой, не пишутся, поэтому разница между ними невидима.
 
@@ -180,13 +180,13 @@ void ASFTestShip::BeginPlay()
 		Commanded, Thrusters->GetTargetThrottles().Num(), Spooled);
 ```
 
-- [ ] **Step 3: Собрать**
+- [x] **Step 3: Собрать**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
 ```
 
-- [ ] **Step 4: Прогнать headless и прочитать оба долга**
+- [x] **Step 4: Прогнать headless и прочитать оба долга**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=15 -ExecCmds="sf.FlightLog 1, sf.ShipProfile 0, sf.Intent.X 1" -log
@@ -197,7 +197,7 @@ void ASFTestShip::BeginPlay()
 - строка `Physics: async block mode ...` — записать значение в результаты;
 - в первой же полётной строке после начала разгона `commanded` больше, чем `spooled`. При `ResponseTimeSeconds` 0.05 и шаге 1/60 разрыв держится три-четыре кадра, поэтому в секундной строке он виден только если попасть в момент старта. **Если разрыва не видно — это не доказательство, что раскрутки нет.** Поставить в `DA_TestShip` одному двигателю `ResponseTimeSeconds` = 2.0, прогнать снова: разрыв обязан держаться секунды. Вернуть 0.05.
 
-- [ ] **Step 5: Записать два оставшихся ручных долга**
+- [x] **Step 5: Записать два оставшихся ручных долга**
 
 Эти два нельзя проверить ключом запуска: оба требуют менять состояние посреди прогона.
 
@@ -215,7 +215,7 @@ void ASFTestShip::BeginPlay()
   полётной строке.
 ```
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git add Source/StarForge/Public/Ship/SFTestShip.h Source/StarForge/Private/Ship/SFTestShip.cpp docs/superpowers/notes/2026-09-08-checkpoint-1-rerun-results.md
@@ -259,7 +259,7 @@ MSG
 
 **Почему кресло задаётся в метрах.** Как и всё в данных корабля: `StarForgeCore` в СИ, и сантиметры здесь расползлись бы по вызывающим. `GetSeatLocationCm` конвертирует один раз, на границе.
 
-- [ ] **Step 1: Написать интерфейс**
+- [x] **Step 1: Написать интерфейс**
 
 `Source/StarForge/Public/Ship/SFStationOperator.h`:
 
@@ -307,7 +307,7 @@ public:
 };
 ```
 
-- [ ] **Step 2: Написать общий пост**
+- [x] **Step 2: Написать общий пост**
 
 `Source/StarForge/Public/Ship/SFShipStationComponent.h`:
 
@@ -463,7 +463,7 @@ bool USFShipStationComponent::IsWithinReach(const FVector& OccupantWorldLocation
 }
 ```
 
-- [ ] **Step 3: Собрать**
+- [x] **Step 3: Собрать**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -471,7 +471,7 @@ bool USFShipStationComponent::IsWithinReach(const FVector& OccupantWorldLocation
 
 Новые `UCLASS` и `UINTERFACE` — Live Coding не поможет, редактор перезапускать. Головных тестов у этой задачи нет: она вся из `UObject`-ов, а поведение проверяется задачей 3. Тестов не выдумывать.
 
-- [ ] **Step 4: Коммит**
+- [x] **Step 4: Коммит**
 
 ```bash
 git add Source/StarForge/Public/Ship/SFStationOperator.h Source/StarForge/Public/Ship/SFShipStationComponent.h Source/StarForge/Private/Ship/SFShipStationComponent.cpp
@@ -516,7 +516,7 @@ MSG
 
 **Почему консольный оператор, а не «если постом никто не занят, читать переменные».** Второй путь — скрытая ветка, которая ведёт корабль, не будучи никем. Пост, у которого есть оператор, всегда отвечает на вопрос «кто ведёт»: в журнале и в HUD видно имя. Ветка «никто, но летим» такого ответа не даёт.
 
-- [ ] **Step 1: Написать консольного оператора**
+- [x] **Step 1: Написать консольного оператора**
 
 `Source/StarForge/Public/Ship/SFConsoleOperatorComponent.h`:
 
@@ -612,7 +612,7 @@ bool USFConsoleOperatorComponent::ProvideFlightIntent(StarForge::FFlightIntent& 
 }
 ```
 
-- [ ] **Step 2: Написать пост пилота**
+- [x] **Step 2: Написать пост пилота**
 
 `Source/StarForge/Public/Ship/SFPilotStationComponent.h`:
 
@@ -734,7 +734,7 @@ void USFPilotStationComponent::TickComponent(
 }
 ```
 
-- [ ] **Step 3: Убрать контур из корабля и повесить пост**
+- [x] **Step 3: Убрать контур из корабля и повесить пост**
 
 В `SFTestShip.h` удалить объявление `void TickFlight(double DeltaSeconds);` и поле `StarForge::FFlightIntent LastIntent;` вместе с методом `GetLastIntent()`. Добавить:
 
@@ -793,7 +793,7 @@ void USFPilotStationComponent::TickComponent(
 
 то есть журнал пишется в обоих режимах, а не только в полётном: в скриптовом он покажет, что пост никем не командует, и это полезно.
 
-- [ ] **Step 4: Собрать и прогнать headless**
+- [x] **Step 4: Собрать и прогнать headless**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -805,7 +805,7 @@ void USFPilotStationComponent::TickComponent(
 
 Ожидается в журнале: строка `Station 'pilot' taken by console.` и разгон до **200.0 м/с** — те же числа, что до переезда контура. **Если скорость изменилась, переезд что-то сломал**: контур обязан считать ровно то же самое, только из другого места.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add Source/StarForge/Public/Ship/SFPilotStationComponent.h Source/StarForge/Private/Ship/SFPilotStationComponent.cpp Source/StarForge/Public/Ship/SFConsoleOperatorComponent.h Source/StarForge/Private/Ship/SFConsoleOperatorComponent.cpp Source/StarForge/Public/Ship/SFTestShip.h Source/StarForge/Private/Ship/SFTestShip.cpp
@@ -847,7 +847,7 @@ MSG
 
 **Почему посадка — это перемещение, а не привязка.** Кресло задаётся позицией в системе отсчёта корабля, и перенос уже держит эту позицию с точностью 0.000 см за 90 секунд. Привязка к трансформу была бы вторым механизмом удержания рядом с первым — то есть вторым местом, где может разъехаться, и двумя разными ответами на вопрос «почему пассажир там, где он есть».
 
-- [ ] **Step 1: Объявить персонажа оператором**
+- [x] **Step 1: Объявить персонажа оператором**
 
 В `SFCharacter.h` включить `#include "Ship/SFStationOperator.h"`, forward-declare `class USFShipStationComponent;` и изменить объявление класса:
 
@@ -878,7 +878,7 @@ class STARFORGE_API ASFCharacter : public ACharacter, public ISFStationOperator
 	bool bInteractWasDown = false;
 ```
 
-- [ ] **Step 2: Реализовать посадку**
+- [x] **Step 2: Реализовать посадку**
 
 В `SFCharacter.cpp` включения:
 
@@ -993,7 +993,7 @@ void ASFCharacter::ToggleSeat()
 
 Объявить `void PollInteract();` в private рядом с `PollLookInput`.
 
-- [ ] **Step 3: Отдать намерение и не ходить сидя**
+- [x] **Step 3: Отдать намерение и не ходить сидя**
 
 Реализовать в `SFCharacter.cpp`:
 
@@ -1059,7 +1059,7 @@ bool ASFCharacter::ProvideFlightIntent(StarForge::FFlightIntent& Out)
 
 иначе сидящий пилот будет одновременно вести корабль и пытаться идти.
 
-- [ ] **Step 4: Собрать и проверить прогоном**
+- [x] **Step 4: Собрать и проверить прогоном**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -1078,7 +1078,7 @@ bool ASFCharacter::ProvideFlightIntent(StarForge::FFlightIntent& Out)
 
 **Отрицательный контроль:** отойти к стене и нажать **E**. Ожидается `No free station within reach.` — радиус работает, а не «садится откуда угодно».
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add Source/StarForge/Public/Player/SFCharacter.h Source/StarForge/Private/Player/SFCharacter.cpp
@@ -1121,7 +1121,7 @@ MSG
 
 **Почему мёртвая зона пересчитывает остаток, а не просто обнуляет.** Если за порогом отдавать сырое значение, ручка прыгает с нуля сразу на величину порога — на геймпаде это заметно, на ручке с длинным ходом это ступенька в самом чувствительном месте. Пересчёт даёт непрерывность: чуть за порогом — чуть больше нуля.
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Дописать в конец `Source/StarForgeCore/Private/Tests/UnitsTest.cpp`:
 
@@ -1165,7 +1165,7 @@ bool FUnitsDeadZoneTest::RunTest(const FString& Parameters)
 }
 ```
 
-- [ ] **Step 2: Убедиться, что не собирается**
+- [x] **Step 2: Убедиться, что не собирается**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -1173,7 +1173,7 @@ bool FUnitsDeadZoneTest::RunTest(const FString& Parameters)
 
 Ожидается ошибка о том, что `ApplyDeadZone` не является членом `StarForge::Units`.
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 В `Units.h`, внутри `namespace StarForge::Units`:
 
@@ -1211,7 +1211,7 @@ bool FUnitsDeadZoneTest::RunTest(const FString& Parameters)
 	}
 ```
 
-- [ ] **Step 4: Прогнать тесты**
+- [x] **Step 4: Прогнать тесты**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -1223,7 +1223,7 @@ bool FUnitsDeadZoneTest::RunTest(const FString& Parameters)
 
 Ожидается **37** пройденных тестов: 36 прежних плюс один новый.
 
-- [ ] **Step 5: Читать оси аналогово**
+- [x] **Step 5: Читать оси аналогово**
 
 В `ASFCharacter::ProvideFlightIntent` заменить чтение линейных и угловых осей на сумму цифровых клавиш и аналоговых осей:
 
@@ -1270,13 +1270,13 @@ bool FUnitsDeadZoneTest::RunTest(const FString& Parameters)
 
 **Клавиши и стик складываются, а не заменяют друг друга.** Так клавиатура и геймпад работают одновременно, и не нужно решать, кто «главный», — а зажим не даёт сумме выйти за предел.
 
-- [ ] **Step 6: Проверить руками**
+- [x] **Step 6: Проверить руками**
 
 Если есть геймпад — сесть в кресло и повести левым стиком. Ожидается **плавный** отклик: половина хода даёт половину скорости, и корабль не ползёт при отпущенном стике.
 
 Если геймпада нет, проверяется только головным тестом, и это надо записать: аналоговый путь скомпилирован, но не наблюдался.
 
-- [ ] **Step 7: Коммит**
+- [x] **Step 7: Коммит**
 
 ```bash
 git add Source/StarForgeCore/Public/Units.h Source/StarForgeCore/Private/Units.cpp Source/StarForgeCore/Private/Tests/UnitsTest.cpp Source/StarForge/Public/Player/SFCharacter.h Source/StarForge/Private/Player/SFCharacter.cpp
