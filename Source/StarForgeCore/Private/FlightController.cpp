@@ -18,7 +18,8 @@ namespace StarForge
 		const FFlightIntent& Intent,
 		const FRigidBodyState& State,
 		const FShipMassProperties& Mass,
-		const FFlightLimits& Limits)
+		const FFlightLimits& Limits,
+		const FWrench& ArrayCapability)
 	{
 		const FVector LinearAxis = ClampAxes(Intent.LinearAxis);
 		const FVector AngularAxis = ClampAxes(Intent.AngularAxis);
@@ -33,21 +34,22 @@ namespace StarForge
 			const FVector TargetVelocity = LinearAxis * Limits.MaxSpeed;
 			Demand.Force = (TargetVelocity - State.LinearVelocity) * Mass.Mass * Limits.LinearGain;
 
+			// Componentwise: each axis has its own ceiling.
 			const FVector TargetAngular = AngularAxis * Limits.MaxAngularSpeed;
 			const FVector AngularError = TargetAngular - State.AngularVelocity;
 			Demand.Torque = Mass.TransformByInertia(AngularError * Limits.AngularGain);
 		}
 		else
 		{
-			// The stick asks for thrust directly. Nothing holds a speed, so the ship
-			// keeps accelerating and keeps whatever spin it is given -- the same pipe
-			// below, a different reading of the same numbers above.
-			Demand.Force = LinearAxis * Mass.Mass * Limits.MaxSpeed * Limits.LinearGain;
-			Demand.Torque = Mass.TransformByInertia(
-				AngularAxis * Limits.MaxAngularSpeed * Limits.AngularGain);
+			// The stick asks for thrust directly, as a fraction of what this array can
+			// actually deliver. Scaling by anything else -- mass times a speed limit,
+			// say -- leaves the thrusters saturated across most of the stick travel,
+			// which a gamepad hides and a physical stick does not.
+			Demand.Force = LinearAxis * ArrayCapability.Force;
+			Demand.Torque = AngularAxis * ArrayCapability.Torque;
 		}
 
-		// Euler's gyroscopic term. Present in both modes: it is a property of a
+		// Euler gyroscopic term. Present in both modes: it is a property of a
 		// spinning rigid body, not of the assist.
 		const FVector AngularMomentum = Mass.TransformByInertia(State.AngularVelocity);
 		Demand.Torque += FVector::CrossProduct(State.AngularVelocity, AngularMomentum);

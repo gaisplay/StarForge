@@ -4,9 +4,14 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerInput.h"
 #include "Player/SFShipboardMovementComponent.h"
 #include "EngineUtils.h"
 #include "Ship/SFShipFrameComponent.h"
+#include "Ship/SFShipStationComponent.h"
+#include "ShipFrameMath.h"
+#include "StarForgeLog.h"
+#include "Units.h"
 
 ASFCharacter::ASFCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<USFShipboardMovementComponent>(
@@ -82,16 +87,48 @@ void ASFCharacter::BeginPlay()
 	}
 }
 
+void ASFCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// A station holds its operator by pointer, and a destroyed character never lets go
+	// of one on its own: the post would read as occupied by a pawn that no longer
+	// exists, refuse every later operator by that name, and fly nothing -- an
+	// unoccupied seat that reports itself taken. Standing up on the way out costs one
+	// branch and removes the whole class of it.
+	//
+	// Only the post this character actually holds, though. Nothing today can seat him
+	// on a station held by somebody else, but Vacate does not ask who it is throwing
+	// out, so the invariant is spelled here rather than left to stay true by luck.
+	// The pointer is dropped either way: a seat we do not hold is not one to keep a
+	// claim on.
+	if (SeatedStation)
+	{
+		if (SeatedStation->GetOperator().GetObject() == this)
+		{
+			SeatedStation->Vacate();
+		}
+
+		SeatedStation = nullptr;
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void ASFCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
 	PollMovementInput();
 	PollLookInput(DeltaSeconds);
+	PollInteract();
 }
 
 void ASFCharacter::PollMovementInput()
 {
+	if (IsSeated())
+	{
+		return;
+	}
+
 	const APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC)
 	{
@@ -123,6 +160,11 @@ void ASFCharacter::PollMovementInput()
 
 void ASFCharacter::PollLookInput(float DeltaSeconds)
 {
+	if (IsSeated())
+	{
+		return;
+	}
+
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC)
 	{
@@ -131,8 +173,213 @@ void ASFCharacter::PollLookInput(float DeltaSeconds)
 
 	const double Step = LookRateDegPerSec * DeltaSeconds;
 
-	if (PC->IsInputKeyDown(EKeys::Left))  { PC->AddYawInput(-Step); }
-	if (PC->IsInputKeyDown(EKeys::Right)) { PC->AddYawInput(Step); }
-	if (PC->IsInputKeyDown(EKeys::Up))    { PC->AddPitchInput(-Step); }
-	if (PC->IsInputKeyDown(EKeys::Down))  { PC->AddPitchInput(Step); }
+	double Yaw = 0.0;
+	double Pitch = 0.0;
+
+	if (PC->IsInputKeyDown(EKeys::Left))  { Yaw -= Step; }
+	if (PC->IsInputKeyDown(EKeys::Right)) { Yaw += Step; }
+	if (PC->IsInputKeyDown(EKeys::Up))    { Pitch += Step; }
+	if (PC->IsInputKeyDown(EKeys::Down))  { Pitch -= Step; }
+
+	if (FMath::IsNearlyZero(Yaw) && FMath::IsNearlyZero(Pitch))
+	{
+		return;
+	}
+
+	// Deliberately not AddYawInput/AddPitchInput. Those feed RotationInput, which
+	// UpdateRotation adds to the world Euler components of the control rotation --
+	// world pitch about world Y, world yaw about world Z. The view is carried in the
+	// ship's frame, so once the ship is rolled those axes are not the occupant's
+	// up-down and left-right at all, and on a deck rolling at 180 deg/s the axis that
+	// "look up" moves along precesses continuously: holding the key swept the view
+	// round in a circle instead of raising it.
+	//
+	// The capsule is rotated to the ship's every tick by the carry, so its up vector
+	// is the deck normal and is the axis to turn about.
+	const FQuat NewView = StarForge::ShipFrame::ApplyLookStep(
+		PC->GetControlRotation().Quaternion(), GetActorUpVector(), Yaw, Pitch);
+
+	PC->SetControlRotation(NewView.Rotator());
+}
+
+void ASFCharacter::PollInteract()
+{
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return;
+	}
+
+	// On the edge, not while held: a held key would seat and unseat him every frame,
+	// and the log would fill with a station changing hands sixty times a second.
+	const bool bDown = PC->IsInputKeyDown(EKeys::E);
+	if (bDown && !bInteractWasDown)
+	{
+		ToggleSeat();
+	}
+	bInteractWasDown = bDown;
+}
+
+void ASFCharacter::ToggleSeat()
+{
+	if (SeatedStation)
+	{
+		SeatedStation->Vacate();
+		SeatedStation = nullptr;
+
+		// Walking resumes exactly where he was. He is already in the ship's frame and
+		// the carry has been holding him all along; standing up changes what reads his
+		// input, not where he is. Nothing to restore on the movement component either:
+		// sitting never took him out of MOVE_Walking, so he never left it.
+		return;
+	}
+
+	USFShipFrameComponent* Frame = GetShipboardMovement() ? GetShipboardMovement()->GetShipFrame() : nullptr;
+	if (!Frame || !Frame->GetOwner())
+	{
+		return;
+	}
+
+	// The nearest station within reach, so two seats side by side do not fight.
+	USFShipStationComponent* Best = nullptr;
+	double BestDistanceSq = TNumericLimits<double>::Max();
+
+	// The winner's seat position is kept from the comparison rather than worked out
+	// again after the seat is taken: one expression, so the place he is measured from
+	// and the place he is moved to cannot drift apart under a later edit.
+	FVector BestSeatWorld = FVector::ZeroVector;
+
+	TArray<USFShipStationComponent*> Stations;
+	Frame->GetOwner()->GetComponents<USFShipStationComponent>(Stations);
+
+	for (USFShipStationComponent* Station : Stations)
+	{
+		if (Station->IsOccupied() || !Station->IsWithinReach(GetActorLocation()))
+		{
+			continue;
+		}
+
+		const FVector SeatWorld =
+			Frame->GetOwner()->GetActorTransform().TransformPosition(Station->GetSeatLocationCm());
+		const double DistanceSq = FVector::DistSquared(SeatWorld, GetActorLocation());
+
+		if (DistanceSq < BestDistanceSq)
+		{
+			BestDistanceSq = DistanceSq;
+			BestSeatWorld = SeatWorld;
+			Best = Station;
+		}
+	}
+
+	if (!Best)
+	{
+		UE_LOG(LogStarForge, Display, TEXT("No free station within reach."));
+		return;
+	}
+
+	if (!Best->TryOccupy(this))
+	{
+		return;
+	}
+
+	SeatedStation = Best;
+
+	// Moved into the seat once; from here the carry holds him there, the same carry
+	// that held him standing. A second holding mechanism beside a proven one is a
+	// second place for the two to disagree.
+	SetActorLocation(BestSeatWorld, /*bSweep=*/false, nullptr, ETeleportType::TeleportPhysics);
+
+	// Residual velocity is killed, but the movement mode is deliberately left alone.
+	// It has to stay MOVE_Walking: OnMovementModeChanged clears the movement base for
+	// every non-walking mode, and with no base MaybeUpdateBasedMovement never calls
+	// UpdateBasedMovement -- which is the one function this project overrides, and the
+	// only thing that carries an occupant with the ship. MOVE_None is worse still,
+	// since PerformMovement returns before it even reaches that call. Either way the
+	// carry stops: a seated pilot would be left at a fixed world location while the
+	// ship departs at up to 400 m/s, his ship-frame view no longer carried, and
+	// DetectCarryGap would bank the whole absence as skipped carries when he stood.
+	// What stops him walking is IsSeated(), checked at the top of PollMovementInput --
+	// not the movement mode.
+	if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
+	{
+		Movement->StopMovementImmediately();
+	}
+}
+
+bool ASFCharacter::ProvideFlightIntent(StarForge::FFlightIntent& Out)
+{
+	// Only while seated. Standing at the console and pressing W is walking, not
+	// flying, and an operator who has left his post must say he is not flying rather
+	// than hand back a centred stick -- with assist on that is an order to stop.
+	if (!IsSeated())
+	{
+		return false;
+	}
+
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return false;
+	}
+
+	double Forward = 0.0;
+	double Right = 0.0;
+	double Up = 0.0;
+
+	if (PC->IsInputKeyDown(EKeys::W)) { Forward += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::S)) { Forward -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::D)) { Right += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::A)) { Right -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::SpaceBar)) { Up += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::LeftControl)) { Up -= 1.0; }
+
+	double Roll = 0.0;
+	double Pitch = 0.0;
+	double Yaw = 0.0;
+
+	if (PC->IsInputKeyDown(EKeys::Q)) { Roll -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::R))  { Roll += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::Up)) { Pitch += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::Down)) { Pitch -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::Left)) { Yaw -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::Right)) { Yaw += 1.0; }
+
+	const UPlayerInput* Input = PC->PlayerInput;
+
+	auto Axis = [Input](const FKey& Key) -> double
+	{
+		// Raw, deliberately. GetKeyValue returns the value *after* the engine's own
+		// per-axis dead zone and rescale, and BaseInput.ini sets that to 0.25 for every
+		// gamepad stick with nothing in our DefaultInput.ini overriding it. So the engine
+		// would remove and rescale the travel before our tested dead zone ever saw the
+		// value: the effective centre would be 0.25 + 0.75*StickDeadZone, and half stick
+		// would arrive as a quarter of the command — exactly the linearity this axis
+		// exists to provide. Setting StickDeadZone to zero would not restore it either,
+		// because the engine's transform is still there underneath. Reading raw makes the
+		// dead zone we can test the only one in the path.
+		return Input ? static_cast<double>(Input->GetRawKeyValue(Key)) : 0.0;
+	};
+
+	const double StickX = StarForge::Units::ApplyDeadZone(Axis(EKeys::Gamepad_LeftY), StickDeadZone);
+	const double StickY = StarForge::Units::ApplyDeadZone(Axis(EKeys::Gamepad_LeftX), StickDeadZone);
+	const double StickPitch = StarForge::Units::ApplyDeadZone(Axis(EKeys::Gamepad_RightY), StickDeadZone);
+	const double StickYaw = StarForge::Units::ApplyDeadZone(Axis(EKeys::Gamepad_RightX), StickDeadZone);
+
+	// Keys and stick add rather than replace each other, so a keyboard and a pad work
+	// at once and nobody has to decide which one is in charge; the clamp is what keeps
+	// the sum inside the range the flight loop is entitled to assume.
+	Out.LinearAxis = FVector(
+		FMath::Clamp(Forward + StickX, -1.0, 1.0),
+		FMath::Clamp(Right + StickY, -1.0, 1.0),
+		FMath::Clamp(Up, -1.0, 1.0));
+
+	// (X roll, Y pitch, Z yaw), the same order everything else uses.
+	Out.AngularAxis = FVector(
+		FMath::Clamp(Roll, -1.0, 1.0),
+		FMath::Clamp(Pitch + StickPitch, -1.0, 1.0),
+		FMath::Clamp(Yaw + StickYaw, -1.0, 1.0));
+
+	Out.bFlightAssistEnabled = true;
+
+	return true;
 }

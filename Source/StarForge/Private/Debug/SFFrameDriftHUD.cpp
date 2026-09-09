@@ -3,10 +3,13 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
+#include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTestShip.h"
+#include "Ship/SFThrusterArrayComponent.h"
 #include "ShipFrameMath.h"
 
 namespace
@@ -25,11 +28,15 @@ namespace
 	 * against it. A dark panel behind the text keeps it legible whatever the scene
 	 * does. Sized generously: a panel slightly too large costs nothing, a line
 	 * falling off the bottom of a too-small one is the same defect all over again.
+	 *
+	 * Raised to 640 when the flight block was added: those lines pushed the readout
+	 * past the old 480 and the last of them fell off the panel, which is the exact
+	 * illegibility the panel was introduced to fix.
 	 */
 	constexpr float PanelX = 20.0f;
 	constexpr float PanelY = 36.0f;
 	constexpr float PanelWidth = 760.0f;
-	constexpr float PanelHeight = 480.0f;
+	constexpr float PanelHeight = 640.0f;
 }
 
 void ASFFrameDriftHUD::DrawLine(const FString& Text, double& Y, const FLinearColor& Color)
@@ -228,4 +235,158 @@ void ASFFrameDriftHUD::DrawHUD()
 			Y,
 			FLinearColor::Red);
 	}
+
+	// The flight numbers share this readout rather than forming a second HUD: the
+	// drift figures matter during flight for the same reasons they mattered standing
+	// still, and two HUDs cannot both be on screen at once.
+	DrawLine(TEXT(""), Y);
+	DrawFlightBlock(Y);
+}
+
+void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
+{
+	const ASFTestShip* Ship = Cast<ASFTestShip>(
+		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+
+	if (!Ship || !Ship->GetThrusters())
+	{
+		DrawLine(TEXT("flight: no ship with a thruster array in the level"), Y, FLinearColor::Red);
+		return;
+	}
+
+	const USFThrusterArrayComponent* Array = Ship->GetThrusters();
+
+	// Said before anything else. An empty flight block looks identical whether the
+	// ship is idle or the array never built, and only this line separates them.
+	if (!Array->IsReady())
+	{
+		DrawLine(TEXT("flight: thruster array NOT built -- ship cannot fly"), Y, FLinearColor::Red);
+		return;
+	}
+
+	// A missing variable used to be reported as its default, so a build without
+	// sf.ShipProfile printed "scripted profile (sf.ShipProfile 1)" -- a value nobody
+	// had read, in the confident shape of one that had been. It is said as unknown
+	// instead, in red, because not knowing which mode the ship is in makes every
+	// figure below it unattributable to a mode.
+	const IConsoleVariable* Profile =
+		IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"));
+
+	if (!Profile)
+	{
+		DrawLine(TEXT("flight mode: UNKNOWN -- sf.ShipProfile not found"), Y, FLinearColor::Red);
+	}
+	else
+	{
+		const bool bProfileOn = Profile->GetInt() != 0;
+		DrawLine(FString::Printf(TEXT("flight mode: %s"),
+			bProfileOn ? TEXT("scripted profile (sf.ShipProfile 1)") : TEXT("thrust (sf.ShipProfile 0)")),
+			Y, bProfileOn ? FLinearColor::Yellow : FLinearColor::Green);
+	}
+
+	// The angular triples carry their axis order on screen. This readout is the only
+	// place a roll/pitch swap becomes visible, and three bare numbers invite reading the
+	// wrong component -- either missing a real swap or inventing one that is not there.
+	//
+	// The intent comes from the pilot station now, because the ship no longer runs the
+	// control loop and no longer knows what was asked of it. A missing station is said
+	// in red rather than skipped, for the same reason the "array NOT built" line above
+	// is: a readout that goes quiet when the thing it measures disappears is
+	// indistinguishable from one reporting a ship at rest.
+	const USFPilotStationComponent* Pilot = Ship->GetPilotStation();
+
+	if (!Pilot)
+	{
+		DrawLine(TEXT("intent  -- ship has no pilot station, nothing is flying it"), Y, FLinearColor::Red);
+	}
+	else
+	{
+		// Who is flying comes first, and an unoccupied post says so in yellow. A stick
+		// position printed without a name beside it is the same defect as a drift of
+		// zero printed without a measured time: it reads calm whether or not anything
+		// is happening.
+		const StarForge::FFlightIntent Intent = Pilot->GetLastIntent();
+		const bool bOccupied = Pilot->IsOccupied();
+		const bool bFlying = Pilot->IsOperatorFlying();
+
+		// Four states, four colours, and the first of them outranks the rest: a station
+		// that cannot see sf.ShipProfile does not know whether the rig is flying itself,
+		// so whatever else this line would have said about it is said by an instrument
+		// that is admittedly broken. Red, because it is the only one of the four that
+		// is a defect rather than a state of the ship.
+		//
+		// The other three: an occupied post that is declining leaves a zeroed intent
+		// behind, which is the same reading a centred stick leaves on a ship at rest;
+		// printed green with no qualifier the two are indistinguishable, and the one
+		// that means "the loop is not running" is the one worth seeing. Orange, so it is
+		// neither the green of a post that is flying nor the yellow of one nobody is at.
+		const FLinearColor FlownByColour = Pilot->IsScriptedProfileStateUnknown()
+			? FLinearColor::Red
+			: (!bOccupied
+				? FLinearColor::Yellow
+				: (bFlying ? FLinearColor::Green : FLinearColor(1.0f, 0.45f, 0.0f)));
+
+		DrawLine(FString::Printf(TEXT("flown by %s%s"),
+			*Pilot->GetOperatorDisplayName(),
+			(bOccupied && !bFlying) ? TEXT(" (standing down)") : TEXT("")),
+			Y, FlownByColour);
+
+		DrawLine(FString::Printf(TEXT("intent  lin (%.2f %.2f %.2f)  ang (roll pitch yaw) (%.2f %.2f %.2f)  assist %s"),
+			Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,
+			Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,
+			Intent.bFlightAssistEnabled ? TEXT("on") : TEXT("off")), Y);
+	}
+
+	const StarForge::FRigidBodyState State = Array->ReadState();
+	DrawLine(FString::Printf(TEXT("speed   %.1f m/s   angular (roll pitch yaw) (%.1f %.1f %.1f) deg/s"),
+		State.LinearVelocity.Size(),
+		FMath::RadiansToDegrees(State.AngularVelocity.X),
+		FMath::RadiansToDegrees(State.AngularVelocity.Y),
+		FMath::RadiansToDegrees(State.AngularVelocity.Z)), Y);
+
+	const StarForge::FWrench Demand = Array->GetLastDemand();
+	const StarForge::FWrench Achieved = Array->GetLastAchieved();
+
+	DrawLine(FString::Printf(TEXT("force   want (%.0f %.0f %.0f)  got (%.0f %.0f %.0f) N"),
+		Demand.Force.X, Demand.Force.Y, Demand.Force.Z,
+		Achieved.Force.X, Achieved.Force.Y, Achieved.Force.Z), Y);
+
+	DrawLine(FString::Printf(TEXT("torque  want (%.0f %.0f %.0f)  got (%.0f %.0f %.0f) Nm"),
+		Demand.Torque.X, Demand.Torque.Y, Demand.Torque.Z,
+		Achieved.Torque.X, Achieved.Torque.Y, Achieved.Torque.Z), Y);
+
+	// Saturation is the usual reason a ship will not do what it is told, and it is
+	// invisible without this: the demand looks fine and the ship simply lags.
+	//
+	// Counted over the commanded throttles, not the spooled ones. Saturation is where
+	// the solver's clamp lands, and the spooled value is a first-order lag toward it
+	// that only crosses this threshold after some seven response times -- so reading
+	// the spooled array would leave this line calm through the whole onset of a launch,
+	// which is exactly the moment it exists to catch. An instrument that reads quiet
+	// while the thing it measures is pinned is the drift-of-zero defect again.
+	int32 Commanded = 0;
+	for (double Throttle : Array->GetTargetThrottles())
+	{
+		if (Throttle > 0.999)
+		{
+			++Commanded;
+		}
+	}
+
+	// The spooled count alongside it is not redundant: the gap between the two is the
+	// spool-up itself, and seeing it move is how the response time from spec 5 is
+	// confirmed to be wired in at all.
+	int32 Spooled = 0;
+	for (double Throttle : Array->GetLastThrottles())
+	{
+		if (Throttle > 0.999)
+		{
+			++Spooled;
+		}
+	}
+
+	const int32 Count = Array->GetTargetThrottles().Num();
+	DrawLine(FString::Printf(TEXT("throttles  commanded %d of %d wide open   spooled %d%s"),
+		Commanded, Count, Spooled, Commanded > 0 ? TEXT("  -- SATURATED") : TEXT("")),
+		Y, Commanded > 0 ? FLinearColor::Yellow : FLinearColor::White);
 }

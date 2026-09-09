@@ -127,6 +127,20 @@ private:
 	 */
 	void DetectCarryGap();
 
+	/**
+	 * Diagnostic only, behind sf.DriftDebug. Reports how many times the carry runs
+	 * per engine frame, what the occupant is standing on, and where he is in the
+	 * ship's coordinates.
+	 *
+	 * It exists because two questions cannot be answered from the drift summary
+	 * alone: the measured-time clock advances once per call, so a call that runs
+	 * twice a frame makes it run at twice real time and every duration on the
+	 * results form is half what it claims; and a negative control that used to fall
+	 * silent now goes on measuring, which means something is still calling this
+	 * after the occupant has left the deck.
+	 */
+	void LogDiagnostics(float DeltaSeconds);
+
 	TWeakObjectPtr<USFShipFrameComponent> ShipFrame;
 
 	/** This occupant's own view of where the ship was last tick. */
@@ -144,6 +158,23 @@ private:
 
 	/** Seconds since the player last commanded movement. */
 	double SecondsSinceCommandedInput = 0.0;
+
+	/**
+	 * Engine frame the drift measurement last ran on.
+	 *
+	 * The engine calls UpdateBasedMovement twice per frame, so without this the
+	 * clock accumulates two frame deltas per frame and runs at exactly twice real
+	 * time -- which made every duration this instrument has ever reported, including
+	 * the one its own validity gate is read against, double what actually elapsed.
+	 */
+	uint64 LastMeasuredFrame = TNumericLimits<uint64>::Max();
+
+	/** Diagnostic state for LogDiagnostics; meaningless unless sf.DriftDebug is on. */
+	uint64 DebugLastFrame = 0;
+	int32 DebugCallsThisFrame = 0;
+	int32 DebugCallsPerFramePeak = 0;
+	double DebugSecondsSinceLog = 0.0;
+	FString DebugLastState;
 
 	/** Length of the current unbroken settled interval. */
 	double MeasuredSeconds = 0.0;

@@ -37,3 +37,51 @@ namespace StarForge::ShipFrame
 		return FeltAccelMetersPerSecSq.Size() > GravPlateLimitMetersPerSecSq;
 	}
 }
+
+namespace StarForge::ShipFrame
+{
+	FQuat ApplyLookStep(
+		const FQuat& CurrentView,
+		const FVector& DeckUp,
+		double YawDegrees,
+		double PitchDegrees,
+		double MaxPitchDegrees)
+	{
+		const FVector Up = DeckUp.GetSafeNormal();
+		if (Up.IsNearlyZero())
+		{
+			// No deck to stand on means no axes to turn about; leaving the view alone
+			// is the only honest answer.
+			return CurrentView;
+		}
+
+		// Yaw about the deck normal, in world space, so turning on the spot follows the
+		// floor rather than the world's vertical.
+		FQuat View = FQuat(Up, FMath::DegreesToRadians(YawDegrees)) * CurrentView;
+
+		// Pitch about the view's own right axis, recomputed after the yaw so the two
+		// halves of one step do not fight each other. It is projected back into the
+		// deck plane first: that is what stops a pitch step from leaking roll, and it
+		// re-squares the axis every frame instead of letting error accumulate.
+		FVector Right = FVector::VectorPlaneProject(View.GetRightVector(), Up).GetSafeNormal();
+		if (Right.IsNearlyZero())
+		{
+			Right = View.GetRightVector();
+		}
+
+		// How far above the deck plane the view already points, and how far it may go.
+		// Clamping the destination rather than the step means holding the key parks the
+		// view at the zenith instead of walking it over the top.
+		const double CurrentPitch = FMath::RadiansToDegrees(
+			FMath::Asin(FMath::Clamp(FVector::DotProduct(View.GetForwardVector(), Up), -1.0, 1.0)));
+
+		const double AllowedPitch =
+			FMath::Clamp(CurrentPitch + PitchDegrees, -MaxPitchDegrees, MaxPitchDegrees) - CurrentPitch;
+
+		// Negative because a positive rotation about the right axis pitches the nose
+		// down, while a positive PitchDegrees means looking up.
+		View = FQuat(Right, -FMath::DegreesToRadians(AllowedPitch)) * View;
+
+		return View.GetNormalized();
+	}
+}

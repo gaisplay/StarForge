@@ -25,6 +25,13 @@ static TAutoConsoleVariable<int32> CVarShipGravity(
 	TEXT("Set to 0 to run the rig as a negative control and confirm the drift gauge can report a failure at all."),
 	ECVF_Default);
 
+static TAutoConsoleVariable<int32> CVarDriftDebug(
+	TEXT("sf.DriftDebug"),
+	0,
+	TEXT("1: log how many times the carry runs per engine frame, the movement mode, the movement base and the ship-local position -- once a second, and immediately on any change of mode or base.\n")
+	TEXT("Diagnostic only, and off by default: during a real measurement it is noise, and the summary line already says what a good run looks like."),
+	ECVF_Default);
+
 USFShipboardMovementComponent::USFShipboardMovementComponent()
 {
 	// This flag does nothing on the frame path. CarryWithFrame applies the ship's
@@ -92,6 +99,11 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 		return;
 	}
 
+	if (CVarDriftDebug.GetValueOnGameThread() != 0)
+	{
+		LogDiagnostics(DeltaSeconds);
+	}
+
 	DetectCarryGap();
 
 	// CMC decides what is walkable by comparing a floor normal against gravity, and
@@ -111,6 +123,55 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 
 	CarryWithFrame();
 	UpdateDriftMeasurement(DeltaSeconds);
+}
+
+void USFShipboardMovementComponent::LogDiagnostics(float DeltaSeconds)
+{
+	// Calls per engine frame. UpdateDriftMeasurement adds DeltaSeconds once per
+	// call, so if this is ever above one the measured clock runs fast by exactly
+	// that factor and every duration on the results form is wrong by it.
+	const uint64 ThisFrame = GFrameCounter;
+	if (ThisFrame == DebugLastFrame)
+	{
+		++DebugCallsThisFrame;
+	}
+	else
+	{
+		DebugCallsThisFrame = 1;
+		DebugLastFrame = ThisFrame;
+	}
+	DebugCallsPerFramePeak = FMath::Max(DebugCallsPerFramePeak, DebugCallsThisFrame);
+
+	const UObject* Base = GetMovementBaseObject();
+	const FString State = FString::Printf(TEXT("%s|%s"),
+		*GetMovementName(), Base ? *Base->GetName() : TEXT("none"));
+
+	DebugSecondsSinceLog += DeltaSeconds;
+
+	// One line a second, and one the instant the mode or the base changes. The
+	// transitions are where the answer is, and a once-a-second sample steps straight
+	// over the quarter second in which the occupant comes off a rolling deck.
+	const bool bStateChanged = State != DebugLastState;
+	if (!bStateChanged && DebugSecondsSinceLog < 1.0)
+	{
+		return;
+	}
+
+	const FVector Local = ShipFrame.IsValid() ? GetLocalLocation() : FVector::ZeroVector;
+
+	UE_LOG(LogStarForge, Log,
+		TEXT("Drift debug%s: calls/frame %d peak %d, dt %.4f, mode %s, base %s, ")
+		TEXT("ship-local (%.0f %.0f %.0f) dist %.0f cm, settled %.1f s, measured %.1f s, ship gravity %d"),
+		bStateChanged ? TEXT(" [CHANGED]") : TEXT(""),
+		DebugCallsThisFrame, DebugCallsPerFramePeak, DeltaSeconds,
+		*GetMovementName(),
+		Base ? *Base->GetName() : TEXT("none"),
+		Local.X, Local.Y, Local.Z, Local.Size(),
+		SecondsSinceCommandedInput, MeasuredSeconds,
+		CVarShipGravity.GetValueOnGameThread());
+
+	DebugLastState = State;
+	DebugSecondsSinceLog = 0.0;
 }
 
 void USFShipboardMovementComponent::DetectCarryGap()
@@ -185,6 +246,19 @@ void USFShipboardMovementComponent::CarryWithFrame()
 
 void USFShipboardMovementComponent::UpdateDriftMeasurement(float DeltaSeconds)
 {
+	// Once a frame, whatever the engine does. UpdateBasedMovement runs twice per
+	// frame, and this function used to add DeltaSeconds on each call, so the clock
+	// ran at exactly twice real time: a reported minute was thirty seconds, and the
+	// fifty-five second validity gate opened after twenty-eight. The ship does not
+	// move between the two calls, so the second sample is identical to the first and
+	// dropping it costs nothing.
+	const uint64 ThisFrame = GFrameCounter;
+	if (ThisFrame == LastMeasuredFrame)
+	{
+		return;
+	}
+	LastMeasuredFrame = ThisFrame;
+
 	// Only commanded input counts as intent. Residual velocity must never excuse a
 	// reading: uncommanded motion is precisely what this instrument exists to catch,
 	// and gating on it let a gross failure suppress its own measurement.

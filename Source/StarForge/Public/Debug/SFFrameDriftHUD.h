@@ -19,5 +19,8 @@ public:
 private:
 	void DrawLine(const FString& Text, double& Y, const FLinearColor& Color = FLinearColor::White);
 
+	/** Flight lines: demand against achievement, throttles, saturation. */
+	void DrawFlightBlock(double& Y);
+
 	double ElapsedSeconds = 0.0;
 };
