@@ -13,6 +13,7 @@
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTargetDrone.h"
 #include "Ship/SFThrusterArrayComponent.h"
+#include "Ship/SFTurretComponent.h"
 #include "StarForgeLog.h"
 #include "Units.h"
 #include "UObject/ConstructorHelpers.h"
@@ -91,6 +92,15 @@ namespace
 	 * which sits on the pivot's X/Y column at floor height.
 	 */
 	constexpr double MarkerOffsetCm = 300.0;
+
+	/** The barrel is a one-metre cone: the engine cone is 100 cm tall, so Z scale is length in metres. */
+	constexpr double BarrelLengthCm = 100.0;
+
+	/** Cone base as a mesh scale: 0.3 x 100 cm = 30 cm across, thin enough to read as a barrel. */
+	constexpr double BarrelThicknessScale = 0.3;
+
+	/** Between the barrel's highest reach and the ceiling's inner face, in centimetres. */
+	constexpr double BarrelCeilingClearanceCm = 10.0;
 
 	/**
 	 * Mass the hull carries before a ship data asset is assigned, in kilograms.
@@ -224,6 +234,48 @@ ASFTestShip::ASFTestShip()
 		FVector(0.0, MarkerOffsetCm, 0.0), MarkerUniformScale);
 	AddOrientationMarker(TEXT("MarkerCylinder"), CylinderMesh.Object,
 		FVector(-MarkerOffsetCm, 0.0, 0.0), MarkerUniformScale);
+
+	// The mount hangs from the ceiling inside the cabin, which is not where a turret
+	// goes. It is where a person can see it: the cabin has no windows, so a barrel on
+	// the roof could be checked only from the log, and the one thing a log cannot check
+	// is whether the picture agrees with the numbers. The aim passes through the walls;
+	// the drone outside is what the numbers describe.
+	//
+	// Height: the ceiling panel's inner face is at InteriorHalfExtentCm minus half its
+	// thickness (400 - 10 = 390). A barrel of BarrelLengthCm pitched to its +60 stop
+	// rises sin 60 = 0.866 of its length above the mount, so a mount at
+	// 390 - 100 - 10 = 280 tops out at 366.6, clear by 23 cm. Derived from the same
+	// constants as the panels, so moving a wall moves the turret with it.
+	Turret = CreateDefaultSubobject<USFTurretComponent>(TEXT("Turret"));
+	Turret->SetupAttachment(Hull);
+	Turret->SetRelativeLocation(FVector(
+		0.0, 0.0,
+		InteriorHalfExtentCm - PanelThickness * CubeEdgeCm * 0.5 - BarrelLengthCm - BarrelCeilingClearanceCm));
+
+	TurretBarrel = CreateDefaultSubobject<USceneComponent>(TEXT("TurretBarrel"));
+	TurretBarrel->SetupAttachment(Turret);
+	Turret->SetBarrel(TurretBarrel);
+
+	// A cone, not a cylinder: it has a pointed end, so a sign error in yaw or pitch
+	// shows as a barrel pointing away from where the readout says. The engine cone's
+	// apex is along its own +Z; a pitch of -90 turns +Z onto +X (a +90 pitch takes +X
+	// onto +Z, and this is its inverse), so the apex is the muzzle. Offset forward by
+	// half its length so the base sits on the pivot.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> BarrelMesh(TEXT("/Engine/BasicShapes/Cone.Cone"));
+	TurretBarrelMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretBarrelMesh"));
+	TurretBarrelMesh->SetupAttachment(TurretBarrel);
+	TurretBarrelMesh->SetRelativeRotation(FRotator(-90.0, 0.0, 0.0));
+	TurretBarrelMesh->SetRelativeLocation(FVector(BarrelLengthCm * 0.5, 0.0, 0.0));
+	TurretBarrelMesh->SetRelativeScale3D(FVector(
+		BarrelThicknessScale, BarrelThicknessScale, BarrelLengthCm / CubeEdgeCm));
+	TurretBarrelMesh->SetMobility(EComponentMobility::Movable);
+
+	// Visual only. It must not be able to block the walk test or catch a sweep.
+	TurretBarrelMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	if (BarrelMesh.Succeeded())
+	{
+		TurretBarrelMesh->SetStaticMesh(BarrelMesh.Object);
+	}
 }
 
 UStaticMeshComponent* ASFTestShip::AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale)

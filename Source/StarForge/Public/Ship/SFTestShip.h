@@ -6,12 +6,14 @@
 #include "SFTestShip.generated.h"
 
 class USFShipFrameComponent;
+class USceneComponent;
 class UStaticMeshComponent;
 class UPointLightComponent;
 class UBoxComponent;
 class USFThrusterArrayComponent;
 class USFPilotStationComponent;
 class USFConsoleOperatorComponent;
+class USFTurretComponent;
 class ASFTargetDrone;
 
 /**
@@ -72,6 +74,8 @@ public:
 
 	USFPilotStationComponent* GetPilotStation() const { return PilotStation; }
 
+	USFTurretComponent* GetTurret() const { return Turret; }
+
 	/** What the gunner post's automation tracks. Spawned by BeginPlay; null if that failed. */
 	ASFTargetDrone* GetTargetDrone() const { return TargetDrone; }
 
@@ -128,6 +132,16 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFConsoleOperatorComponent> ConsoleOperator;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFTurretComponent> Turret;
+
+	/** The pivot the turret turns; the cone below is attached to it. */
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USceneComponent> TurretBarrel;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<UStaticMeshComponent> TurretBarrelMesh;
 
 	/**
 	 * Lights the interior from the room's centre so the walk test is visible at all.
