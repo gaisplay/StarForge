@@ -322,9 +322,16 @@ bool ASFCharacter::ProvideFlightIntent(StarForge::FFlightIntent& Out)
 
 	auto Axis = [Input](const FKey& Key) -> double
 	{
-		// GetKeyValue gives the analog value for an axis key and 0 or 1 for a button,
-		// so one call covers both without the caller knowing which it asked for.
-		return Input ? static_cast<double>(Input->GetKeyValue(Key)) : 0.0;
+		// Raw, deliberately. GetKeyValue returns the value *after* the engine's own
+		// per-axis dead zone and rescale, and BaseInput.ini sets that to 0.25 for every
+		// gamepad stick with nothing in our DefaultInput.ini overriding it. So the engine
+		// would remove and rescale the travel before our tested dead zone ever saw the
+		// value: the effective centre would be 0.25 + 0.75*StickDeadZone, and half stick
+		// would arrive as a quarter of the command — exactly the linearity this axis
+		// exists to provide. Setting StickDeadZone to zero would not restore it either,
+		// because the engine's transform is still there underneath. Reading raw makes the
+		// dead zone we can test the only one in the path.
+		return Input ? static_cast<double>(Input->GetRawKeyValue(Key)) : 0.0;
 	};
 
 	const double StickX = StarForge::Units::ApplyDeadZone(Axis(EKeys::Gamepad_LeftY), StickDeadZone);

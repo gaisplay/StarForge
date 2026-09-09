@@ -134,8 +134,14 @@ bool FUnitsDeadZoneTest::RunTest(const FString& Parameters)
 	// Just outside it, the output starts from zero rather than jumping to the
 	// threshold. Returning the raw value would put a step at the most sensitive part
 	// of the travel.
+	// Bounded on both sides: an implementation that swallowed the first sliver of real
+	// travel and returned a flat zero just past the threshold would pass a one-sided
+	// upper bound, and the stick would have a wider dead zone than it was told to have.
+	const double JustPast = StarForge::Units::ApplyDeadZone(0.11, 0.1);
 	TestTrue(TEXT("just past the zone the output is near zero, not near the threshold"),
-		StarForge::Units::ApplyDeadZone(0.11, 0.1) < 0.02);
+		JustPast < 0.02);
+	TestTrue(TEXT("but it is above zero, so the zone is not wider than asked"),
+		JustPast > 0.0);
 
 	// Full travel still means full travel, in both directions.
 	TestTrue(TEXT("full deflection is unchanged"),
@@ -146,6 +152,27 @@ bool FUnitsDeadZoneTest::RunTest(const FString& Parameters)
 	// Halfway between the threshold and full travel is halfway out, not 0.55.
 	TestTrue(TEXT("the remaining travel is rescaled, not offset"),
 		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(0.55, 0.1), 0.5, 1e-9));
+
+	// The same midpoint pulled the other way. Only full deflection was checked for a
+	// negative before, and full deflection is the one negative value the rescale returns
+	// correctly even if the sign is restored from the wrong quantity — a branch that
+	// rescaled the magnitude and then forgot the sign, or took Sign of the rescaled
+	// value, still gives -1 there. Mid-travel is where that bug shows.
+	TestTrue(TEXT("negative mid-travel is rescaled with its sign intact"),
+		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(-0.55, 0.1), -0.5, 1e-9));
+
+	// Hardware and mixed inputs can hand us more than full deflection; the clamp is what
+	// stops that reaching the flight loop as a command it is not entitled to assume.
+	// Without FMath::Min this returns 2.111.
+	TestTrue(TEXT("beyond full deflection is clamped to full, not passed through"),
+		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(2.0, 0.1), 1.0, 1e-12));
+
+	// A dead zone of 1.0 is what an operator types into the editor to mean "ignore this
+	// stick entirely". The Clamp to 0.99 is the only thing between that and a division by
+	// zero: without it the denominator is 0 and the axis returns NaN or infinity, which
+	// then propagates silently through the whole flight solve.
+	TestTrue(TEXT("a dead zone of one is clamped rather than dividing by zero"),
+		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(1.0, 1.0), 1.0, 1e-12));
 
 	// A zero dead zone must be a pass-through, so turning the feature off cannot
 	// itself distort the axis.
