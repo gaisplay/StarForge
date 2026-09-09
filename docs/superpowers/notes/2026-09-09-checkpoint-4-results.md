@@ -132,7 +132,7 @@
 |---|---|---|---|
 | B7 `E` сидя | `Station 'pilot' left by player.` | `flown by unoccupied`, `W` ходит, `spooled 0` | ____ |
 | B7 корабль двигался в момент вставания | — | продолжает двигаться, тормозить некому | ____ |
-| B8 `E` у маркера (3 м) | `No free station within reach.` | без изменений | ____ |
+| B8 `E` у сферы или конуса (3 м; **не у цилиндра** — до кресла канонира оттуда 1.5 м) | `No station within reach.` | без изменений | ____ |
 | B8 `E` снова в центре | `taken by player` | `flown by player` | ____ |
 | B9 `sf.ConsoleOperator 1` после вставания | `Station 'pilot' taken by console.` | `flown by console` | ____ |
 | B9 `E` в центре | `refusing player` | без изменений | ____ |

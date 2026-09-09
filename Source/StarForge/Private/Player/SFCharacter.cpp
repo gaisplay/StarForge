@@ -252,9 +252,16 @@ void ASFCharacter::ToggleSeat()
 	TArray<USFShipStationComponent*> Stations;
 	Frame->GetOwner()->GetComponents<USFShipStationComponent>(Stations);
 
+	// Occupied posts are considered, not skipped. Skipping them made TryOccupy's
+	// refusal unreachable from the only path a person uses, and once a second seat
+	// existed it did worse than stay quiet: standing at the pilot's console with the
+	// console operator in it, E walked the search past the refusal and sat him at the
+	// gunner's post a metre and a half aft. He would have been told nothing, and the
+	// checkpoint step that presses E expecting to be refused would have recorded a
+	// seat taken as a refusal given. The nearest post answers for itself.
 	for (USFShipStationComponent* Station : Stations)
 	{
-		if (Station->IsOccupied() || !Station->IsWithinReach(GetActorLocation()))
+		if (!Station->IsWithinReach(GetActorLocation()))
 		{
 			continue;
 		}
@@ -273,7 +280,7 @@ void ASFCharacter::ToggleSeat()
 
 	if (!Best)
 	{
-		UE_LOG(LogStarForge, Display, TEXT("No free station within reach."));
+		UE_LOG(LogStarForge, Display, TEXT("No station within reach."));
 		return;
 	}
 
