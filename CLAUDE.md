@@ -60,6 +60,7 @@ Console variables the rig understands:
 |---|---|---|
 | `sf.ShipGravity` | 1 | 0 leaves gravity at world down — the negative control that detaches the occupant |
 | `sf.ShipProfile` | 1 | 1 flies the scripted checkpoint manoeuvre, 0 flies on thrust from the intent |
+| `sf.ConsoleOperator` | 1 | 1 the console operator holds the pilot's seat; 0 leaves it free, which is what a person needs before E will seat him. A runtime switch, not a startup default — it can be typed at the console mid-run |
 | `sf.Intent.X/Y/Z` | 0 | Linear intent in ship axes, -1..1 |
 | `sf.Intent.Roll/Pitch/Yaw` | 0 | Angular intent, -1..1, stored as X roll / Y pitch / Z yaw |
 | `sf.Intent.Assist` | 1 | 1 the stick asks for a speed, 0 it asks for thrust |
