@@ -201,8 +201,28 @@ the chair as drift — press the key on the move; and the interior flies with th
 so a ship turning at 180 deg/s changes nothing on screen, which is the design working and
 reads like nothing happening.
 
-**Next action:** checkpoint 4 by hand, then plan «в» — turret, gunner station, an
-automation operator, and the grav-plate knockdown.
+**Stage 2's plan «в» is done on `feat/gunner-station` and both manual checkpoints have been
+passed by a person.** Turret aiming, a gunner station, an automation operator holding it, a
+target drone, and the grav-plate knockdown of §6. 56 headless tests.
+
+Checkpoint 4 (the pilot's seat) and checkpoint 5 (turret, crew, knockdown) were both run by
+hand on 2026-09-10; the forms carry the figures and the logs are in `notes/evidence/`. Across
+five interactive runs there was not one `CARRY NOT RUNNING`, not one `CARRY FAILED`, and not
+one skipped carry — a knocked-down occupant stays aboard, which is the distinction §6 exists
+to draw. Three independent measurements of the grav-plate threshold — 146.6 deg/s at the
+centre, 123.2 at the side wall, 178.4 standing up from the seat — all landed on
+`sqrt(19.62/r)` to two decimals.
+
+**Two defects were found by hand that no headless check could have caught**, and both are
+fixed: the hull fell asleep and stopped answering roll and pitch above about 250 fps (every
+headless run is a fixed 60), and the console never opened on a non-Latin keyboard layout,
+silently. Read the two results forms before trusting any figure older than 2026-09-10.
+
+**Next action:** merge `feat/gunner-station` into `main` with `--no-ff`, then the stage-3
+handoff. Still open, and neither blocks the merge: no gamepad exists to observe the analog
+input path, and §6's "dragged across the deck" is marked inexact — a knocked-down man is
+thrown about the cabin, ceiling included, and the decision between accepting that and damping
+it is deliberately deferred.
 
 Things in the code that look like mistakes and are not:
 
