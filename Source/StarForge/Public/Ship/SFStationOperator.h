@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "FlightController.h"
+#include "TurretMath.h"
 #include "UObject/Interface.h"
 #include "SFStationOperator.generated.h"
 
@@ -35,6 +36,16 @@ class STARFORGE_API ISFStationOperator
 public:
 	/** Fills Out and returns true if this operator is flying. */
 	virtual bool ProvideFlightIntent(StarForge::FFlightIntent& Out) { return false; }
+
+	/**
+	 * Fills Out and returns true if this operator is gunning.
+	 *
+	 * A second method rather than a variant inside one intent, as spec 4 chose: the
+	 * type check is kept, and a new role costs an edit to this file that everyone can
+	 * see rather than a new case somewhere that nobody has to. The default is false,
+	 * for the reason ProvideFlightIntent's is: an operator who is not gunning says so.
+	 */
+	virtual bool ProvideTurretIntent(StarForge::FTurretIntent& Out) { return false; }
 
 	/** Human-readable name for the readout and the log. */
 	virtual FString GetOperatorName() const { return TEXT("unnamed"); }

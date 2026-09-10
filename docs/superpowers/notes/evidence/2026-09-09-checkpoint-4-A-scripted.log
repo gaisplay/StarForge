@@ -1,0 +1,181 @@
+LogInit: Command Line: -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.DriftDebug 1, sf.Knockdown 0" -game
+[2026.09.10-09.47.50:422][  0]LogWorld: Bringing World /Game/Maps/L_FrameSpike.L_FrameSpike up for play (max tick rate 0) at 2026.09.10-12.47.50
+[2026.09.10-09.47.50:427][  0]LogStarForge: Display: Thruster array ready: 24 thrusters, 50000 kg, inertia (533333, 533333, 533333) kg m^2.
+[2026.09.10-09.47.50:427][  0]LogStarForge: Display: Station 'pilot' taken by console.
+[2026.09.10-09.47.50:427][  0]LogStarForge: Display: Station 'gunner' taken by automation.
+[2026.09.10-09.47.50:427][  0]LogStarForge: Display: Turret mount at ship-local (0 0 280) cm: yaw +/-120, pitch -30..60 deg, traverse 90 deg/s, on target within 0.5 deg, barrel attached.
+[2026.09.10-09.47.50:427][  0]LogStarForge: Display: Physics: async block mode (cvar absent), substepping off. Drift figures are only comparable across runs where these match.
+[2026.09.10-09.47.50:427][  0]LogStarForge: Display: Target drone spawned: orbit 30.0 m radius at 10.0 deg/s, tilted 20.0 deg, anchored to SFTestShip_0, present.
+[2026.09.10-09.47.51:495][  2]LogStarForge: Drift debug [CHANGED]: calls/frame 1 peak 1, dt 0.0060, mode Walking, base Floor, ship-local (-409 -3 -304) dist 510 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.47.52:497][500]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0018, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 1.0 s, measured 0.5 s, ship gravity 1
+[2026.09.10-09.47.53:499][979]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0021, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 2.0 s, measured 1.5 s, ship gravity 1
+[2026.09.10-09.47.54:499][442]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0018, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 3.0 s, measured 2.5 s, ship gravity 1
+[2026.09.10-09.47.55:501][926]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0018, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 4.0 s, measured 3.5 s, ship gravity 1
+[2026.09.10-09.47.56:502][408]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0018, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 5.0 s, measured 4.5 s, ship gravity 1
+[2026.09.10-09.47.57:502][884]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0018, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 6.0 s, measured 5.5 s, ship gravity 1
+[2026.09.10-09.47.58:503][361]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0018, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 7.0 s, measured 6.5 s, ship gravity 1
+[2026.09.10-09.47.59:505][844]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 8.0 s, measured 7.5 s, ship gravity 1
+[2026.09.10-09.48.00:506][319]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 9.0 s, measured 8.5 s, ship gravity 1
+[2026.09.10-09.48.01:508][769]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0021, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 10.0 s, measured 9.5 s, ship gravity 1
+[2026.09.10-09.48.01:988][995]LogStarForge: Shipboard drift: 10.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.48.02:508][246]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0019, mode Walking, base Floor, ship-local (0 0 -300) dist 300 cm, settled 11.0 s, measured 10.5 s, ship gravity 1
+[2026.09.10-09.48.03:510][719]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (0 0 -300) dist 300 cm, settled 12.0 s, measured 11.5 s, ship gravity 1
+[2026.09.10-09.48.04:510][200]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0018, mode Walking, base Floor, ship-local (0 -0 -300) dist 300 cm, settled 13.0 s, measured 12.5 s, ship gravity 1
+[2026.09.10-09.48.05:509][679]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0019, mode Walking, base Floor, ship-local (0 0 -300) dist 300 cm, settled 14.0 s, measured 13.5 s, ship gravity 1
+[2026.09.10-09.48.06:510][159]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0019, mode Walking, base Floor, ship-local (0 0 -300) dist 300 cm, settled 15.0 s, measured 14.5 s, ship gravity 1
+[2026.09.10-09.48.07:510][637]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0018, mode Walking, base Floor, ship-local (0 0 -300) dist 300 cm, settled 16.0 s, measured 15.5 s, ship gravity 1
+[2026.09.10-09.48.08:512][100]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0017, mode Walking, base Floor, ship-local (0 0 -300) dist 300 cm, settled 17.0 s, measured 16.5 s, ship gravity 1
+[2026.09.10-09.48.09:513][540]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0022, mode Walking, base Floor, ship-local (0 0 -300) dist 300 cm, settled 18.0 s, measured 17.5 s, ship gravity 1
+[2026.09.10-09.48.10:514][952]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0019, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 19.0 s, measured 18.5 s, ship gravity 1
+[2026.09.10-09.48.11:515][412]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0018, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 20.0 s, measured 19.5 s, ship gravity 1
+[2026.09.10-09.48.11:990][631]LogStarForge: Shipboard drift: 20.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.48.12:516][870]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 21.0 s, measured 20.5 s, ship gravity 1
+[2026.09.10-09.48.13:518][328]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0021, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 22.0 s, measured 21.5 s, ship gravity 1
+[2026.09.10-09.48.14:519][788]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 23.0 s, measured 22.5 s, ship gravity 1
+[2026.09.10-09.48.15:521][246]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 24.0 s, measured 23.5 s, ship gravity 1
+[2026.09.10-09.48.16:521][684]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0022, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 25.0 s, measured 24.5 s, ship gravity 1
+[2026.09.10-09.48.17:523][145]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 26.0 s, measured 25.5 s, ship gravity 1
+[2026.09.10-09.48.18:522][603]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 27.0 s, measured 26.5 s, ship gravity 1
+[2026.09.10-09.48.19:524][ 46]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0021, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 28.0 s, measured 27.5 s, ship gravity 1
+[2026.09.10-09.48.20:524][492]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 29.0 s, measured 28.5 s, ship gravity 1
+[2026.09.10-09.48.21:525][951]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 30.0 s, measured 29.5 s, ship gravity 1
+[2026.09.10-09.48.21:988][172]LogStarForge: Shipboard drift: 30.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.48.22:526][417]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 31.0 s, measured 30.5 s, ship gravity 1
+[2026.09.10-09.48.23:529][901]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 32.0 s, measured 31.5 s, ship gravity 1
+[2026.09.10-09.48.24:530][368]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 33.0 s, measured 32.5 s, ship gravity 1
+[2026.09.10-09.48.25:533][840]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0030, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 34.0 s, measured 33.5 s, ship gravity 1
+[2026.09.10-09.48.26:534][330]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 35.0 s, measured 34.5 s, ship gravity 1
+[2026.09.10-09.48.27:535][805]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 36.0 s, measured 35.5 s, ship gravity 1
+[2026.09.10-09.48.28:535][289]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 37.0 s, measured 36.5 s, ship gravity 1
+[2026.09.10-09.48.29:536][771]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0019, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 38.0 s, measured 37.5 s, ship gravity 1
+[2026.09.10-09.48.30:536][250]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0019, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 39.0 s, measured 38.5 s, ship gravity 1
+[2026.09.10-09.48.31:537][730]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0017, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 40.0 s, measured 39.5 s, ship gravity 1
+[2026.09.10-09.48.31:990][938]LogStarForge: Shipboard drift: 40.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.48.32:539][206]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 41.0 s, measured 40.5 s, ship gravity 1
+[2026.09.10-09.48.33:541][662]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0026, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 42.0 s, measured 41.5 s, ship gravity 1
+[2026.09.10-09.48.34:541][104]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 43.0 s, measured 42.6 s, ship gravity 1
+[2026.09.10-09.48.35:573][566]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0422, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 44.0 s, measured 43.5 s, ship gravity 1
+[2026.09.10-09.48.36:574][ 36]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0030, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 45.1 s, measured 44.6 s, ship gravity 1
+[2026.09.10-09.48.37:576][512]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0019, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 46.1 s, measured 45.6 s, ship gravity 1
+[2026.09.10-09.48.38:577][924]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0032, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 47.1 s, measured 46.6 s, ship gravity 1
+[2026.09.10-09.48.39:579][300]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 48.1 s, measured 47.6 s, ship gravity 1
+[2026.09.10-09.48.40:579][666]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 49.1 s, measured 48.6 s, ship gravity 1
+[2026.09.10-09.48.41:581][ 36]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0026, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 50.1 s, measured 49.6 s, ship gravity 1
+[2026.09.10-09.48.41:990][189]LogStarForge: Shipboard drift: 50.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.48.42:581][410]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 51.1 s, measured 50.6 s, ship gravity 1
+[2026.09.10-09.48.43:584][783]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 52.1 s, measured 51.6 s, ship gravity 1
+[2026.09.10-09.48.44:586][130]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0035, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 53.1 s, measured 52.6 s, ship gravity 1
+[2026.09.10-09.48.45:589][466]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0034, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 54.1 s, measured 53.6 s, ship gravity 1
+[2026.09.10-09.48.46:590][831]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0030, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 55.1 s, measured 54.6 s, ship gravity 1
+[2026.09.10-09.48.47:593][197]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 56.1 s, measured 55.6 s, ship gravity 1
+[2026.09.10-09.48.48:595][580]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0035, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 57.1 s, measured 56.6 s, ship gravity 1
+[2026.09.10-09.48.49:597][952]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 58.1 s, measured 57.6 s, ship gravity 1
+[2026.09.10-09.48.50:599][339]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 59.1 s, measured 58.6 s, ship gravity 1
+[2026.09.10-09.48.51:601][718]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0034, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 60.1 s, measured 59.6 s, ship gravity 1
+[2026.09.10-09.48.51:989][856]LogStarForge: Shipboard drift: 60.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.48.52:603][ 87]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0026, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 61.1 s, measured 60.6 s, ship gravity 1
+[2026.09.10-09.48.53:605][465]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 62.1 s, measured 61.6 s, ship gravity 1
+[2026.09.10-09.48.54:607][848]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 63.1 s, measured 62.6 s, ship gravity 1
+[2026.09.10-09.48.55:608][229]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 64.1 s, measured 63.6 s, ship gravity 1
+[2026.09.10-09.48.56:611][599]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 65.1 s, measured 64.6 s, ship gravity 1
+[2026.09.10-09.48.57:613][973]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-0 -0 -300) dist 300 cm, settled 66.1 s, measured 65.6 s, ship gravity 1
+[2026.09.10-09.48.58:615][346]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0030, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 67.1 s, measured 66.6 s, ship gravity 1
+[2026.09.10-09.48.59:617][728]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 68.1 s, measured 67.6 s, ship gravity 1
+[2026.09.10-09.49.00:617][ 99]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 69.1 s, measured 68.6 s, ship gravity 1
+[2026.09.10-09.49.01:618][475]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 70.1 s, measured 69.6 s, ship gravity 1
+[2026.09.10-09.49.01:990][617]LogStarForge: Shipboard drift: 70.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.49.02:619][849]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 71.1 s, measured 70.6 s, ship gravity 1
+[2026.09.10-09.49.03:620][206]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 72.1 s, measured 71.6 s, ship gravity 1
+[2026.09.10-09.49.04:624][545]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0034, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 73.1 s, measured 72.6 s, ship gravity 1
+[2026.09.10-09.49.11:288][809]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.4000, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 73.9 s, measured 73.4 s, ship gravity 1
+[2026.09.10-09.49.12:289][149]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0026, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 75.3 s, measured 74.8 s, ship gravity 1
+[2026.09.10-09.49.13:292][521]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0026, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 76.3 s, measured 75.8 s, ship gravity 1
+[2026.09.10-09.49.14:295][897]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0034, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 77.3 s, measured 76.8 s, ship gravity 1
+[2026.09.10-09.49.15:295][272]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 78.3 s, measured 77.8 s, ship gravity 1
+[2026.09.10-09.49.16:296][643]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0036, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 79.3 s, measured 78.8 s, ship gravity 1
+[2026.09.10-09.49.17:298][991]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0026, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 80.3 s, measured 79.8 s, ship gravity 1
+[2026.09.10-09.49.17:461][ 48]LogStarForge: Shipboard drift: 80.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.49.18:299][333]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 81.3 s, measured 80.8 s, ship gravity 1
+[2026.09.10-09.49.19:301][709]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0026, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 82.3 s, measured 81.8 s, ship gravity 1
+[2026.09.10-09.49.20:302][ 93]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0030, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 83.3 s, measured 82.8 s, ship gravity 1
+[2026.09.10-09.49.21:303][468]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 84.3 s, measured 83.8 s, ship gravity 1
+[2026.09.10-09.49.22:304][848]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 85.3 s, measured 84.8 s, ship gravity 1
+[2026.09.10-09.49.23:304][208]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 86.3 s, measured 85.8 s, ship gravity 1
+[2026.09.10-09.49.24:304][594]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 87.3 s, measured 86.8 s, ship gravity 1
+[2026.09.10-09.49.25:307][972]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0036, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 88.3 s, measured 87.8 s, ship gravity 1
+[2026.09.10-09.49.26:308][306]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0031, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 89.3 s, measured 88.8 s, ship gravity 1
+[2026.09.10-09.49.27:309][655]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 90.3 s, measured 89.8 s, ship gravity 1
+[2026.09.10-09.49.27:460][710]LogStarForge: Shipboard drift: 90.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.49.28:310][ 14]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0033, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 91.3 s, measured 90.8 s, ship gravity 1
+[2026.09.10-09.49.29:310][356]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 92.3 s, measured 91.8 s, ship gravity 1
+[2026.09.10-09.49.30:311][715]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 93.3 s, measured 92.9 s, ship gravity 1
+[2026.09.10-09.49.31:312][175]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0022, mode Walking, base Floor, ship-local (-0 0 -300) dist 300 cm, settled 94.4 s, measured 93.9 s, ship gravity 1
+[2026.09.10-09.49.31:821][403]LogStarForge: Shipboard drift interval complete: 94.4 s, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.49.32:314][623]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0022, mode Walking, base Floor, ship-local (124 97 -300) dist 338 cm, settled 0.1 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.33:314][ 69]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (-93 27 -300) dist 315 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.34:317][487]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0029, mode Walking, base Floor, ship-local (-97 155 -300) dist 351 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.35:012][775]LogStarForge: Warning: Station 'pilot' is already held by console; refusing player.
+[2026.09.10-09.49.35:318][915]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0022, mode Walking, base Floor, ship-local (259 22 -300) dist 397 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.36:322][324]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-43 -47 -300) dist 306 cm, settled 0.2 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.37:323][710]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-43 -47 -300) dist 306 cm, settled 1.2 s, measured 0.7 s, ship gravity 1
+[2026.09.10-09.49.38:323][162]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-43 -43 -300) dist 306 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.38:603][284]LogStarForge: Warning: Station 'pilot' is already held by console; refusing player.
+[2026.09.10-09.49.39:323][600]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0021, mode Walking, base Floor, ship-local (116 51 -300) dist 326 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.40:326][ 47]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-310 -159 -300) dist 460 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.41:325][490]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0021, mode Walking, base Floor, ship-local (108 -307 -300) dist 442 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.42:326][933]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0021, mode Walking, base Floor, ship-local (206 210 -300) dist 420 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.43:326][379]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0026, mode Walking, base Floor, ship-local (-90 131 -300) dist 339 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.44:327][827]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0019, mode Walking, base Floor, ship-local (-34 152 -300) dist 338 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.45:329][273]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (-348 118 -300) dist 475 cm, settled 0.3 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.46:330][701]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (104 122 -300) dist 340 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.47:330][134]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (254 -324 -300) dist 509 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.48:333][574]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0022, mode Walking, base Floor, ship-local (-204 -192 -300) dist 410 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.49:334][ 19]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0021, mode Walking, base Floor, ship-local (-24 104 -300) dist 318 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.50:334][467]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-13 105 -300) dist 318 cm, settled 1.0 s, measured 0.5 s, ship gravity 1
+[2026.09.10-09.49.51:335][913]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0029, mode Walking, base Floor, ship-local (-13 105 -300) dist 318 cm, settled 2.0 s, measured 1.5 s, ship gravity 1
+[2026.09.10-09.49.52:337][355]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-13 105 -300) dist 318 cm, settled 3.0 s, measured 2.5 s, ship gravity 1
+[2026.09.10-09.49.53:338][782]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0019, mode Walking, base Floor, ship-local (-5 120 -300) dist 323 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.54:339][225]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0019, mode Walking, base Floor, ship-local (135 -126 -300) dist 352 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.55:341][675]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0032, mode Walking, base Floor, ship-local (-261 6 -300) dist 397 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.56:343][106]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (72 -78 -300) dist 318 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.57:343][541]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0022, mode Walking, base Floor, ship-local (72 270 -300) dist 410 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.58:343][987]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (38 127 -300) dist 328 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.49.59:343][430]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-218 -92 -300) dist 382 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.50.00:346][882]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0020, mode Walking, base Floor, ship-local (-88 85 -300) dist 324 cm, settled 0.6 s, measured 0.1 s, ship gravity 1
+[2026.09.10-09.50.01:346][329]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (-88 85 -300) dist 324 cm, settled 1.6 s, measured 1.1 s, ship gravity 1
+[2026.09.10-09.50.02:347][769]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (-88 85 -300) dist 324 cm, settled 2.6 s, measured 2.1 s, ship gravity 1
+[2026.09.10-09.50.03:348][175]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (-88 85 -300) dist 324 cm, settled 3.6 s, measured 3.1 s, ship gravity 1
+[2026.09.10-09.50.04:347][605]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0021, mode Walking, base Floor, ship-local (-88 85 -300) dist 324 cm, settled 4.6 s, measured 4.1 s, ship gravity 1
+[2026.09.10-09.50.05:348][945]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-88 85 -300) dist 324 cm, settled 5.6 s, measured 5.1 s, ship gravity 1
+[2026.09.10-09.50.05:702][ 73]LogStarForge: Shipboard drift interval complete: 5.4 s, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.50.06:349][300]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0024, mode Walking, base Floor, ship-local (-295 -96 -300) dist 431 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.50.07:351][652]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0031, mode Walking, base Floor, ship-local (-85 -4 -300) dist 312 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.50.08:352][  3]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0023, mode Walking, base Floor, ship-local (-73 -118 -300) dist 330 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.50.09:353][353]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-102 -136 -300) dist 345 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.50.10:355][704]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0031, mode Walking, base Floor, ship-local (191 4 -300) dist 355 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.50.11:357][ 55]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0029, mode Walking, base Floor, ship-local (-155 -161 -300) dist 374 cm, settled 0.0 s, measured 0.0 s, ship gravity 1
+[2026.09.10-09.50.12:358][414]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 0.8 s, measured 0.3 s, ship gravity 1
+[2026.09.10-09.50.13:359][776]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0031, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 1.8 s, measured 1.3 s, ship gravity 1
+[2026.09.10-09.50.14:361][137]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0029, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 2.8 s, measured 2.3 s, ship gravity 1
+[2026.09.10-09.50.15:361][498]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0029, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 3.8 s, measured 3.3 s, ship gravity 1
+[2026.09.10-09.50.16:362][859]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 4.8 s, measured 4.3 s, ship gravity 1
+[2026.09.10-09.50.17:363][218]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0030, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 5.8 s, measured 5.3 s, ship gravity 1
+[2026.09.10-09.50.18:365][577]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0029, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 6.8 s, measured 6.3 s, ship gravity 1
+[2026.09.10-09.50.19:367][937]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 7.8 s, measured 7.3 s, ship gravity 1
+[2026.09.10-09.50.20:368][295]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 8.8 s, measured 8.3 s, ship gravity 1
+[2026.09.10-09.50.21:368][656]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 9.8 s, measured 9.3 s, ship gravity 1
+[2026.09.10-09.50.22:026][893]LogStarForge: Shipboard drift: 10.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.50.22:368][ 17]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0033, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 10.8 s, measured 10.3 s, ship gravity 1
+[2026.09.10-09.50.23:370][378]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 11.8 s, measured 11.3 s, ship gravity 1
+[2026.09.10-09.50.24:370][739]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 12.8 s, measured 12.3 s, ship gravity 1
+[2026.09.10-09.50.25:371][101]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 13.8 s, measured 13.3 s, ship gravity 1
+[2026.09.10-09.50.26:373][463]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0031, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 14.8 s, measured 14.3 s, ship gravity 1
+[2026.09.10-09.50.27:375][822]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 15.8 s, measured 15.3 s, ship gravity 1
+[2026.09.10-09.50.28:377][181]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 16.8 s, measured 16.4 s, ship gravity 1
+[2026.09.10-09.50.29:378][539]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 17.9 s, measured 17.4 s, ship gravity 1
+[2026.09.10-09.50.30:378][897]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0025, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 18.9 s, measured 18.4 s, ship gravity 1
+[2026.09.10-09.50.31:380][256]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0028, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 19.9 s, measured 19.4 s, ship gravity 1
+[2026.09.10-09.50.32:024][486]LogStarForge: Shipboard drift: 20.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- knockdown off (sf.Knockdown 0)
+[2026.09.10-09.50.32:380][614]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 20.9 s, measured 20.4 s, ship gravity 1
+[2026.09.10-09.50.33:382][972]LogStarForge: Drift debug: calls/frame 1 peak 2, dt 0.0027, mode Walking, base Floor, ship-local (-71 -121 -300) dist 331 cm, settled 21.9 s, measured 21.4 s, ship gravity 1
+[2026.09.10-09.50.34:867][158]Log file closed, 09/10/26 12:50:34

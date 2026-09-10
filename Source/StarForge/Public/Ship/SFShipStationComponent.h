@@ -45,6 +45,12 @@ public:
 	bool IsOccupied() const { return Operator.GetObject() != nullptr; }
 	TScriptInterface<ISFStationOperator> GetOperator() const { return Operator; }
 
+	/**
+	 * Who holds the post, by name, or "unoccupied". Virtual so a station can append the
+	 * state of its own instrument to it, as the pilot station does with sf.ShipProfile.
+	 */
+	virtual FString GetOperatorDisplayName() const;
+
 	/** The seat in the ship's frame, in centimetres, which is what the engine wants. */
 	FVector GetSeatLocationCm() const;
 

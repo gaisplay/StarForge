@@ -3,14 +3,19 @@
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/World.h"
 #include "FlightController.h"
 #include "HAL/IConsoleManager.h"
 #include "PhysicsEngine/PhysicsSettings.h"
+#include "Ship/SFAutomationOperatorComponent.h"
 #include "Ship/SFConsoleOperatorComponent.h"
+#include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
+#include "Ship/SFTargetDrone.h"
 #include "Ship/SFThrusterArrayComponent.h"
+#include "Ship/SFTurretComponent.h"
 #include "StarForgeLog.h"
 #include "Units.h"
 #include "UObject/ConstructorHelpers.h"
@@ -58,6 +63,9 @@ namespace
 	 */
 	constexpr double SpawnClearanceCm = 100.0;
 
+	/** How far aft of the pilot's seat the gunner sits, in centimetres. See the constructor. */
+	constexpr double GunnerSeatAftCm = 150.0;
+
 	/**
 	 * Attenuation radius for the interior light, in centimetres. The room is 8 m
 	 * (800 cm) across; 2000 cm gives the light enough reach to fall off gently across
@@ -89,6 +97,15 @@ namespace
 	 * which sits on the pivot's X/Y column at floor height.
 	 */
 	constexpr double MarkerOffsetCm = 300.0;
+
+	/** The barrel is a one-metre cone: the engine cone is 100 cm tall, so Z scale is length in metres. */
+	constexpr double BarrelLengthCm = 100.0;
+
+	/** Cone base as a mesh scale: 0.3 x 100 cm = 30 cm across, thin enough to read as a barrel. */
+	constexpr double BarrelThicknessScale = 0.3;
+
+	/** Between the barrel's highest reach and the ceiling's inner face, in centimetres. */
+	constexpr double BarrelCeilingClearanceCm = 10.0;
 
 	/**
 	 * Mass the hull carries before a ship data asset is assigned, in kilograms.
@@ -136,6 +153,35 @@ ASFTestShip::ASFTestShip()
 	// BeginPlay whenever one is assigned.
 	Hull->SetMassOverrideInKg(NAME_None, static_cast<float>(DefaultHullMassKg), true);
 
+	// This hull must never sleep, and that is a correctness requirement rather than a
+	// preference. A sleeping body keeps the force and torque handed to it and
+	// integrates neither, so a ship under a control loop stops answering its own
+	// thrusters; and the occupant's carry reads this transform every frame, so a hull
+	// that stops updating stops carrying him.
+	//
+	// It bit hard. Chaos sleeps a body whose per-step velocity change stays under a
+	// threshold, and that change shrinks as the frame rate rises: at 60 fps a full roll
+	// command gains 0.05 rad/s per step and stays awake, at 400 fps it gains 0.0075 and
+	// is re-slept inside the same step, losing what it gained. Measured on 2026-09-10 by
+	// hand at ~370 fps and reproduced headlessly: roll settled at 1.7 deg/s instead of
+	// 180.0, pitch at 1.7 instead of 120.0, while the readout reported the whole
+	// commanded 1.6 MNm as achieved. The boundary sits between 200 and 300 fps.
+	//
+	// Two accidents hid it for an entire stage. Linear thrust never showed it, because
+	// 16 m/s^2 clears the linear threshold in one step; yaw never showed it, because
+	// this array makes more torque about Z than about X and wins the same race. And
+	// every headless check runs at a fixed 60 fps, where the torque wins with room to
+	// spare -- so "a full roll settles at exactly 180.0 deg/s" was true of the test rig
+	// and false of the game on a fast machine.
+	//
+	// Waking the body when a wrench is applied was tried first and measured to do
+	// nothing, for the reason above: being awake is not what is in question.
+	//
+	// A multiplier of zero means the hull sleeps only when it is exactly motionless, so
+	// the first step of any commanded thrust keeps it awake from then on.
+	Hull->BodyInstance.SleepFamily = ESleepFamily::Custom;
+	Hull->BodyInstance.CustomSleepThresholdMultiplier = 0.0f;
+
 	Frame = CreateDefaultSubobject<USFShipFrameComponent>(TEXT("Frame"));
 	Thrusters = CreateDefaultSubobject<USFThrusterArrayComponent>(TEXT("Thrusters"));
 
@@ -161,6 +207,23 @@ ASFTestShip::ASFTestShip()
 		0.0, 0.0, StarForge::Units::CmToMetres(-InteriorHalfExtentCm + SpawnClearanceCm));
 
 	ConsoleOperator = CreateDefaultSubobject<USFConsoleOperatorComponent>(TEXT("ConsoleOperator"));
+
+	GunnerStation = CreateDefaultSubobject<USFGunnerStationComponent>(TEXT("GunnerStation"));
+
+	// A metre and a half aft of the pilot, at exactly the pilot's height and for the
+	// same reason (see PilotStation above: a seat above standing height drops him into
+	// MOVE_Falling and the carry stops). Aft rather than beside so the roll axis, which
+	// runs along X, stays overhead: at (-1.5, 0, -3) he is the same three metres from
+	// it as in the pilot's seat. Within the 2 m interact radius of the spawn point, so
+	// "nearest free seat" decides between the two and neither is out of reach from
+	// where a person starts. The capsule (radius 34) spans X -184..-116; the aft wall's
+	// inner face is at -390, and the cylinder marker at (-300, 0, 0) is three metres up.
+	GunnerStation->SeatLocationMetres = FVector(
+		StarForge::Units::CmToMetres(-GunnerSeatAftCm),
+		0.0,
+		StarForge::Units::CmToMetres(-InteriorHalfExtentCm + SpawnClearanceCm));
+
+	AutomationOperator = CreateDefaultSubobject<USFAutomationOperatorComponent>(TEXT("AutomationOperator"));
 
 	// The ship data asset is wired here rather than assigned on a placed actor
 	// because there is no placed actor to assign it on: L_FrameSpike is deliberately
@@ -222,6 +285,48 @@ ASFTestShip::ASFTestShip()
 		FVector(0.0, MarkerOffsetCm, 0.0), MarkerUniformScale);
 	AddOrientationMarker(TEXT("MarkerCylinder"), CylinderMesh.Object,
 		FVector(-MarkerOffsetCm, 0.0, 0.0), MarkerUniformScale);
+
+	// The mount hangs from the ceiling inside the cabin, which is not where a turret
+	// goes. It is where a person can see it: the cabin has no windows, so a barrel on
+	// the roof could be checked only from the log, and the one thing a log cannot check
+	// is whether the picture agrees with the numbers. The aim passes through the walls;
+	// the drone outside is what the numbers describe.
+	//
+	// Height: the ceiling panel's inner face is at InteriorHalfExtentCm minus half its
+	// thickness (400 - 10 = 390). A barrel of BarrelLengthCm pitched to its +60 stop
+	// rises sin 60 = 0.866 of its length above the mount, so a mount at
+	// 390 - 100 - 10 = 280 tops out at 366.6, clear by 23 cm. Derived from the same
+	// constants as the panels, so moving a wall moves the turret with it.
+	Turret = CreateDefaultSubobject<USFTurretComponent>(TEXT("Turret"));
+	Turret->SetupAttachment(Hull);
+	Turret->SetRelativeLocation(FVector(
+		0.0, 0.0,
+		InteriorHalfExtentCm - PanelThickness * CubeEdgeCm * 0.5 - BarrelLengthCm - BarrelCeilingClearanceCm));
+
+	TurretBarrel = CreateDefaultSubobject<USceneComponent>(TEXT("TurretBarrel"));
+	TurretBarrel->SetupAttachment(Turret);
+	Turret->SetBarrel(TurretBarrel);
+
+	// A cone, not a cylinder: it has a pointed end, so a sign error in yaw or pitch
+	// shows as a barrel pointing away from where the readout says. The engine cone's
+	// apex is along its own +Z; a pitch of -90 turns +Z onto +X (a +90 pitch takes +X
+	// onto +Z, and this is its inverse), so the apex is the muzzle. Offset forward by
+	// half its length so the base sits on the pivot.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> BarrelMesh(TEXT("/Engine/BasicShapes/Cone.Cone"));
+	TurretBarrelMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretBarrelMesh"));
+	TurretBarrelMesh->SetupAttachment(TurretBarrel);
+	TurretBarrelMesh->SetRelativeRotation(FRotator(-90.0, 0.0, 0.0));
+	TurretBarrelMesh->SetRelativeLocation(FVector(BarrelLengthCm * 0.5, 0.0, 0.0));
+	TurretBarrelMesh->SetRelativeScale3D(FVector(
+		BarrelThicknessScale, BarrelThicknessScale, BarrelLengthCm / CubeEdgeCm));
+	TurretBarrelMesh->SetMobility(EComponentMobility::Movable);
+
+	// Visual only. It must not be able to block the walk test or catch a sweep.
+	TurretBarrelMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	if (BarrelMesh.Succeeded())
+	{
+		TurretBarrelMesh->SetStaticMesh(BarrelMesh.Object);
+	}
 }
 
 UStaticMeshComponent* ASFTestShip::AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale)
@@ -297,6 +402,38 @@ void ASFTestShip::BeginPlay()
 			 "comparable across runs where these match."),
 		AsyncMode ? *FString::FromInt(AsyncMode->GetInt()) : TEXT("(cvar absent)"),
 		UPhysicsSettings::Get()->bSubstepping ? TEXT("on") : TEXT("off"));
+
+	// The rig assembles itself, so the thing the turret tracks is spawned here rather
+	// than placed: L_FrameSpike is empty by design. Anchored to this ship's position so
+	// it stays in range whichever way the ship is driven, and in world axes so it does
+	// not turn with the ship, which is what makes a rolling hull a test of the aim.
+	//
+	// Deferred, because the drone's BeginPlay logs its anchor and takes its first
+	// position from it, and a spawn that finishes before SetAnchor would log "the world
+	// origin" for a drone that is about to be anchored to this ship.
+	FTransform DroneSpawn = GetActorTransform();
+	DroneSpawn.SetScale3D(FVector::OneVector);
+	TargetDrone = GetWorld()->SpawnActorDeferred<ASFTargetDrone>(
+		ASFTargetDrone::StaticClass(), DroneSpawn, this, nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (TargetDrone)
+	{
+		TargetDrone->SetAnchor(this);
+		TargetDrone->FinishSpawning(DroneSpawn);
+
+		// Components have begun play inside Super::BeginPlay, so the automation is
+		// already in its seat by now; the first station tick is still ahead, and a null
+		// drone until then is reported as no target rather than aimed at.
+		if (AutomationOperator)
+		{
+			AutomationOperator->SetTargetDrone(TargetDrone);
+		}
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Error, TEXT("Target drone failed to spawn; the turret will have nothing to track."));
+	}
 }
 
 void ASFTestShip::Tick(float DeltaSeconds)
@@ -323,12 +460,12 @@ void ASFTestShip::Tick(float DeltaSeconds)
 		LogFlightState(DeltaSeconds);
 	}
 
-	// Measured from what the body actually did, not from what was commanded. In the
-	// scripted mode the two agree; under thrust they do not, and the grav-plate
-	// readout has to show the ship real acceleration or it is showing nothing.
-	const FVector VelocityCms = Hull->GetPhysicsLinearVelocity();
-	LinearAccelMetersPerSecSq = (VelocityCms - PreviousVelocityCms) / DeltaSeconds / 100.0;
-	PreviousVelocityCms = VelocityCms;
+	// Only the speed is kept here, for the readout's profile-phase line. The
+	// acceleration moved to the frame component: the felt-acceleration figure and the
+	// knockdown are read from one instrument, and that instrument is not the test
+	// ship's class -- the movement component must not have to know this class exists
+	// to find out how hard the deck is accelerating.
+	PreviousVelocityCms = Hull->GetPhysicsLinearVelocity();
 }
 
 void ASFTestShip::TickScriptedProfile()
@@ -355,6 +492,46 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		return;
 	}
 	SecondsSinceFlightLog = 0.0;
+
+	// The turret reports before the thruster check: a ship whose array never built can
+	// still lay a turret, and a line that vanishes with the array would look like a
+	// turret that stopped.
+	if (GunnerStation && GunnerStation->GetTurret())
+	{
+		const USFTurretComponent* GunnerTurret = GunnerStation->GetTurret();
+		const StarForge::FTurretIntent TurretIntent = GunnerStation->GetLastIntent();
+
+		FString GunnedBy = GunnerStation->GetOperatorDisplayName();
+		if (GunnerStation->IsOccupied() && !GunnerStation->IsOperatorGunning())
+		{
+			GunnedBy += TEXT(" (standing down)");
+		}
+
+		const FString Target = TurretIntent.bHasTarget
+			? FString::Printf(TEXT("(%.0f %.0f %.0f) cm"),
+				TurretIntent.TargetWorldLocation.X,
+				TurretIntent.TargetWorldLocation.Y,
+				TurretIntent.TargetWorldLocation.Z)
+			: FString(TEXT("none"));
+
+		const StarForge::Turret::FTurretAim Bearing = GunnerTurret->GetLastBearing();
+		const FString BearingText = GunnerTurret->HasBearing()
+			? FString::Printf(TEXT("yaw %.1f pitch %.1f deg"),
+				FMath::RadiansToDegrees(Bearing.YawRad), FMath::RadiansToDegrees(Bearing.PitchRad))
+			: FString(TEXT("none"));
+
+		const StarForge::Turret::FTurretAim Aim = GunnerTurret->GetAim();
+
+		UE_LOG(LogStarForge, Log,
+			TEXT("Turret: gunned by %s | target %s firing %d | bearing %s | aim yaw %.1f pitch %.1f deg | %s"),
+			*GunnedBy, *Target, TurretIntent.bFiring ? 1 : 0, *BearingText,
+			FMath::RadiansToDegrees(Aim.YawRad), FMath::RadiansToDegrees(Aim.PitchRad),
+			USFTurretComponent::StateName(GunnerTurret->GetState()));
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Warning, TEXT("Turret: no gunner station or no turret -- nothing is aiming."));
+	}
 
 	// The log is now written in both modes, so it can be reached before the array has
 	// built -- which the flight branch used to make impossible. Said out loud rather
@@ -423,7 +600,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	// what confusing it produces, and this log is where that would show.
 	UE_LOG(LogStarForge, Log,
 		TEXT("Flight: flown by %s | intent lin (%.2f %.2f %.2f) ang (%.2f %.2f %.2f) assist %d | ")
-		TEXT("speed %.1f m/s, ang roll/pitch/yaw (%.1f %.1f %.1f) deg/s | ")
+		TEXT("speed %.1f m/s, accel %.1f m/s2, ang roll/pitch/yaw (%.1f %.1f %.1f) deg/s | ")
 		TEXT("force want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) N | ")
 		TEXT("torque want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) Nm | ")
 		TEXT("throttles %d of %d commanded, %d spooled"),
@@ -432,6 +609,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,
 		Intent.bFlightAssistEnabled ? 1 : 0,
 		State.LinearVelocity.Size(),
+		Frame->GetLinearAccelMetersPerSecSq().Size(),
 		FMath::RadiansToDegrees(State.AngularVelocity.X),
 		FMath::RadiansToDegrees(State.AngularVelocity.Y),
 		FMath::RadiansToDegrees(State.AngularVelocity.Z),

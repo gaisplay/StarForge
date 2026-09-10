@@ -6,12 +6,17 @@
 #include "SFTestShip.generated.h"
 
 class USFShipFrameComponent;
+class USceneComponent;
 class UStaticMeshComponent;
 class UPointLightComponent;
 class UBoxComponent;
 class USFThrusterArrayComponent;
 class USFPilotStationComponent;
+class USFGunnerStationComponent;
 class USFConsoleOperatorComponent;
+class USFAutomationOperatorComponent;
+class USFTurretComponent;
+class ASFTargetDrone;
 
 /**
  * Throwaway measurement rig: a boxed room that flies a scripted manoeuvre at
@@ -71,11 +76,15 @@ public:
 
 	USFPilotStationComponent* GetPilotStation() const { return PilotStation; }
 
+	USFGunnerStationComponent* GetGunnerStation() const { return GunnerStation; }
+
+	USFTurretComponent* GetTurret() const { return Turret; }
+
+	/** What the gunner post's automation tracks. Spawned by BeginPlay; null if that failed. */
+	ASFTargetDrone* GetTargetDrone() const { return TargetDrone; }
+
 	/** Where a passenger should be placed so he starts standing on the floor. */
 	FVector GetInteriorSpawnWorldLocation() const;
-
-	/** This tick's linear acceleration in m/s^2, for the grav-plate readout. */
-	FVector GetLinearAccelMetersPerSecSq() const { return LinearAccelMetersPerSecSq; }
 
 	/** This tick's linear speed in m/s, so the readout shows where in the profile we are. */
 	double GetSpeedMetersPerSec() const { return PreviousVelocityCms.Size() / 100.0; }
@@ -123,7 +132,23 @@ private:
 	TObjectPtr<USFPilotStationComponent> PilotStation;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFGunnerStationComponent> GunnerStation;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFConsoleOperatorComponent> ConsoleOperator;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFAutomationOperatorComponent> AutomationOperator;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFTurretComponent> Turret;
+
+	/** The pivot the turret turns; the cone below is attached to it. */
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USceneComponent> TurretBarrel;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<UStaticMeshComponent> TurretBarrelMesh;
 
 	/**
 	 * Lights the interior from the room's centre so the walk test is visible at all.
@@ -134,6 +159,9 @@ private:
 	TObjectPtr<UPointLightComponent> InteriorLight;
 
 	UPROPERTY()
+	TObjectPtr<ASFTargetDrone> TargetDrone;
+
+	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> Panels;
 
 	UPROPERTY()
@@ -141,5 +169,4 @@ private:
 
 	double ElapsedSeconds = 0.0;
 	FVector PreviousVelocityCms = FVector::ZeroVector;
-	FVector LinearAccelMetersPerSecSq = FVector::ZeroVector;
 };

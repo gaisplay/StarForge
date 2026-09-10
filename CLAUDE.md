@@ -54,17 +54,34 @@ session that never ticked.
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=25 -ExecCmds="sf.FlightLog 1, sf.ShipProfile 0, sf.Intent.X 1" -log
 ```
 
+**The drift line carries knocked-down time and a verdict.** `Shipboard drift: … skipped
+carries N, knocked down S s -- <verdict>`, where the verdict is `footing intact`,
+`KNOCKED DOWN: …`, `CARRY FAILED: …` or `knockdown off (sf.Knockdown 0)`. Under the
+recipe above it reads `knocked down 0.0 s -- footing intact`: 800 kN on 50 t is 16 m/s²,
+under the 19.62 limit. The scripted profile (`sf.ShipProfile 1`) is over the limit almost
+continuously — 314 m/s² of linear acceleration at its peaks — so a standing occupant is
+knocked down for the whole run and the drift figure is his slide across the cabin.
+**Re-running checkpoint 1's baseline needs `sf.Knockdown 0`**, and so does the
+`sf.ShipGravity 0` negative control: with the knockdown on, `bStayBasedInAir` keeps the
+movement base through the fall, the carry keeps running, and the control shows nothing.
+A carry that has genuinely stopped is reported by `Carry NOT RUNNING` once a second,
+from outside the carry, because the counter inside it cannot report a gap that never ends.
+
 Console variables the rig understands:
 
 | Variable | Default | What it does |
 |---|---|---|
 | `sf.ShipGravity` | 1 | 0 leaves gravity at world down — the negative control that detaches the occupant |
 | `sf.ShipProfile` | 1 | 1 flies the scripted checkpoint manoeuvre, 0 flies on thrust from the intent |
+| `sf.ConsoleOperator` | 1 | 1 the console operator holds the pilot's seat; 0 leaves it free, which is what a person needs before E will seat him. A runtime switch, not a startup default — it can be typed at the console mid-run |
+| `sf.Knockdown` | 1 | 1 knocks a standing occupant off his feet above the 19.62 m/s² grav-plate limit (spec §6) — falling, walking refused, still carried; 0 keeps him standing. Checkpoint 1's scripted-profile baseline and the `sf.ShipGravity 0` negative control need 0 |
 | `sf.Intent.X/Y/Z` | 0 | Linear intent in ship axes, -1..1 |
 | `sf.Intent.Roll/Pitch/Yaw` | 0 | Angular intent, -1..1, stored as X roll / Y pitch / Z yaw |
 | `sf.Intent.Assist` | 1 | 1 the stick asks for a speed, 0 it asks for thrust |
 | `sf.FlightLog` | 0 | 1 logs the flight readout once a second |
 | `sf.DriftDebug` | 0 | 1 logs carry calls per frame, movement mode, base and ship-local position |
+| `sf.TargetDrone` | 1 | 0 withdraws the rig's target drone; the turret must then report no target rather than aim at the origin |
+| `sf.AutomationOperator` | 1 | 1 the ship's automation holds the gunner's seat; 0 leaves it free. The gunner's post is what tests spec §4's claim that the ship cannot tell who holds a post, so it is held by something that is not a person by default |
 
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
 
@@ -146,8 +163,9 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 ## Current state
 
-**Stage 2 is finished and merged to `main`.** Thirty-four commits, merged as
-`8ffa63b`; the branch `feat/ship-on-chaos` is gone. 37 headless tests, clean build.
+**Stage 2 is finished, merged, and its branch deleted. All of it is on `main`**, as
+merge commit `8ffa63b` over thirty-four commits. 37 headless tests, clean build.
+There is no stage-2 branch left to look for.
 
 The ship is a Chaos rigid body flown by the maths from `StarForgeCore`. It has a data
 asset (`Content/Ships/DA_TestShip`), a thruster array component that reads mass
@@ -183,8 +201,28 @@ the chair as drift — press the key on the move; and the interior flies with th
 so a ship turning at 180 deg/s changes nothing on screen, which is the design working and
 reads like nothing happening.
 
-**Next action:** checkpoint 4 by hand, then plan «в» — turret, gunner station, an
-automation operator, and the grav-plate knockdown.
+**Stage 2's plan «в» is done on `feat/gunner-station` and both manual checkpoints have been
+passed by a person.** Turret aiming, a gunner station, an automation operator holding it, a
+target drone, and the grav-plate knockdown of §6. 56 headless tests.
+
+Checkpoint 4 (the pilot's seat) and checkpoint 5 (turret, crew, knockdown) were both run by
+hand on 2026-09-10; the forms carry the figures and the logs are in `notes/evidence/`. Across
+five interactive runs there was not one `CARRY NOT RUNNING`, not one `CARRY FAILED`, and not
+one skipped carry — a knocked-down occupant stays aboard, which is the distinction §6 exists
+to draw. Three independent measurements of the grav-plate threshold — 146.6 deg/s at the
+centre, 123.2 at the side wall, 178.4 standing up from the seat — all landed on
+`sqrt(19.62/r)` to two decimals.
+
+**Two defects were found by hand that no headless check could have caught**, and both are
+fixed: the hull fell asleep and stopped answering roll and pitch above about 250 fps (every
+headless run is a fixed 60), and the console never opened on a non-Latin keyboard layout,
+silently. Read the two results forms before trusting any figure older than 2026-09-10.
+
+**Next action:** merge `feat/gunner-station` into `main` with `--no-ff`, then the stage-3
+handoff. Still open, and neither blocks the merge: no gamepad exists to observe the analog
+input path, and §6's "dragged across the deck" is marked inexact — a knocked-down man is
+thrown about the cabin, ceiling included, and the decision between accepting that and damping
+it is deliberately deferred.
 
 Things in the code that look like mistakes and are not:
 
@@ -192,7 +230,8 @@ Things in the code that look like mistakes and are not:
   it a rolling deck stops being walkable within a quarter second and the carry stops
   being called at all. Proven again on 2026-09-08: with `sf.ShipGravity 0` the occupant
   went from Floor to WallXNeg to Ceiling inside 202 ms and the engine stopped calling
-  the carry entirely.
+  the carry entirely. That control is run with `sf.Knockdown 0` from now on; the
+  `bStayBasedInAir` entry below says why.
 - `bSweep = false` on the carry's `MoveUpdatedComponent`. Relative to the ship the
   occupant has not moved, and a sweep at 400 m/s traces six metres through the hull.
 - Camera view limits of `0 / 359.999` rather than `±180`. `FMath::ClampAngle` computes
@@ -225,10 +264,39 @@ Things in the code that look like mistakes and are not:
   zeroing the net force zeroes every contributing throttle. Turning without being
   pushed needs a force couple, and a couple needs two thrusters facing opposite ways.
   This is a constraint on real ship layouts too, not just on the fixture.
+- **`bStayBasedInAir` set only for the duration of a knockdown, `IsValidLandingSpot`
+  returning false while down, and `ProcessLanded` refusing to land him.** The knockdown
+  puts the occupant into `MOVE_Falling`, and entering falling clears the movement base
+  unless that flag is set (`CharacterMovementComponent.cpp` 1454–1471); with no base the
+  engine never calls `UpdateBasedMovement`, and the carry — the one thing that keeps him
+  aboard at 400 m/s — stops. §6 is explicit that it must not. The flag is not left on
+  permanently because a deck made unwalkable by `sf.ShipGravity 0` would then keep its
+  base too, and the negative control would show nothing. The landing-spot override is
+  what keeps him down: `PhysFalling` lands him on the first blocking hit it is allowed
+  to (5050), in the same frame, under the same acceleration. `ProcessLanded` is
+  overridden as well because a character wedged between two walls is landed without
+  asking (5221–5225), and landing re-derives the base from the floor under him.
+- **`UpdateFooting` called from two places — the carry and `TickComponent`.** The engine
+  calls `UpdateBasedMovement` only while a movement base is set (2476–2487), so a man who
+  loses his base while down would freeze there: no landing, because the override above
+  refuses one while he is down, and so no base and no carry ever again. The tick runs
+  either way, and the same once-per-frame guard that stops the push being applied twice
+  makes the second call free whenever the carry has already run. The flag comes off in
+  the same function when the base is genuinely gone — there is nothing left to keep.
+- **`FallingLateralFriction = 2.0` where the plan says the coefficient is 4/s.**
+  `ApplyVelocityBraking` multiplies it by `BrakingFrictionFactor`, 2.0 by default (734,
+  4384–4385). The 4/s that acts is what makes a knocked-down slide settle at a quarter
+  of the excess acceleration; writing 4 here would halve that. It bounds only the part
+  of the push lying along the deck — `PhysFalling` friction applies to
+  `ProjectToGravityFloor(Velocity)` alone — so it is not a speed limit on a knockdown:
+  under the scripted profile a knocked-down occupant was measured at 358 m/s inside the
+  eight-metre cabin, stopped by the walls and nothing else.
 
 When reading the checkpoint HUD: **check the measured-time line before the drift
 figure.** A drift of zero is what both a perfect minute and a dead instrument look
-like, and only `measured` tells them apart.
+like, and only `measured` tells them apart. And read the `footing` line before judging a
+drift over budget: a slide while knocked down is not a carry failure, and the line says
+which it was.
 
 **Numbers go in the log, not on a screen.** Both instrument defects found so far — the
 doubled clock and the hull's drag — were caught by comparing logged figures against

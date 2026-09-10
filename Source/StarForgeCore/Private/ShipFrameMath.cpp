@@ -36,6 +36,34 @@ namespace StarForge::ShipFrame
 	{
 		return FeltAccelMetersPerSecSq.Size() > GravPlateLimitMetersPerSecSq;
 	}
+
+	FVector ComputeUncompensatedAcceleration(const FVector& FeltAccelMetersPerSecSq)
+	{
+		const FVector Absorbed = FeltAccelMetersPerSecSq.GetClampedToMaxSize(GravPlateLimitMetersPerSecSq);
+		return -(FeltAccelMetersPerSecSq - Absorbed);
+	}
+
+	bool FFootingState::Update(bool bOverLimit, double DeltaSeconds, double RecoverySeconds)
+	{
+		if (bOverLimit)
+		{
+			bDown = true;
+			SecondsUnderLimit = 0.0;
+			return bDown;
+		}
+
+		if (bDown)
+		{
+			SecondsUnderLimit += FMath::Max(0.0, DeltaSeconds);
+			if (SecondsUnderLimit >= RecoverySeconds)
+			{
+				bDown = false;
+				SecondsUnderLimit = 0.0;
+			}
+		}
+
+		return bDown;
+	}
 }
 
 namespace StarForge::ShipFrame

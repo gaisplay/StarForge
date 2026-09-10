@@ -22,5 +22,8 @@ private:
 	/** Flight lines: demand against achievement, throttles, saturation. */
 	void DrawFlightBlock(double& Y);
 
+	/** Gunner lines: who holds the post, and what state the turret is in. */
+	void DrawGunnerBlock(double& Y);
+
 	double ElapsedSeconds = 0.0;
 };

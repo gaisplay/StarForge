@@ -6,11 +6,14 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
+#include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTestShip.h"
 #include "Ship/SFThrusterArrayComponent.h"
+#include "Ship/SFTurretComponent.h"
 #include "ShipFrameMath.h"
+#include "TurretMath.h"
 
 namespace
 {
@@ -32,11 +35,17 @@ namespace
 	 * Raised to 640 when the flight block was added: those lines pushed the readout
 	 * past the old 480 and the last of them fell off the panel, which is the exact
 	 * illegibility the panel was introduced to fix.
+	 *
+	 * Raised again to 760 for the gunner block. A healthy run is 23 lines at 22 px from
+	 * a 48 px top with one 10 px gap, so the last line's text ends near 564 against a
+	 * panel bottom of 796; the three red diagnostic lines above add 66 more, and the
+	 * knockdown's footing line is still to come. A line falling off the bottom is the
+	 * defect this panel exists to prevent.
 	 */
 	constexpr float PanelX = 20.0f;
 	constexpr float PanelY = 36.0f;
 	constexpr float PanelWidth = 760.0f;
-	constexpr float PanelHeight = 640.0f;
+	constexpr float PanelHeight = 760.0f;
 }
 
 void ASFFrameDriftHUD::DrawLine(const FString& Text, double& Y, const FLinearColor& Color)
@@ -115,6 +124,33 @@ void ASFFrameDriftHUD::DrawHUD()
 			FLinearColor::Red);
 	}
 
+	// The third of the lines that give the drift figure its meaning. The two above say
+	// the carry failed; this one says the man was knocked down, and a slide under it is
+	// not a carry failure -- "drift" used to mean only the first. Yellow with the
+	// mechanic off, because that run is not comparable with one that has it.
+	if (!Movement->IsKnockdownEnabled())
+	{
+		DrawLine(TEXT("footing  KNOCKDOWN OFF (sf.Knockdown 0) - checkpoint 1's rig, not this plan's"), Y, FLinearColor::Yellow);
+	}
+	else if (Movement->IsKnockedDown())
+	{
+		const FVector Push = Movement->GetKnockdownPushMetersPerSecSq();
+
+		// The length of this fall, not the interval's tally. The tally is dropped with
+		// the peaks on every frame of the settle window, so a man lying on the deck
+		// would be printed as down for 0.0 s through the whole half second the
+		// instrument spends restarting -- a readout looking broken while it works.
+		DrawLine(FString::Printf(TEXT("footing  KNOCKED DOWN %.1f s   push (%.1f %.1f %.1f) m/s2 ship axes   %s"),
+			Movement->GetCurrentKnockdownSeconds(), Push.X, Push.Y, Push.Z, *Movement->DescribeFooting()),
+			Y, FLinearColor(1.0f, 0.45f, 0.0f));
+	}
+	else
+	{
+		DrawLine(FString::Printf(TEXT("footing  intact%s   knocked down %.1f s this interval   %s"),
+			Movement->IsStrappedIn() ? TEXT(" (strapped in)") : TEXT(""),
+			Movement->GetKnockedDownSeconds(), *Movement->DescribeFooting()), Y);
+	}
+
 	DrawLine(FString::Printf(TEXT("elapsed              %.1f s"), ElapsedSeconds), Y);
 	DrawLine(FString::Printf(TEXT("drift now            %.3f cm"), Movement->GetDriftCm()), Y);
 
@@ -128,10 +164,20 @@ void ASFFrameDriftHUD::DrawHUD()
 	const double PeakDrift = Movement->GetPeakDriftCm();
 	const bool bWithinBudget = bMeasured && PeakDrift <= 1.0;
 
+	// Orange, not red, when the interval had him on the deck: the figure is over
+	// budget because he slid, and the word beside it says so. Red stays for a figure
+	// over budget with him on his feet, which is the carry's own failure.
+	//
+	// Read from the state as well as the tally, for the reason the footing line gives:
+	// through the settle window the tally is zero on every frame, and this colour would
+	// go red for the very spec 6 case the mechanic was written to produce.
+	const bool bDownThisInterval = Movement->IsKnockedDown() || Movement->GetKnockedDownSeconds() > 0.0;
 	DrawLine(
-		FString::Printf(TEXT("drift peak           %.3f cm   [budget 1.0 cm/min]"), PeakDrift),
+		FString::Printf(TEXT("drift peak           %.3f cm   [budget 1.0 cm/min]%s"), PeakDrift,
+			bDownThisInterval ? TEXT("   <- includes his slide while knocked down") : TEXT("")),
 		Y,
-		bWithinBudget ? FLinearColor::Green : (bMeasured ? FLinearColor::Red : FLinearColor::Yellow));
+		bWithinBudget ? FLinearColor::Green
+			: (bMeasured ? (bDownThisInterval ? FLinearColor(1.0f, 0.45f, 0.0f) : FLinearColor::Red) : FLinearColor::Yellow));
 
 	const FString MeasuredWarning = bMeasured
 		? FString()
@@ -163,14 +209,13 @@ void ASFFrameDriftHUD::DrawHUD()
 	const bool bBestMeasured = BestSeconds >= MinimumValidMeasurementSeconds;
 	const bool bBestWithinBudget = bBestMeasured && BestPeakDrift <= 1.0;
 
-	const FLinearColor BestColor = bBestWithinBudget
-		? FLinearColor::Green
-		: (bBestMeasured ? FLinearColor::Red : FLinearColor::Yellow);
-
+	const bool bBestHadHimDown = Movement->GetBestCompletedKnockedDownSeconds() > 0.0;
 	DrawLine(
-		FString::Printf(TEXT("best drift peak      %.3f cm   [budget 1.0 cm/min]"), BestPeakDrift),
+		FString::Printf(TEXT("best drift peak      %.3f cm   [budget 1.0 cm/min]%s"), BestPeakDrift,
+			bBestHadHimDown ? TEXT("   <- includes a slide while knocked down") : TEXT("")),
 		Y,
-		BestColor);
+		bBestWithinBudget ? FLinearColor::Green
+			: (bBestMeasured ? (bBestHadHimDown ? FLinearColor(1.0f, 0.45f, 0.0f) : FLinearColor::Red) : FLinearColor::Yellow));
 
 	DrawLine(
 		FString::Printf(TEXT("best measured        %.1f s of settled time"), BestSeconds),
@@ -205,24 +250,21 @@ void ASFFrameDriftHUD::DrawHUD()
 		DrawLine(FString::Printf(TEXT("angular rate         %.1f deg/s   [combined ceiling %.1f]"),
 			FMath::RadiansToDegrees(Omega.Size()), CombinedCeilingDegPerSec), Y);
 
-		// omega x (omega x r) is the centripetal term of one frame only. The angular
-		// velocity and the ship's linear acceleration are both world-space while the
-		// offset is ship-local, so mixing them produced a figure wrong by an amount
-		// that swung with the ship's attitude. Bring the two vectors into the ship.
-		const FTransform FrameTransform = Frame->GetFrameTransform();
-		const FVector LocalOmega = FrameTransform.InverseTransformVectorNoScale(Omega);
-		const FVector LocalAccel = FrameTransform.InverseTransformVectorNoScale(
-			Ship->GetLinearAccelMetersPerSecSq());
-
-		const FVector Felt = StarForge::ShipFrame::ComputeFeltAcceleration(
-			LocalAccel, LocalOmega, Local / 100.0);
-
-		const bool bKnockdown = StarForge::ShipFrame::ExceedsGravPlateLimit(Felt);
+		// The figure the footing decision was taken on, not a second computation of it
+		// here: the screen has to show the number the mechanic saw, or the two can
+		// disagree and nobody will know which to believe.
+		const FVector Felt = Movement->GetFeltAccelerationMetersPerSecSq();
+		const bool bOverLimit = StarForge::ShipFrame::ExceedsGravPlateLimit(Felt);
 		DrawLine(
-			FString::Printf(TEXT("felt acceleration    %.2f m/s2   [limit %.2f]"),
-				Felt.Size(), StarForge::ShipFrame::GravPlateLimitMetersPerSecSq),
+			FString::Printf(TEXT("felt acceleration    %.2f m/s2   [limit %.2f]%s"),
+				Felt.Size(), StarForge::ShipFrame::GravPlateLimitMetersPerSecSq,
+				(bOverLimit && !Movement->IsKnockedDown())
+					? TEXT("   over the limit, on his feet: strapped in or sf.Knockdown 0")
+					: TEXT("")),
 			Y,
-			bKnockdown ? FLinearColor::Yellow : FLinearColor::White);
+			Movement->IsKnockedDown()
+				? FLinearColor(1.0f, 0.45f, 0.0f)
+				: (bOverLimit ? FLinearColor::Yellow : FLinearColor::White));
 	}
 	else
 	{
@@ -241,6 +283,7 @@ void ASFFrameDriftHUD::DrawHUD()
 	// still, and two HUDs cannot both be on screen at once.
 	DrawLine(TEXT(""), Y);
 	DrawFlightBlock(Y);
+	DrawGunnerBlock(Y);
 }
 
 void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
@@ -389,4 +432,61 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 	DrawLine(FString::Printf(TEXT("throttles  commanded %d of %d wide open   spooled %d%s"),
 		Commanded, Count, Spooled, Commanded > 0 ? TEXT("  -- SATURATED") : TEXT("")),
 		Y, Commanded > 0 ? FLinearColor::Yellow : FLinearColor::White);
+}
+
+void ASFFrameDriftHUD::DrawGunnerBlock(double& Y)
+{
+	const ASFTestShip* Ship = Cast<ASFTestShip>(
+		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+	const USFGunnerStationComponent* Gunner = Ship ? Ship->GetGunnerStation() : nullptr;
+	const USFTurretComponent* Turret = Gunner ? Gunner->GetTurret() : nullptr;
+
+	// Red, for the same reason the flight block says "array NOT built" in red: a block
+	// that goes quiet when the thing it reports disappears is indistinguishable from
+	// one reporting a turret at rest.
+	if (!Gunner || !Turret)
+	{
+		DrawLine(TEXT("gunner  -- ship has no gunner station or no turret, nothing is aiming"), Y, FLinearColor::Red);
+		return;
+	}
+
+	// Who holds the post comes first, with the same three colours the pilot line uses:
+	// yellow for nobody, orange for somebody who is declining, green for somebody gunning.
+	const bool bOccupied = Gunner->IsOccupied();
+	const bool bGunning = Gunner->IsOperatorGunning();
+	const FLinearColor GunnedByColour = !bOccupied
+		? FLinearColor::Yellow
+		: (bGunning ? FLinearColor::Green : FLinearColor(1.0f, 0.45f, 0.0f));
+
+	DrawLine(FString::Printf(TEXT("gunned by %s%s"),
+		*Gunner->GetOperatorDisplayName(),
+		(bOccupied && !bGunning) ? TEXT(" (standing down)") : TEXT("")),
+		Y, GunnedByColour);
+
+	const StarForge::Turret::FTurretAim Aim = Turret->GetAim();
+	const StarForge::Turret::FTurretAim Bearing = Turret->GetLastBearing();
+	const FString BearingText = Turret->HasBearing()
+		? FString::Printf(TEXT("yaw %.1f pitch %.1f"),
+			FMath::RadiansToDegrees(Bearing.YawRad), FMath::RadiansToDegrees(Bearing.PitchRad))
+		: FString(TEXT("none"));
+
+	// Green only for on target. A turret at its stop is orange, not green, because its
+	// angle alone would read as on target; no target and no command are yellow, the
+	// colour of a post nobody is at.
+	FLinearColor StateColour = FLinearColor::White;
+	switch (Turret->GetState())
+	{
+	case ESFTurretState::OnTarget: StateColour = FLinearColor::Green; break;
+	case ESFTurretState::CannotBear: StateColour = FLinearColor(1.0f, 0.45f, 0.0f); break;
+	case ESFTurretState::NoTarget:
+	case ESFTurretState::Uncommanded: StateColour = FLinearColor::Yellow; break;
+	default: break;
+	}
+
+	DrawLine(FString::Printf(TEXT("turret  aim yaw %.1f pitch %.1f deg   bearing %s   %s   firing %s"),
+		FMath::RadiansToDegrees(Aim.YawRad), FMath::RadiansToDegrees(Aim.PitchRad),
+		*BearingText,
+		USFTurretComponent::StateName(Turret->GetState()),
+		Turret->IsFiring() ? TEXT("on") : TEXT("off")),
+		Y, StateColour);
 }

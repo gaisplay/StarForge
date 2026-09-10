@@ -81,7 +81,7 @@ void USFPilotStationComponent::BeginPlay()
 
 FString USFPilotStationComponent::GetOperatorDisplayName() const
 {
-	const FString Name = IsOccupied() ? Operator->GetOperatorName() : TEXT("unoccupied");
+	const FString Name = Super::GetOperatorDisplayName();
 
 	// The doubt rides along in the name because the name is what both readouts print,
 	// and a degraded instrument that only says so once at startup is a degraded
