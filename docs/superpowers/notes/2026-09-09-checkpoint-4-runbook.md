@@ -91,12 +91,21 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-09-checkpoin
 ## Запуск A — стенд по умолчанию не сломан (2 минуты)
 
 ```bash
-"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.DriftDebug 1"
+"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.DriftDebug 1, sf.Knockdown 0"
 ```
+
+**`sf.Knockdown 0` здесь обязателен, и это правка от 2026-09-10.** План «в» включил
+сбивание с ног (§6) по умолчанию, а скриптовый профиль идёт над порогом гравиплит
+почти непрерывно: без этого ключа стоящего роняет на десятом кадре, `peak drift`
+уходит к 913 см вместо ожидаемого сантиметра, и запуск, который должен показать
+«стенд не сломан», прочитается как отказ переноса. Этот запуск воспроизводит базу
+точки проверки 1, а её снимали до появления механики — значит и рига должна быть
+та же. Само сбивание проверяется точкой проверки 5, отдельно и нарочно.
 
 Ожидается на панели: `flight mode: scripted profile (sf.ShipProfile 1)` жёлтым,
 `flown by console (standing down)` оранжевым, `intent lin (0.00 0.00 0.00)`,
-`ship speed` по синусоиде до 400, `angular rate` ~216.
+`ship speed` по синусоиде до 400, `angular rate` ~216, строка
+`footing  KNOCKDOWN OFF (sf.Knockdown 0)` жёлтым.
 
 1. **Где ты стоишь.** Первым делом записать `ship-local position`. Кресло/спавн —
    `0 0 -300`. Если ты у стены, а не в центре — это находка №1 обзора (первые
@@ -204,17 +213,32 @@ peak`, `jitter peak` должны стоять на `0.000`; красных `CAR
 ## Запуск C — сидя через полный манёвр (2 минуты)
 
 ```bash
-"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.ConsoleOperator 0, sf.DriftDebug 1"
+"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.ConsoleOperator 0, sf.DriftDebug 1, sf.Knockdown 0"
 ```
 
 Скриптовый профиль включён (по умолчанию), консоль пост не берёт. Ожидается:
-`flown by unoccupied` жёлтым, корабль летит профиль.
+`flown by unoccupied` жёлтым, корабль летит профиль, строка
+`footing  KNOCKDOWN OFF (sf.Knockdown 0)` жёлтым.
 
-Подойти к креслу, `E` на ходу. Ожидается: `flown by player (standing down)`
-**оранжевым** — пост занят, но стенд летит сам, и клавиши на корабль не действуют.
-Сидеть неподвижно до `measured` ≥ 55 через полный манёвр 400 м/с и 180°/с.
-Записать `drift peak`, `jitter peak`, `skipped`. Это самый жёсткий тест сидящего
-пилота из возможных на этом стенде.
+**`sf.Knockdown 0` в строке запуска и включение его обратно после посадки — правка от
+2026-09-10, и без неё запуск невыполним.** Скриптовый профиль идёт над порогом
+гравиплит почти непрерывно, стоящего роняет на десятом кадре — примерно за одну
+шестую секунды, — а лежачему `E` отвечает `No seat while knocked down.` Сесть
+человек не успеет никогда. Поэтому садиться надо при выключенной механике, а
+включать её уже сидя.
+
+1. Подойти к креслу, `E` на ходу. Ожидается: `flown by player (standing down)`
+   **оранжевым** — пост занят, но стенд летит сам, и клавиши на корабль не действуют.
+2. `~` → **`sf.Knockdown 1`**. Ожидается: строка `footing` меняется с
+   `KNOCKDOWN OFF` на **`intact`**, и человека **не роняет**: сидящий пристёгнут и
+   не теряет опоры, что бы корабль ни делал. Если уронило сидящего — записать и
+   остановиться, это отказ, а не механика.
+3. Сидеть неподвижно до `measured` ≥ 55 через полный манёвр 400 м/с и 180°/с.
+   Записать `drift peak`, `jitter peak`, `skipped`.
+
+Это самый жёсткий тест сидящего пилота из возможных на этом стенде, и с шагом 2 он
+заодно закрывает пункт «пристёгнутый в кресле», который бланк точки проверки 5
+числит непроверенным.
 
 ---
 
