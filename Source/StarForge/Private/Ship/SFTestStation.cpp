@@ -148,8 +148,14 @@ ASFTestStation::ASFTestStation()
 	//
 	// It does not touch the ship's. Docked, the ship's cabin ends at station-local -610
 	// and this begins at -600: ten centimetres of wall, deliberately unclaimed.
-	const double InteriorHalfYCm = (Station::HalfYCm + Station::TunnelLengthCm) * 0.5;        // 500
-	const double InteriorCentreYCm = Station::HalfYCm - InteriorHalfYCm;             // -100
+	// The span runs from the tunnel's outboard mouth at -600 to the far wall at +400, so it
+	// is 2*HalfYCm + TunnelLengthCm long -- a thousand centimetres, half-extent 500, centred
+	// at -100. Writing it as (HalfYCm + TunnelLengthCm)/2 gives 300 and looks close enough to
+	// pass a reading; it leaves the whole tunnel and two metres of the station's own deck
+	// inside no volume at all, which is a man who stays bound to the ship for four metres
+	// after walking out of it.
+	const double InteriorHalfYCm = (2.0 * Station::HalfYCm + Station::TunnelLengthCm) * 0.5;  // 500
+	const double InteriorCentreYCm = Station::HalfYCm - InteriorHalfYCm;                      // -100
 
 	Interior = CreateDefaultSubobject<USFInteriorVolumeComponent>(TEXT("Interior"));
 	Interior->SetupAttachment(Root);
