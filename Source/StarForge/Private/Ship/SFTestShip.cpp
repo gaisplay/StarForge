@@ -518,6 +518,22 @@ void ASFTestShip::Tick(float DeltaSeconds)
 
 void ASFTestShip::TickScriptedProfile()
 {
+	// The profile commands a physics body, and a hull that is not simulating is not one:
+	// the velocities below go nowhere, and yet the ship reads them straight back out of
+	// Chaos into its readout, printing speed it never had beside the word "docked". The
+	// lock on the thruster array closes the other route into that same lie and cannot
+	// close this one, because this writes velocity rather than force.
+	//
+	// Asked as "is this body simulating" rather than as a question about docking on
+	// purpose: that is the profile's true precondition, and putting it this way means the
+	// rig never learns that docking exists, exactly as the pilot's post never does.
+	//
+	// Silent, because it would run every frame.
+	if (!Hull->IsSimulatingPhysics())
+	{
+		return;
+	}
+
 	const double Phase = 2.0 * UE_DOUBLE_PI * ElapsedSeconds / ProfilePeriodSeconds;
 
 	const FVector VelocityCms(PeakSpeedCms * FMath::Sin(Phase), 0.0, 0.0);

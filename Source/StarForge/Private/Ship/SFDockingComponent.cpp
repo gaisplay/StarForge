@@ -211,13 +211,23 @@ void USFDockingComponent::LogRefusal() const
 	UE_LOG(LogStarForge, Warning, TEXT("Dock: refused -- %s"), *Detail);
 }
 
-void USFDockingComponent::EnterCapture()
+bool USFDockingComponent::EnterCapture()
 {
 	AActor* Owner = GetOwner();
 	UPrimitiveComponent* Hull = GetHull();
 	if (!Owner || !Hull || !Port || !StationPort)
 	{
-		return;
+		// Reaching this means a port or the owner went away between ResolvePorts and here,
+		// which no run can currently do -- hence an error rather than a refusal. It names what
+		// was missing, because "the capture did not start" on its own sends the reader to check
+		// all four.
+		UE_LOG(LogStarForge, Error,
+			TEXT("Dock: capture did not start -- no %s."),
+			!Owner ? TEXT("owner")
+				: !Hull ? TEXT("hull")
+				: !Port ? TEXT("port on this ship")
+				: TEXT("station port"));
+		return false;
 	}
 
 	// Order matters and is this: lock, clear, stop simulating, then take the two ends.
@@ -248,6 +258,8 @@ void USFDockingComponent::EnterCapture()
 
 	CaptureElapsedSeconds = 0.0;
 	State = ESFDockingState::Capturing;
+
+	return true;
 }
 
 void USFDockingComponent::AdvanceCapture(double DeltaSeconds)
@@ -270,12 +282,13 @@ void USFDockingComponent::AdvanceCapture(double DeltaSeconds)
 		return;
 	}
 
-	// Eased, not linear, and this is a correctness requirement rather than polish. The
-	// frame component differences its owner's position twice to get acceleration, and a
-	// linear run-in steps the velocity from zero to its full value inside one frame: over
-	// three metres in a second that is 180 m/s^2 at sixty frames, and every standing
-	// occupant would be knocked off his feet at the start of every dock. Smoothstep peaks
-	// at 6d/T^2 -- 18.0 m/s^2 at the window's edge, under spec 6's 19.62 by eight per cent.
+	// Eased, not linear, though it does not buy as much as it looks. The frame component
+	// differences its owner's position twice to get acceleration, and a linear run-in
+	// steps the velocity from zero to its full value inside one frame: over three metres
+	// in a second that is 180 m/s^2 at sixty frames. Smoothstep peaks at 6d/T^2 instead
+	// -- 23.0 m/s^2 at the window's edge once the port's 4.80 m lever arm is counted into
+	// d, which is still over spec 6's 19.62 ceiling. See CaptureSeconds for the whole
+	// arithmetic and for why that is accepted rather than fixed.
 	const double Eased = Alpha * Alpha * (3.0 - 2.0 * Alpha);
 
 	// A teleport, like the carry itself. The hull is kinematic and the occupant rides it
@@ -291,6 +304,10 @@ void USFDockingComponent::CompleteCapture()
 	AActor* Owner = GetOwner();
 	if (!Owner || !StationPort)
 	{
+		// Terminal if it is ever reached: the hull stays not simulating, not attached and mid
+		// pose, and no path leads out of Capturing again. Left that way on purpose -- nothing
+		// in the slice can destroy or stream out the station, and a recovery no run can reach
+		// is mechanism nobody could test.
 		return;
 	}
 
@@ -316,6 +333,11 @@ bool USFDockingComponent::RequestDock()
 {
 	if (State != ESFDockingState::Free)
 	{
+		// Said out loud for the reason Toggle gives: a command that does nothing is otherwise
+		// indistinguishable from one that never arrived. Edge-triggered, so this is one line
+		// per press and cannot become a torrent.
+		UE_LOG(LogStarForge, Display, TEXT("Dock: ignored -- the ship is already %s."),
+			State == ESFDockingState::Docked ? TEXT("docked") : TEXT("capturing"));
 		return false;
 	}
 
@@ -333,7 +355,12 @@ bool USFDockingComponent::RequestDock()
 		return false;
 	}
 
-	EnterCapture();
+	// The line below is read as a commitment -- the F key and any automation take this
+	// bool for one -- so it is printed only by a capture that actually began.
+	if (!EnterCapture())
+	{
+		return false;
+	}
 
 	UE_LOG(LogStarForge, Display,
 		TEXT("Dock: capturing, %.1f m, %.1f m/s, fwd %.1f deg, up %.1f deg"),
@@ -348,8 +375,11 @@ bool USFDockingComponent::RequestUndock()
 {
 	// Docked and nothing else. A capture is not cancellable (see Toggle), and letting go
 	// of a hull half way between two poses would hand Chaos a body nobody positioned.
+	// Refused out loud, as in RequestDock: silence here reads exactly like an unbound key.
 	if (State != ESFDockingState::Docked)
 	{
+		UE_LOG(LogStarForge, Display, TEXT("Dock: undock ignored -- the ship is %s."),
+			State == ESFDockingState::Free ? TEXT("not docked") : TEXT("mid-capture"));
 		return false;
 	}
 
@@ -426,8 +456,15 @@ void USFDockingComponent::DockImmediately()
 	}
 
 	// No run-in: the loop rig must not have a single frame in which the ship is adrift,
-	// because the pawn's first tick has to find him standing in a docked cabin.
-	EnterCapture();
+	// because the pawn's first tick has to find him standing in a docked cabin. Completing
+	// a capture that never started would attach a still-simulating hull and call it docked,
+	// which is the claim RequestDock has just stopped making; EnterCapture has already said
+	// what was missing.
+	if (!EnterCapture())
+	{
+		return;
+	}
+
 	CompleteCapture();
 }
 

@@ -72,11 +72,27 @@ public:
 	/**
 	 * How long the run-in takes, in seconds.
 	 *
-	 * Not free to shorten. The run-in is eased, so its peak acceleration is 6d/T^2 for a
-	 * path of d; at the window's edge of 3 m and one second that is 18.0 m/s^2, under the
-	 * 19.62 grav-plate ceiling of spec 6 by eight per cent. Below about 0.958 s -- or with
-	 * DistanceMetres above about 3.27 -- the capture itself starts knocking standing
-	 * occupants off their feet.
+	 * The run-in is eased, so its peak acceleration is 6d/T^2 -- an order of magnitude
+	 * below a linear run-in, which would step the velocity from zero to full inside one
+	 * frame (180 m/s^2 over three metres at sixty frames). It does NOT bring the capture
+	 * under the 19.62 m/s^2 grav-plate ceiling of spec 6, and the arithmetic is written out
+	 * here rather than rounded off, because an earlier version of this comment claimed a
+	 * margin that does not exist:
+	 *
+	 *   - d is the HULL's path, not the distance between the ports. The port sits
+	 *     sqrt(400^2 + 265^2) = 4.80 m off the hull's centre, so turning through the
+	 *     window's 10 degrees of allowed misalignment adds 2 * 4.80 * sin(5 deg) = 0.84 m.
+	 *     At the window's edge d is 3.84 m and 6d/T^2 is 23.0 m/s^2.
+	 *   - The angular term is 6 * 10 deg / T^2 = 1.047 rad/s^2, which is 4.19 m/s^2 at a
+	 *     four-metre radius, and it peaks in the SAME frame: smoothstep's second derivative
+	 *     is largest at alpha 0 and alpha 1, not in the middle.
+	 *   - The first frame is a step of its own: stopping the simulation kills the hull's
+	 *     velocity in one frame, which at the window's 1 m/s limit is 60 m/s^2 at 60 fps.
+	 *
+	 * None of that is compensated, deliberately. The command comes from the pilot's seat and
+	 * a strapped-in occupant cannot be knocked down; the slice has nobody else aboard.
+	 * Deriving this figure from the actual path would be mechanism for a case the slice
+	 * cannot reach -- the moment a standing passenger exists, it stops being optional.
 	 */
 	UPROPERTY(EditAnywhere, Category = "StarForge|Docking")
 	double CaptureSeconds = 1.0;
@@ -139,8 +155,13 @@ private:
 	/** Measures the approach and stores it in SI. Only meaningful while Free. */
 	void UpdateApproach();
 
-	/** Locks, stops simulating, and takes the two ends of the run-in. */
-	void EnterCapture();
+	/**
+	 * Locks, stops simulating, and takes the two ends of the run-in.
+	 *
+	 * False when it did not get that far, so that no caller announces a capture that never
+	 * began: the bool RequestDock returns is read by a key and by automation.
+	 */
+	bool EnterCapture();
 
 	/** Sets the exact mated pose, attaches, and says so. */
 	void CompleteCapture();
