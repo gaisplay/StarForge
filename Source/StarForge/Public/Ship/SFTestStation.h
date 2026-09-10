@@ -8,6 +8,7 @@ class UPointLightComponent;
 class USceneComponent;
 class UStaticMeshComponent;
 class USFDockingPortComponent;
+class USFInteriorVolumeComponent;
 class USFShipFrameComponent;
 
 /**
@@ -43,6 +44,9 @@ public:
 	/** The station's half of the airlock, at the outboard mouth of the tunnel. */
 	USFDockingPortComponent* GetDockingPort() const { return DockingPort; }
 
+	/** The box, the tunnel and everything in them. Whoever walks in rides the station. */
+	USFInteriorVolumeComponent* GetInterior() const { return Interior; }
+
 private:
 	/**
 	 * Builds one wall out of an engine cube. Duplicated from ASFTestShip deliberately:
@@ -64,6 +68,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFDockingPortComponent> DockingPort;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFInteriorVolumeComponent> Interior;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<UPointLightComponent> InteriorLight;

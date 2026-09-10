@@ -12,6 +12,7 @@
 #include "Ship/SFDockingComponent.h"
 #include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
+#include "Ship/SFInteriorVolumeComponent.h"
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
@@ -301,6 +302,16 @@ ASFTestShip::ASFTestShip()
 	Docking = CreateDefaultSubobject<USFDockingComponent>(TEXT("Docking"));
 
 	AddBoxPanel(TEXT("WallYNeg"), FVector(0.0, -Half, 0.0), FVector(Span, PanelThickness, Span));
+
+	// The cabin, out to the inner faces of the panels: half-extent 390 on every axis,
+	// which along +Y is exactly the hatch plane. Everything inside the hull is the ship;
+	// the tunnel and beyond are the station (spec 8), and the two volumes meet at this
+	// plane with the wall's twenty centimetres between them -- ten to each side of the
+	// pair's midline. Nobody is claimed in that gap, and the last binding holds through it.
+	Interior = CreateDefaultSubobject<USFInteriorVolumeComponent>(TEXT("Interior"));
+	Interior->SetupAttachment(Hull);
+	Interior->SetRelativeLocation(FVector::ZeroVector);
+	Interior->SetBoxExtent(FVector(Half - PanelThickness * CubeEdgeCm * 0.5));
 
 	// The room had no light of any kind: a black screen makes the one check that
 	// matters most after drift -- whether the interior holds still in front of the

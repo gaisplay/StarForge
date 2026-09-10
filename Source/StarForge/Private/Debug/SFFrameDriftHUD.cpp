@@ -6,6 +6,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
+#include "Ship/SFDockingComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipFrameComponent.h"
@@ -41,11 +42,16 @@ namespace
 	 * panel bottom of 796; the three red diagnostic lines above add 66 more, and the
 	 * knockdown's footing line is still to come. A line falling off the bottom is the
 	 * defect this panel exists to prevent.
+	 *
+	 * Raised again to 820 for the frame and dock lines: two more at 22 px, plus the
+	 * margin a line needs so it does not sit on the panel's edge. A line falling off the
+	 * bottom is the defect this panel exists to prevent, and it has now been prevented
+	 * three times by the same arithmetic.
 	 */
 	constexpr float PanelX = 20.0f;
 	constexpr float PanelY = 36.0f;
 	constexpr float PanelWidth = 760.0f;
-	constexpr float PanelHeight = 760.0f;
+	constexpr float PanelHeight = 820.0f;
 }
 
 void ASFFrameDriftHUD::DrawLine(const FString& Text, double& Y, const FLinearColor& Color)
@@ -230,6 +236,71 @@ void ASFFrameDriftHUD::DrawHUD()
 	const FVector Local = Movement->GetLocalLocation();
 	DrawLine(FString::Printf(TEXT("ship-local position  %.1f  %.1f  %.1f cm"),
 		Local.X, Local.Y, Local.Z), Y);
+
+	// Who carries him, and what the last handover cost. Yellow until there has been one,
+	// because "no handover yet" and "a handover of zero centimetres" are the same text
+	// otherwise and mean opposite things. Red when the floor under him has belonged to
+	// somebody else for ten frames: that outranks every figure above it, since the carry
+	// is following the frame and the frame is wrong.
+	const int32 Mismatch = Movement->GetFrameMismatchFrames();
+	const bool bNoHandoverYet = Movement->GetLastHandoverText().IsEmpty();
+	DrawLine(
+		FString::Printf(TEXT("frame   bound to %s   last handover: %s"),
+			*Movement->GetFrameName(),
+			bNoHandoverYet ? TEXT("none yet") : *Movement->GetLastHandoverText()),
+		Y,
+		(Mismatch >= 10) ? FLinearColor::Red : (bNoHandoverYet ? FLinearColor::Yellow : FLinearColor::White));
+
+	// The dock line is about the ship, not about whichever carrier he happens to be
+	// standing in: a man on the station still needs to see whether his ship is attached
+	// to it. Found the same way the flight block finds it, for the same reason.
+	const ASFTestShip* DockShip = Cast<ASFTestShip>(
+		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+	const USFDockingComponent* Docking = DockShip ? DockShip->GetDocking() : nullptr;
+
+	if (!Docking)
+	{
+		DrawLine(TEXT("dock    -- no ship with a docking component in the level"), Y, FLinearColor::Red);
+	}
+	else if (!Docking->HasStation())
+	{
+		DrawLine(TEXT("dock    free -- NO STATION in this level"), Y, FLinearColor::Red);
+	}
+	else
+	{
+		switch (Docking->GetState())
+		{
+		case ESFDockingState::Docked:
+			DrawLine(TEXT("dock    docked"), Y, FLinearColor::Yellow);
+			break;
+		case ESFDockingState::Capturing:
+			DrawLine(FString::Printf(TEXT("dock    capturing %.1f of %.1f s"),
+				Docking->GetCaptureElapsedSeconds(), Docking->GetCaptureSeconds()),
+				Y, FLinearColor(1.0f, 0.45f, 0.0f));
+			break;
+		default:
+		{
+			const StarForge::Docking::FDockingApproach Approach = Docking->GetLastApproach();
+			const FVector At = Docking->GetPortOffsetShipLocalMetres();
+			const bool bCanDock = Docking->CanDockNow();
+
+			// Green only when the key would be accepted this instant. A window that
+			// reported itself open while the command would refuse is the same defect as a
+			// turret at its stop reporting itself on target.
+			DrawLine(
+				FString::Printf(TEXT("dock    free | port %.1f m at (%+.1f %+.1f %+.1f) ship  %.1f m/s  fwd %.1f  up %.1f  -- %s"),
+					Approach.Distance, At.X, At.Y, At.Z, Approach.SpeedMetresPerSec,
+					FMath::RadiansToDegrees(Approach.ForwardAngleRad),
+					FMath::RadiansToDegrees(Approach.UpAngleRad),
+					bCanDock ? TEXT("CAN DOCK")
+						: *FString::Printf(TEXT("out of window: %s"),
+							USFDockingComponent::RefusalName(Docking->GetLastRefusal()))),
+				Y,
+				bCanDock ? FLinearColor::Green : FLinearColor::White);
+			break;
+		}
+		}
+	}
 
 	if (Frame && Ship)
 	{

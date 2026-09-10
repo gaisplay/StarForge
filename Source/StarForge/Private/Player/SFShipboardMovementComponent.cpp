@@ -2,6 +2,7 @@
 
 #include "CoreGlobals.h"
 #include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "HAL/IConsoleManager.h"
@@ -85,6 +86,29 @@ USFShipboardMovementComponent::USFShipboardMovementComponent()
 
 void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame)
 {
+	USFShipFrameComponent* OldFrame = ShipFrame.Get();
+
+	// A handover is a change of carrier, not a rebinding to the same one. Walking back
+	// into a volume he never left fires the overlap again, and treating that as a
+	// handover would reset the drift instrument every time he crossed his own doorway.
+	if (OldFrame && NewFrame && OldFrame != NewFrame)
+	{
+		// The angle between the two decks' down vectors. It is the number spec 8 means by
+		// "the gravity direction changes only by the leftover tolerance": mated ports
+		// hold both +Z parallel to within the up-angle limit, so a person walking through
+		// the airlock should read a fraction of a degree here and never ten.
+		const FVector OldDown = -OldFrame->GetFrameTransform().GetUnitAxis(EAxis::Z);
+		const FVector NewDown = -NewFrame->GetFrameTransform().GetUnitAxis(EAxis::Z);
+
+		PendingHandoverOldName = OldFrame->GetOwner()
+			? OldFrame->GetOwner()->GetActorNameOrLabel() : TEXT("none");
+		PendingHandoverNewName = NewFrame->GetOwner()
+			? NewFrame->GetOwner()->GetActorNameOrLabel() : TEXT("none");
+		PendingHandoverGravityTurnDeg = FMath::RadiansToDegrees(
+			FMath::Acos(FMath::Clamp(FVector::DotProduct(OldDown, NewDown), -1.0, 1.0)));
+		bHandoverPending = true;
+	}
+
 	ShipFrame = NewFrame;
 
 	if (NewFrame)
@@ -118,6 +142,22 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 	BestCompletedPeakDriftCm = 0.0;
 	BestCompletedPeakJitterCm = 0.0;
 	BestCompletedKnockedDownSeconds = 0.0;
+
+	// The cross-check belongs to the binding it was taken against.
+	MismatchFrames = 0;
+	LastCrossCheckFrame = TNumericLimits<uint64>::Max();
+	SecondsSinceMismatchLog = 0.0;
+}
+
+FString USFShipboardMovementComponent::GetFrameName() const
+{
+	const USFShipFrameComponent* Frame = ShipFrame.Get();
+	if (!Frame || !Frame->GetOwner())
+	{
+		return TEXT("none");
+	}
+
+	return Frame->GetOwner()->GetActorNameOrLabel();
 }
 
 int64 USFShipboardMovementComponent::GetFramesSinceLastCarry() const
@@ -154,6 +194,7 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 	}
 
 	DetectCarryGap();
+	UpdateFrameCrossCheck(DeltaSeconds);
 
 	// CMC decides what is walkable by comparing a floor normal against gravity, and
 	// gravity points at world down until something says otherwise. A deck rolling at
@@ -261,6 +302,50 @@ void USFShipboardMovementComponent::DetectCarryGap()
 	bHasCarriedOnce = true;
 }
 
+void USFShipboardMovementComponent::UpdateFrameCrossCheck(float DeltaSeconds)
+{
+	const uint64 ThisFrame = GFrameCounter;
+	if (ThisFrame == LastCrossCheckFrame)
+	{
+		return;
+	}
+	LastCrossCheckFrame = ThisFrame;
+
+	// The engine already knows what he is standing on. The base is a component, its owner
+	// is an actor, and that actor either carries the frame he rides or it does not.
+	const UActorComponent* Base = Cast<UActorComponent>(GetMovementBaseObject());
+	const AActor* BaseOwner = Base ? Base->GetOwner() : nullptr;
+	const USFShipFrameComponent* BaseFrame =
+		BaseOwner ? BaseOwner->FindComponentByClass<USFShipFrameComponent>() : nullptr;
+
+	// No base, or a base whose owner carries no frame at all, is not a mismatch. The
+	// first is a carry failure and has two instruments of its own; the second is a crate
+	// or a drone, and standing on one says nothing about which ship you belong to.
+	if (!BaseFrame || BaseFrame == ShipFrame.Get())
+	{
+		MismatchFrames = 0;
+		SecondsSinceMismatchLog = 0.0;
+		return;
+	}
+
+	++MismatchFrames;
+	SecondsSinceMismatchLog += DeltaSeconds;
+
+	// The first line at ten frames -- a sixth of a second, long enough that a single
+	// frame of tick order cannot produce it -- and then one a second for as long as it
+	// lasts. The same reason Carry NOT RUNNING repeats: a single line at frame ten does
+	// not say that the disagreement has been going on for a minute.
+	if (MismatchFrames == 10 || SecondsSinceMismatchLog >= 1.0)
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Standing on %s's floor while bound to %s's frame for %d frames. ")
+			TEXT("One of the two is wrong, and the carry is following the frame."),
+			BaseOwner ? *BaseOwner->GetActorNameOrLabel() : TEXT("nothing"),
+			*GetFrameName(), MismatchFrames);
+		SecondsSinceMismatchLog = 0.0;
+	}
+}
+
 void USFShipboardMovementComponent::CarryWithFrame()
 {
 	const FTransform CurrentFrameTransform = ShipFrame->GetFrameTransform();
@@ -279,6 +364,31 @@ void USFShipboardMovementComponent::CarryWithFrame()
 		/*bSweep=*/false,
 		/*OutHit=*/nullptr,
 		ETeleportType::TeleportPhysics);
+
+	// The instrument spec 8 asks for, and it measures the carry's own delta rather than
+	// the difference between two positions. Between the binding and this call the man may
+	// have taken a step of his own, and his step is his; the carry's delta is exactly the
+	// part the handover caused.
+	//
+	// With both carriers docked it is required to be zero, because neither is moving with
+	// respect to the other -- which is "visually unnoticeable" written as a number. It is
+	// zero for a WRONG binding to a still carrier too, and that is why the negative
+	// controls are judged on the cross-check and on the carry, not on this line.
+	if (bHandoverPending)
+	{
+		LastHandoverJumpCm = Delta.Size();
+		LastHandoverGravityTurnDeg = PendingHandoverGravityTurnDeg;
+		LastHandoverText = FString::Printf(TEXT("%s -> %s, %.3f cm, %.1f deg"),
+			*PendingHandoverOldName, *PendingHandoverNewName,
+			LastHandoverJumpCm, LastHandoverGravityTurnDeg);
+
+		UE_LOG(LogStarForge, Display,
+			TEXT("Frame handover: %s -> %s, first carry moved him %.3f cm, gravity turned %.1f deg"),
+			*PendingHandoverOldName, *PendingHandoverNewName,
+			LastHandoverJumpCm, LastHandoverGravityTurnDeg);
+
+		bHandoverPending = false;
+	}
 
 	const FQuat FrameDelta =
 		CurrentFrameTransform.GetRotation() * LastFrameTransform.GetRotation().Inverse();

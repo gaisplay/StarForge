@@ -7,11 +7,37 @@
 #include "GameFramework/PlayerInput.h"
 #include "Player/SFShipboardMovementComponent.h"
 #include "EngineUtils.h"
+#include "Ship/SFDockingComponent.h"
+#include "Ship/SFInteriorVolumeComponent.h"
+#include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFShipStationComponent.h"
+#include "Ship/SFTestShip.h"
+#include "Ship/SFTestStation.h"
 #include "ShipFrameMath.h"
 #include "StarForgeLog.h"
 #include "Units.h"
+
+namespace
+{
+	/**
+	 * Rebinds the occupant to a named frame regardless of where he is standing.
+	 *
+	 * The negative control for the handover, and the same trick as sf.ShipGravity 0 for
+	 * the carry. With the ship docked it is a legitimate handover and everything stays
+	 * quiet; with the ship undocked and under thrust it is a knowingly wrong binding, and
+	 * the cross-check has to complain within ten frames and the carry has to stop shortly
+	 * after. An instrument that stays calm through that is blind.
+	 *
+	 * Declared here because this is the file that reads it. Empty means "no command", and
+	 * it acts on a change of the value rather than on its level.
+	 */
+	TAutoConsoleVariable<FString> CVarBindFrame(
+		TEXT("sf.BindFrame"), TEXT(""),
+		TEXT("ship|station: bind the occupant to that carrier's frame wherever he is standing. Empty: no command.\n")
+		TEXT("A negative control. Bound to the wrong carrier in flight, the cross-check must warn and the carry must stop."),
+		ECVF_Default);
+}
 
 ASFCharacter::ASFCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<USFShipboardMovementComponent>(
@@ -36,18 +62,44 @@ void ASFCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// The rig has exactly one ship, so wiring is unambiguous. Boarding volumes
-	// arrive with docking in the world phase.
 	if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
 	{
 		USFShipFrameComponent* FoundFrame = nullptr;
 
-		for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+		// First, the engine's own answer. Free, and right at any settled moment.
+		TArray<UPrimitiveComponent*> Overlaps;
+		GetCapsuleComponent()->GetOverlappingComponents(Overlaps);
+		for (UPrimitiveComponent* Component : Overlaps)
 		{
-			if (USFShipFrameComponent* Frame = It->FindComponentByClass<USFShipFrameComponent>())
+			if (const USFInteriorVolumeComponent* Volume = Cast<USFInteriorVolumeComponent>(Component))
 			{
-				FoundFrame = Frame;
+				FoundFrame = Volume->GetOwnerFrame();
 				break;
+			}
+		}
+
+		// Second, the same question asked geometrically. Overlap bookkeeping at BeginPlay
+		// depends on the order components registered, and "whose reference frame am I in"
+		// is not allowed to depend on that. A point in a box is the same answer without
+		// the timing.
+		if (!FoundFrame)
+		{
+			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+			{
+				TArray<USFInteriorVolumeComponent*> Volumes;
+				It->GetComponents<USFInteriorVolumeComponent>(Volumes);
+				for (USFInteriorVolumeComponent* Volume : Volumes)
+				{
+					if (Volume->ContainsPoint(GetActorLocation()))
+					{
+						FoundFrame = Volume->GetOwnerFrame();
+						break;
+					}
+				}
+				if (FoundFrame)
+				{
+					break;
+				}
 			}
 		}
 
@@ -57,11 +109,31 @@ void ASFCharacter::BeginPlay()
 		}
 		else
 		{
+			// Third and last: any frame at all, loudly. A man outside every volume still
+			// has to be carried by something, and the warning is what says the binding was
+			// a guess rather than an answer.
+			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+			{
+				if (USFShipFrameComponent* Frame = It->FindComponentByClass<USFShipFrameComponent>())
+				{
+					Movement->SetShipFrame(Frame);
+					UE_LOG(LogStarForge, Warning,
+						TEXT("SFCharacter bound to %s by search, not by volume: he spawned outside every ")
+						TEXT("interior volume. The binding is a guess."),
+						*It->GetActorNameOrLabel());
+					FoundFrame = Frame;
+					break;
+				}
+			}
+		}
+
+		if (!FoundFrame)
+		{
 			// A rig that silently measures nothing is worse than one that fails.
-			UE_LOG(LogTemp, Warning,
-				TEXT("SFCharacter: found no USFShipFrameComponent in the world. The "
-					 "occupant will stand in world space while the ship flies away, and "
-					 "every drift reading will be a zero that means nothing."));
+			UE_LOG(LogStarForge, Warning,
+				TEXT("SFCharacter: found no USFShipFrameComponent in the world. The occupant will ")
+				TEXT("stand in world space while the ship flies away, and every drift reading will be ")
+				TEXT("a zero that means nothing."));
 		}
 	}
 
@@ -129,6 +201,27 @@ void ASFCharacter::Tick(float DeltaSeconds)
 	PollMovementInput();
 	PollLookInput(DeltaSeconds);
 	PollInteract();
+	PollDockInput();
+	PollBindFrameCommand();
+}
+
+void ASFCharacter::BindFrame(USFShipFrameComponent* Frame)
+{
+	USFShipboardMovementComponent* Movement = GetShipboardMovement();
+	if (!Movement || !Frame)
+	{
+		return;
+	}
+
+	// Re-entering the same volume must not restart the drift instrument. The volume fires
+	// on every entry, and a man stepping in and out of his own doorway would otherwise
+	// erase a good measurement with each step.
+	if (Movement->GetShipFrame() == Frame)
+	{
+		return;
+	}
+
+	Movement->SetShipFrame(Frame);
 }
 
 void ASFCharacter::PollMovementInput()
@@ -239,6 +332,89 @@ void ASFCharacter::PollInteract()
 		ToggleSeat();
 	}
 	bInteractWasDown = bDown;
+}
+
+void ASFCharacter::PollDockInput()
+{
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return;
+	}
+
+	// On the edge, like the interact key: held, it would dock and undock every frame.
+	const bool bDown = PC->IsInputKeyDown(EKeys::F);
+	if (bDown && !bDockWasDown)
+	{
+		// Docking is commanded from the pilot's seat and from nowhere else. Spec 8 puts it
+		// there because it is a flight decision: the pilot is the one who can see the
+		// approach, and a passenger who could dock from the back of the cabin would be
+		// commanding a manoeuvre he has no instrument for.
+		USFPilotStationComponent* Pilot = Cast<USFPilotStationComponent>(GetSeatedStation());
+		if (!Pilot)
+		{
+			// Said out loud, because a key that does nothing is otherwise the same as a
+			// key that is not bound at all -- and this one was pressed on purpose.
+			UE_LOG(LogStarForge, Display, TEXT("Docking is commanded from the pilot's seat."));
+		}
+		else if (USFDockingComponent* Docking = Pilot->GetOwner()->FindComponentByClass<USFDockingComponent>())
+		{
+			Docking->Toggle();
+		}
+		else
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("F pressed in the pilot's seat, but this ship has no docking component."));
+		}
+	}
+	bDockWasDown = bDown;
+}
+
+void ASFCharacter::PollBindFrameCommand()
+{
+	const FString Command = CVarBindFrame.GetValueOnGameThread();
+	if (Command == LastBindFrameCommand)
+	{
+		return;
+	}
+	LastBindFrameCommand = Command;
+
+	if (Command.IsEmpty())
+	{
+		return;
+	}
+
+	USFShipFrameComponent* Frame = nullptr;
+	if (Command.Equals(TEXT("ship"), ESearchCase::IgnoreCase))
+	{
+		for (TActorIterator<ASFTestShip> It(GetWorld()); It; ++It)
+		{
+			Frame = It->GetFrameComponent();
+			break;
+		}
+	}
+	else if (Command.Equals(TEXT("station"), ESearchCase::IgnoreCase))
+	{
+		for (TActorIterator<ASFTestStation> It(GetWorld()); It; ++It)
+		{
+			Frame = It->GetFrameComponent();
+			break;
+		}
+	}
+
+	if (!Frame)
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("sf.BindFrame '%s': no such carrier in this level. Nothing was rebound."), *Command);
+		return;
+	}
+
+	BindFrame(Frame);
+
+	UE_LOG(LogStarForge, Display,
+		TEXT("Frame bound by console to %s (sf.BindFrame). This ignores where he is standing, which is "
+			 "the point: it is a negative control."),
+		Frame->GetOwner() ? *Frame->GetOwner()->GetActorNameOrLabel() : TEXT("nothing"));
 }
 
 void ASFCharacter::ToggleSeat()

@@ -18,6 +18,7 @@ class USFAutomationOperatorComponent;
 class USFTurretComponent;
 class USFDockingPortComponent;
 class USFDockingComponent;
+class USFInteriorVolumeComponent;
 class ASFTargetDrone;
 
 /**
@@ -88,6 +89,9 @@ public:
 	/** Docking lives on the moving side. The station has a port and no mechanism. */
 	USFDockingComponent* GetDocking() const { return Docking; }
 
+	/** The cabin as a volume. Whoever walks in rides this ship's frame. */
+	USFInteriorVolumeComponent* GetInterior() const { return Interior; }
+
 	/** What the gunner post's automation tracks. Spawned by BeginPlay; null if that failed. */
 	ASFTargetDrone* GetTargetDrone() const { return TargetDrone; }
 
@@ -156,6 +160,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFDockingComponent> Docking;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFInteriorVolumeComponent> Interior;
 
 	/** The pivot the turret turns; the cone below is attached to it. */
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")

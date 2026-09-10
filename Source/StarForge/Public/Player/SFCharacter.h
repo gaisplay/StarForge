@@ -7,6 +7,7 @@
 
 class UCameraComponent;
 class USFShipboardMovementComponent;
+class USFShipFrameComponent;
 class USFShipStationComponent;
 
 /**
@@ -38,6 +39,12 @@ public:
 	bool IsSeated() const { return SeatedStation != nullptr; }
 	USFShipStationComponent* GetSeatedStation() const { return SeatedStation; }
 
+	/**
+	 * Rides the given frame from now on. Called by an interior volume on entry and by
+	 * sf.BindFrame; nothing else has business changing it.
+	 */
+	void BindFrame(USFShipFrameComponent* Frame);
+
 	/** Degrees of view rotation per second of held arrow key. */
 	UPROPERTY(EditAnywhere, Category = "StarForge|Input")
 	double LookRateDegPerSec = 90.0;
@@ -51,6 +58,12 @@ private:
 	void PollLookInput(float DeltaSeconds);
 	void PollInteract();
 
+	/** F, from the pilot's seat: docks or undocks. Says so from anywhere else. */
+	void PollDockInput();
+
+	/** sf.BindFrame, acted on when the value changes. The negative control's door. */
+	void PollBindFrameCommand();
+
 	/** Tries to take the nearest station within reach, or leaves the current one. */
 	void ToggleSeat();
 
@@ -62,4 +75,10 @@ private:
 
 	/** Edge detection for the interact key: held is not pressed. */
 	bool bInteractWasDown = false;
+
+	/** Edge detection for the dock key: held is not pressed. */
+	bool bDockWasDown = false;
+
+	/** Last value seen on sf.BindFrame, so it acts on a change and not on a level. */
+	FString LastBindFrameCommand;
 };

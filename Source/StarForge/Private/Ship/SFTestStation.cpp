@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Ship/SFDockingPortComponent.h"
+#include "Ship/SFInteriorVolumeComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "StarForgeLog.h"
 #include "UObject/ConstructorHelpers.h"
@@ -139,6 +140,24 @@ ASFTestStation::ASFTestStation()
 	DockingPort->SetupAttachment(Root);
 	DockingPort->SetRelativeLocation(FVector(0.0, -Station::HalfYCm - Station::TunnelLengthCm, TunnelPortZ));
 	DockingPort->SetRelativeRotation(FRotator(0.0, -90.0, 0.0));
+
+	// The box plus the tunnel: Y from -600 (the tunnel's outboard mouth) to +400, so the
+	// centre is at -100 and the half-extent 500. X and Z reach the inner faces of the
+	// walls. The volume is wider than the tunnel along X and Z, which costs nothing --
+	// the extra is inside solid panels, where a pawn cannot be.
+	//
+	// It does not touch the ship's. Docked, the ship's cabin ends at station-local -610
+	// and this begins at -600: ten centimetres of wall, deliberately unclaimed.
+	const double InteriorHalfYCm = (Station::HalfYCm + Station::TunnelLengthCm) * 0.5;        // 500
+	const double InteriorCentreYCm = Station::HalfYCm - InteriorHalfYCm;             // -100
+
+	Interior = CreateDefaultSubobject<USFInteriorVolumeComponent>(TEXT("Interior"));
+	Interior->SetupAttachment(Root);
+	Interior->SetRelativeLocation(FVector(0.0, InteriorCentreYCm, 0.0));
+	Interior->SetBoxExtent(FVector(
+		Station::HalfXCm - Station::PanelThickness * Station::CubeEdgeCm * 0.5,
+		InteriorHalfYCm,
+		Station::HalfZCm - Station::PanelThickness * Station::CubeEdgeCm * 0.5));
 
 	InteriorLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("InteriorLight"));
 	InteriorLight->SetupAttachment(Root);
