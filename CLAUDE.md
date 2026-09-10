@@ -300,6 +300,23 @@ Things in the code that look like mistakes and are not:
   under the scripted profile a knocked-down occupant was measured at 358 m/s inside the
   eight-metre cabin, stopped by the walls and nothing else.
 
+- **`SleepFamily = ESleepFamily::Custom` with `CustomSleepThresholdMultiplier = 0` on the
+  hull.** Two lines in `ASFTestShip`'s constructor that look like leftover tuning and are
+  the difference between a ship that flies and one that does not. Chaos sleeps a body whose
+  per-step velocity change stays under a threshold, and that change shrinks as the frame rate
+  rises: a full roll gains 0.05 rad/s per step at 60 fps and stays awake, gains 0.0075 at 400
+  and is re-slept inside the step, losing what it gained. Above about 250 fps the ship simply
+  stops answering roll and pitch while the readout reports the whole commanded 1.6 MNm as
+  achieved. A multiplier of zero means the hull sleeps only when exactly motionless, so the
+  first step of any commanded thrust keeps it awake. Waking the body wherever a wrench is
+  applied was tried first and measured to change nothing — being awake is not what is in
+  question — and the reason it cannot work is written where that attempt stood.
+- **A second console key, `F1`, in `Config/DefaultInput.ini`.** The engine binds the console
+  to `Tilde` alone, and on a keyboard layout that does not produce Tilde from the key left of
+  "1" the console never opens — silently, with nothing in the log. It cost a whole run of
+  checkpoint 4 before it was understood, and every manual check that needs a command mid-run
+  is impossible without it. `Tilde` is kept, so a Latin layout behaves exactly as before.
+
 When reading the checkpoint HUD: **check the measured-time line before the drift
 figure.** A drift of zero is what both a perfect minute and a dead instrument look
 like, and only `measured` tells them apart. And read the `footing` line before judging a
