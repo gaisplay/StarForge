@@ -163,18 +163,21 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 ## Current state
 
-**Stage 2 is finished, merged, and its branch deleted. All of it is on `main`**, as
-merge commit `8ffa63b` over thirty-four commits. 37 headless tests, clean build.
-There is no stage-2 branch left to look for.
+**Stage 2 is finished in full — all three of its plans — and every commit is on `main`.**
+The flight maths and the ship on Chaos landed as `8ffa63b`; the pilot's post came with it;
+the gunner's post, the automation operator, the target drone and the grav-plate knockdown
+of §6 landed as `41a8f80` over twenty-three commits. 56 headless tests, clean build.
 
 The ship is a Chaos rigid body flown by the maths from `StarForgeCore`. It has a data
 asset (`Content/Ships/DA_TestShip`), a thruster array component that reads mass
 properties back from Chaos, a closed control loop, and a flight readout on screen and
 in the log. The loop is owned by `USFPilotStationComponent`, which asks whoever holds
-the post for an intent through `ISFStationOperator` — the console operator and the
-player are two implementations of that one interface, and the station cannot tell them
-apart. That indifference is the load-bearing claim of spec §4; a second station in the
-next plan tests it.
+the post for an intent through `ISFStationOperator` — the console operator, the player
+and the ship's own automation are three implementations of that one interface, and no
+station can tell them apart. That indifference is the load-bearing claim of spec §4, and
+it is no longer theoretical: a player flying from the pilot's seat and automation tracking
+a drone from the gunner's were logged in the same millisecond of the same frame, with
+neither post nor hull noticing the difference.
 
 **The risk that made stage 2a open with a measurement is gone.** Checkpoint 1 was
 earned against a ship that moved by setting its transform; it was re-earned against a
@@ -182,47 +185,52 @@ simulated body: ninety unbroken seconds, zero drift, zero jitter, no skipped car
 the movement base never once changing. Figures and the negative control are in
 `docs/superpowers/notes/2026-09-08-checkpoint-1-rerun-results.md`.
 
-**Every flight check passes, and all of them ran headlessly.** Forward thrust reaches
-200.0 m/s and saturates at exactly 800 kN; a full roll settles at exactly 180.0 deg/s on
-the roll axis and a full pitch at exactly 120.0 on pitch, with nothing on the other two;
-a pure torque produces no linear speed; with the scripted profile on, the station stands
-down and commands nothing. The hull's inertia reads 533 333 kg m², which is
-`m(a²+b²)/12` for an 8 m cube of 50 t to the unit — the SI/centimetre boundary is right
-end to end.
+**Every flight check passes.** Forward thrust reaches 200.0 m/s and saturates at exactly
+800 kN; a full roll settles at exactly 180.0 deg/s on the roll axis and a full pitch at
+exactly 120.0 on pitch, with nothing on the other two; a pure torque produces no linear
+speed; with the scripted profile on, the station stands down and commands nothing. The
+hull's inertia reads 533 333 kg m², which is `m(a²+b²)/12` for an 8 m cube of 50 t to the
+unit — the SI/centimetre boundary is right end to end.
 
-**What no machine has checked.** Nobody has actually sat down. No surviving log records
-a seat taken by a player, because a headless run has no hands: the seating path, braking
-on a released stick, walking under thrust, and the whole gamepad branch are compiled,
-reviewed and reasoned about, not observed. The runbook and the form for that sitting are
-`docs/superpowers/notes/2026-09-09-checkpoint-4-runbook.md` and `-results.md`. Two of its
-warnings cannot come from the instrument: sitting down is a single teleport the drift
-gauge does not know about, so taking the seat from a standstill prints the distance to
-the chair as drift — press the key on the move; and the interior flies with the occupant,
-so a ship turning at 180 deg/s changes nothing on screen, which is the design working and
-reads like nothing happening.
+**Those rates are now checked at four frame rates, not one, and that is not pedantry.**
+Until 2026-09-10 every one of them was measured only at a fixed 60 fps, and "a full roll
+settles at exactly 180.0" was true there and false above about 250 fps, where the hull slept
+through its own thrusters. When adding a flight check, run it at `-fps=400` as well as
+`-fps=60`; a rate that holds at one and not the other is the shape this project's worst
+defect took.
 
-**Stage 2's plan «в» is done on `feat/gunner-station` and both manual checkpoints have been
-passed by a person.** Turret aiming, a gunner station, an automation operator holding it, a
-target drone, and the grav-plate knockdown of §6. 56 headless tests.
+**Both manual checkpoints have been passed by a person, on 2026-09-10.** Checkpoint 4 (the
+pilot's seat) had been owed since the previous stage; checkpoint 5 (turret, crew, knockdown)
+closed this one. The forms carry the figures and the logs sit in `notes/evidence/` beside
+them. Across five interactive runs there was not one `CARRY NOT RUNNING`, not one
+`CARRY FAILED`, and not one skipped carry — a knocked-down occupant stays aboard, which is
+the distinction §6 exists to draw. Three independent measurements of the grav-plate threshold
+— 146.6 deg/s at the cabin's centre, 123.2 at the side wall, 178.4 standing up out of the
+seat — all landed on `sqrt(19.62/r)` to two decimals.
 
-Checkpoint 4 (the pilot's seat) and checkpoint 5 (turret, crew, knockdown) were both run by
-hand on 2026-09-10; the forms carry the figures and the logs are in `notes/evidence/`. Across
-five interactive runs there was not one `CARRY NOT RUNNING`, not one `CARRY FAILED`, and not
-one skipped carry — a knocked-down occupant stays aboard, which is the distinction §6 exists
-to draw. Three independent measurements of the grav-plate threshold — 146.6 deg/s at the
-centre, 123.2 at the side wall, 178.4 standing up from the seat — all landed on
-`sqrt(19.62/r)` to two decimals.
+**Two defects were found by hand that no headless check in this project could have caught**,
+and both are fixed: the hull fell asleep and stopped answering roll and pitch above about
+250 fps, and the console never opened at all on a non-Latin keyboard layout, silently. Every
+headless run here is a fixed 60 fps, so the first lived entirely above the tested range while
+"a full roll settles at exactly 180.0 deg/s" stayed true of the rig and false of the game.
+**Read the two results forms before trusting any figure older than 2026-09-10.**
 
-**Two defects were found by hand that no headless check could have caught**, and both are
-fixed: the hull fell asleep and stopped answering roll and pitch above about 250 fps (every
-headless run is a fixed 60), and the console never opened on a non-Latin keyboard layout,
-silently. Read the two results forms before trusting any figure older than 2026-09-10.
+Two warnings from checkpoint 4 that the instrument cannot give and that still hold: sitting
+down is a single teleport the drift gauge does not know about, so taking the seat from a
+standstill prints the distance walked to the chair as drift — measured at 46.429 cm from
+46.5 cm away, so press the key on the move; and the interior flies with the occupant, so a
+ship turning at 180 deg/s changes nothing on screen, which is the design working and reads
+like nothing happening.
 
-**Next action:** merge `feat/gunner-station` into `main` with `--no-ff`, then the stage-3
-handoff. Still open, and neither blocks the merge: no gamepad exists to observe the analog
-input path, and §6's "dragged across the deck" is marked inexact — a knocked-down man is
-thrown about the cabin, ceiling included, and the decision between accepting that and damping
-it is deliberately deferred.
+**Next action:** the stage-3 handoff, then plan stage 3 — station, docking port, handing the
+reference frame over in an airlock.
+
+Two things are open, and neither blocked the merge. No gamepad exists, so the analog input
+path is compiled and unit-tested but has never been watched. And §6's "dragged across the
+deck" is **marked inexact**: a knocked-down man is thrown about the cabin, ceiling included,
+because friction bounds only the component along the deck. Accepting that and rewriting the
+sentence, or damping the component across the deck, are different games; the choice is
+deliberately deferred and the spec says so where it matters.
 
 Things in the code that look like mistakes and are not:
 
