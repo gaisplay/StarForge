@@ -204,6 +204,12 @@ void USFThrusterArrayComponent::ApplyDemand(const StarForge::FWrench& DemandShip
 
 	const FTransform ShipToWorld = Body->GetComponentTransform();
 
+	// Nothing here wakes the body. Waking it was tried on 2026-09-10 and measured to
+	// do nothing: a sleeping hull is re-slept within the same step, because what
+	// decides the matter is the velocity gained in one step and not whether the body
+	// was awake when the torque arrived. The fix is on the hull, which is set never to
+	// sleep -- see ASFTestShip's constructor for the measurements.
+
 	// AddForce with no bone applies at the centre of mass, so it adds no torque of
 	// its own; the torque below is the whole of it.
 	Body->AddForce(ShipToWorld.TransformVectorNoScale(Uu.Force));

@@ -153,6 +153,35 @@ ASFTestShip::ASFTestShip()
 	// BeginPlay whenever one is assigned.
 	Hull->SetMassOverrideInKg(NAME_None, static_cast<float>(DefaultHullMassKg), true);
 
+	// This hull must never sleep, and that is a correctness requirement rather than a
+	// preference. A sleeping body keeps the force and torque handed to it and
+	// integrates neither, so a ship under a control loop stops answering its own
+	// thrusters; and the occupant's carry reads this transform every frame, so a hull
+	// that stops updating stops carrying him.
+	//
+	// It bit hard. Chaos sleeps a body whose per-step velocity change stays under a
+	// threshold, and that change shrinks as the frame rate rises: at 60 fps a full roll
+	// command gains 0.05 rad/s per step and stays awake, at 400 fps it gains 0.0075 and
+	// is re-slept inside the same step, losing what it gained. Measured on 2026-09-10 by
+	// hand at ~370 fps and reproduced headlessly: roll settled at 1.7 deg/s instead of
+	// 180.0, pitch at 1.7 instead of 120.0, while the readout reported the whole
+	// commanded 1.6 MNm as achieved. The boundary sits between 200 and 300 fps.
+	//
+	// Two accidents hid it for an entire stage. Linear thrust never showed it, because
+	// 16 m/s^2 clears the linear threshold in one step; yaw never showed it, because
+	// this array makes more torque about Z than about X and wins the same race. And
+	// every headless check runs at a fixed 60 fps, where the torque wins with room to
+	// spare -- so "a full roll settles at exactly 180.0 deg/s" was true of the test rig
+	// and false of the game on a fast machine.
+	//
+	// Waking the body when a wrench is applied was tried first and measured to do
+	// nothing, for the reason above: being awake is not what is in question.
+	//
+	// A multiplier of zero means the hull sleeps only when it is exactly motionless, so
+	// the first step of any commanded thrust keeps it awake from then on.
+	Hull->BodyInstance.SleepFamily = ESleepFamily::Custom;
+	Hull->BodyInstance.CustomSleepThresholdMultiplier = 0.0f;
+
 	Frame = CreateDefaultSubobject<USFShipFrameComponent>(TEXT("Frame"));
 	Thrusters = CreateDefaultSubobject<USFThrusterArrayComponent>(TEXT("Thrusters"));
 
