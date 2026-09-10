@@ -9,8 +9,16 @@ namespace StarForge::Docking
 		 *
 		 * The clamp is not defensive decoration. A dot product of two normalised vectors
 		 * comes back at 1.0000000000000002 often enough, and Acos of that is NaN -- which
-		 * propagates into the approach, compares false against every limit, and presents
-		 * as a dock command that refuses with no reason a person can see.
+		 * propagates into the approach and compares false against every limit, so a
+		 * refusal written as `Value > Limit` falls through every one of them and grants
+		 * permission to dock on a figure nobody computed. CanDock's guards are negated
+		 * against exactly that; the clamp is what keeps a rounding error from ever having
+		 * to depend on them.
+		 *
+		 * It is not itself a filter for non-finite input and must not be read as one:
+		 * Clamp(NaN, -1, 1) returns 1.0, whose Acos is zero -- perfectly aligned, the
+		 * most permissive answer there is. A genuinely non-finite approach reaches CanDock
+		 * by way of the distance or the carried speed, and is refused there.
 		 */
 		double AngleBetween(const FVector& A, const FVector& B)
 		{
@@ -47,19 +55,27 @@ namespace StarForge::Docking
 	{
 		// Closed intervals throughout: exactly on a limit is inside it. A pilot who has
 		// flown to precisely three metres should not be sent away from three metres.
-		if (ApproachSI.Distance > Limits.DistanceMetres)
+		//
+		// Each condition is the negation of "inside", not the plain `> Limit` that reads
+		// the same, and the two differ exactly where this function must not be wrong. A
+		// non-finite figure compares false against both, so `> Limit` falls through all
+		// four guards and answers None -- permission to dock, granted on a question that
+		// could not be evaluated. Negated, it fails the first condition instead. Both
+		// paths in are reachable: the speed is carried from the caller's instrument
+		// untouched, and a port location that is not finite makes FVector::Dist NaN.
+		if (!(ApproachSI.Distance <= Limits.DistanceMetres))
 		{
 			return EDockingRefusal::Distance;
 		}
-		if (ApproachSI.SpeedMetresPerSec > Limits.SpeedMetresPerSec)
+		if (!(ApproachSI.SpeedMetresPerSec <= Limits.SpeedMetresPerSec))
 		{
 			return EDockingRefusal::Speed;
 		}
-		if (ApproachSI.ForwardAngleRad > Limits.ForwardAngleRad)
+		if (!(ApproachSI.ForwardAngleRad <= Limits.ForwardAngleRad))
 		{
 			return EDockingRefusal::Forward;
 		}
-		if (ApproachSI.UpAngleRad > Limits.UpAngleRad)
+		if (!(ApproachSI.UpAngleRad <= Limits.UpAngleRad))
 		{
 			return EDockingRefusal::Up;
 		}
@@ -84,7 +100,10 @@ namespace StarForge::Docking
 
 	FTransform CapturePose(const FTransform& Start, const FTransform& Target, double Alpha)
 	{
-		if (Alpha <= 0.0)
+		// Negated for the reason CanDock's guards are: a non-finite alpha is false against
+		// both ends of the range and would fall through into the interpolation, freezing
+		// the hull at a pose of NaNs for as long as it stays docked.
+		if (!(Alpha > 0.0))
 		{
 			return Start;
 		}

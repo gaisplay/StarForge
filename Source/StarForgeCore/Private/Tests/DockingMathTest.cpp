@@ -1,6 +1,8 @@
 #include "Misc/AutomationTest.h"
 #include "DockingMath.h"
 
+#include <limits>
+
 namespace
 {
 	constexpr double Deg = UE_DOUBLE_PI / 180.0;
@@ -319,6 +321,70 @@ bool FDockingCapturePoseIsExactAtItsEndsTest::RunTest(const FString& Parameters)
 		Half.GetLocation().Equals(FVector(100.0, 0.0, 0.0), 1e-6));
 	TestTrue(TEXT("and half way in rotation"),
 		FMath::IsNearlyEqual(Half.GetRotation().Rotator().Yaw, 30.0, 1e-3));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDockingNonFiniteApproachIsRefusedTest,
+	"StarForge.Core.Docking.NonFiniteApproachIsRefused",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FDockingNonFiniteApproachIsRefusedTest::RunTest(const FString& Parameters)
+{
+	// A function whose whole job is refusing must not answer "permitted" to a question it
+	// could not evaluate. Written as `Value > Limit`, every guard in CanDock is false for a
+	// NaN, all four fall through, and the answer is None -- an instrument reading plausibly
+	// while dead, which is the exact shape of this project's two worst defects: the drift
+	// clock that ran at double speed and the hull that reported full thrust while asleep.
+	const double NaN = std::numeric_limits<double>::quiet_NaN();
+	const double Inf = std::numeric_limits<double>::infinity();
+
+	// The fixture before the behaviour. A NaN that a compiler flag had quietly turned into
+	// a finite number would make every assertion below pass for the wrong reason, and the
+	// test would then be one more instrument that reads well and measures nothing.
+	TestTrue(TEXT("the NaN really is not finite"), !FMath::IsFinite(NaN));
+	TestTrue(TEXT("and the infinity really is not finite"), !FMath::IsFinite(Inf));
+
+	const StarForge::Docking::FDockingLimits Limits = MakeLimits();
+
+	// One non-finite field at a time, each named by the guard that has to catch it. Both
+	// paths into this are reachable: the speed is carried in from the caller's instrument
+	// untouched, and a port location that is not finite makes FVector::Dist return NaN.
+	StarForge::Docking::FDockingApproach NoDistance = MakeGoodApproach();
+	NoDistance.Distance = NaN;
+	TestTrue(TEXT("a NaN distance is refused, and named as distance"),
+		StarForge::Docking::CanDock(NoDistance, Limits) == StarForge::Docking::EDockingRefusal::Distance);
+
+	StarForge::Docking::FDockingApproach NoSpeed = MakeGoodApproach();
+	NoSpeed.SpeedMetresPerSec = NaN;
+	TestTrue(TEXT("a NaN speed is refused, and named as speed"),
+		StarForge::Docking::CanDock(NoSpeed, Limits) == StarForge::Docking::EDockingRefusal::Speed);
+
+	StarForge::Docking::FDockingApproach NoForward = MakeGoodApproach();
+	NoForward.ForwardAngleRad = NaN;
+	TestTrue(TEXT("a NaN forward angle is refused, and named as forward"),
+		StarForge::Docking::CanDock(NoForward, Limits) == StarForge::Docking::EDockingRefusal::Forward);
+
+	StarForge::Docking::FDockingApproach NoUp = MakeGoodApproach();
+	NoUp.UpAngleRad = NaN;
+	TestTrue(TEXT("a NaN up angle is refused, and named as up"),
+		StarForge::Docking::CanDock(NoUp, Limits) == StarForge::Docking::EDockingRefusal::Up);
+
+	// Infinity is the other half of "not finite" and refuses under either spelling of the
+	// guard, so it is here to pin the whole class rather than the one member that bites.
+	StarForge::Docking::FDockingApproach Infinite = MakeGoodApproach();
+	Infinite.Distance = Inf;
+	TestTrue(TEXT("an infinite distance is refused too"),
+		StarForge::Docking::CanDock(Infinite, Limits) == StarForge::Docking::EDockingRefusal::Distance);
+
+	// The same failure one function over: both of CapturePose's range guards are false for
+	// a NaN alpha, so it would slerp the hull to a pose of NaNs -- and a capture ends in an
+	// attachment that freezes whatever pose it was handed, with nothing to correct it.
+	const FTransform Start(FRotator(0.0, 20.0, 0.0).Quaternion(), FVector::ZeroVector);
+	const FTransform Target(FRotator(0.0, 40.0, 0.0).Quaternion(), FVector(200.0, 0.0, 0.0));
+	TestTrue(TEXT("a NaN alpha holds the hull exactly at the start"),
+		StarForge::Docking::CapturePose(Start, Target, NaN).Equals(Start, 0.0));
 
 	return true;
 }
