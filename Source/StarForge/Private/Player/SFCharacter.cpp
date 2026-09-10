@@ -66,6 +66,11 @@ void ASFCharacter::BeginPlay()
 	{
 		USFShipFrameComponent* FoundFrame = nullptr;
 
+		// Kept so the failure can name itself. "A volume claims me but hands out no frame"
+		// and "no volume claims me" are different faults with different repairs, and
+		// collapsing them into one warning is how a dead stage survived eleven runs.
+		const USFInteriorVolumeComponent* ClaimingVolume = nullptr;
+
 		// First, the engine's own answer. Free, and right at any settled moment.
 		TArray<UPrimitiveComponent*> Overlaps;
 		GetCapsuleComponent()->GetOverlappingComponents(Overlaps);
@@ -73,8 +78,12 @@ void ASFCharacter::BeginPlay()
 		{
 			if (const USFInteriorVolumeComponent* Volume = Cast<USFInteriorVolumeComponent>(Component))
 			{
+				ClaimingVolume = Volume;
 				FoundFrame = Volume->GetOwnerFrame();
-				break;
+				if (FoundFrame)
+				{
+					break;
+				}
 			}
 		}
 
@@ -92,8 +101,12 @@ void ASFCharacter::BeginPlay()
 				{
 					if (Volume->ContainsPoint(GetActorLocation()))
 					{
+						ClaimingVolume = Volume;
 						FoundFrame = Volume->GetOwnerFrame();
-						break;
+						if (FoundFrame)
+						{
+							break;
+						}
 					}
 				}
 				if (FoundFrame)
@@ -117,10 +130,28 @@ void ASFCharacter::BeginPlay()
 				if (USFShipFrameComponent* Frame = It->FindComponentByClass<USFShipFrameComponent>())
 				{
 					Movement->SetShipFrame(Frame);
-					UE_LOG(LogStarForge, Warning,
-						TEXT("SFCharacter bound to %s by search, not by volume: he spawned outside every ")
-						TEXT("interior volume. The binding is a guess."),
-						*It->GetActorNameOrLabel());
+
+					if (ClaimingVolume)
+					{
+						// The volume answered, and the answer was empty. That is a broken
+						// carrier, not a man standing in the open, and it says so: the guess
+						// below is a symptom and the missing frame component is the defect.
+						UE_LOG(LogStarForge, Error,
+							TEXT("SFCharacter bound to %s by search: %s's interior volume claims him but ")
+							TEXT("hands out no frame. The volume is there and its carrier has no ")
+							TEXT("USFShipFrameComponent behind it."),
+							*It->GetActorNameOrLabel(),
+							ClaimingVolume->GetOwner()
+								? *ClaimingVolume->GetOwner()->GetActorNameOrLabel() : TEXT("nothing"));
+					}
+					else
+					{
+						UE_LOG(LogStarForge, Warning,
+							TEXT("SFCharacter bound to %s by search, not by volume: he spawned outside every ")
+							TEXT("interior volume. The binding is a guess."),
+							*It->GetActorNameOrLabel());
+					}
+
 					FoundFrame = Frame;
 					break;
 				}

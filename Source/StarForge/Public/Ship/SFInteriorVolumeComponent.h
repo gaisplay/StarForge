@@ -30,8 +30,16 @@ public:
 
 	virtual void BeginPlay() override;
 
-	/** The frame this volume hands out; the owner's, resolved once at BeginPlay. */
-	USFShipFrameComponent* GetOwnerFrame() const { return OwnerFrame; }
+	/**
+	 * The frame this volume hands out: its owner's, resolved on the first ask and kept.
+	 *
+	 * Resolved lazily because a volume is asked whose frame it is before its own BeginPlay
+	 * has run. A pawn begins play before the components of actors the game mode spawns in
+	 * StartPlay, so the character's first binding reaches this getter while OwnerFrame is
+	 * still null -- and a null here does not fall through to a better answer, it falls
+	 * through to the guess the volumes exist to replace.
+	 */
+	USFShipFrameComponent* GetOwnerFrame() const;
 
 	/**
 	 * Whether a world point is inside this box, computed rather than looked up.
@@ -54,5 +62,5 @@ private:
 		const FHitResult& SweepResult);
 
 	UPROPERTY()
-	TObjectPtr<USFShipFrameComponent> OwnerFrame;
+	mutable TObjectPtr<USFShipFrameComponent> OwnerFrame;
 };

@@ -23,16 +23,24 @@ USFInteriorVolumeComponent::USFInteriorVolumeComponent()
 	SetCanEverAffectNavigation(false);
 }
 
+USFShipFrameComponent* USFInteriorVolumeComponent::GetOwnerFrame() const
+{
+	if (!OwnerFrame)
+	{
+		if (const AActor* Owner = GetOwner())
+		{
+			OwnerFrame = Owner->FindComponentByClass<USFShipFrameComponent>();
+		}
+	}
+
+	return OwnerFrame;
+}
+
 void USFInteriorVolumeComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (AActor* Owner = GetOwner())
-	{
-		OwnerFrame = Owner->FindComponentByClass<USFShipFrameComponent>();
-	}
-
-	if (!OwnerFrame)
+	if (!GetOwnerFrame())
 	{
 		// A volume with no frame behind it would silently do nothing: people would walk
 		// through it and stay bound to whatever they were bound to before, which is the
@@ -69,6 +77,6 @@ void USFInteriorVolumeComponent::HandleBeginOverlap(
 {
 	if (ASFCharacter* Character = Cast<ASFCharacter>(OtherActor))
 	{
-		Character->BindFrame(OwnerFrame);
+		Character->BindFrame(GetOwnerFrame());
 	}
 }
