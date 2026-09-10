@@ -86,9 +86,6 @@ public:
 	/** Where a passenger should be placed so he starts standing on the floor. */
 	FVector GetInteriorSpawnWorldLocation() const;
 
-	/** This tick's linear acceleration in m/s^2, for the grav-plate readout. */
-	FVector GetLinearAccelMetersPerSecSq() const { return LinearAccelMetersPerSecSq; }
-
 	/** This tick's linear speed in m/s, so the readout shows where in the profile we are. */
 	double GetSpeedMetersPerSec() const { return PreviousVelocityCms.Size() / 100.0; }
 
@@ -172,5 +169,4 @@ private:
 
 	double ElapsedSeconds = 0.0;
 	FVector PreviousVelocityCms = FVector::ZeroVector;
-	FVector LinearAccelMetersPerSecSq = FVector::ZeroVector;
 };

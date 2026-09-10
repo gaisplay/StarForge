@@ -221,7 +221,7 @@ void ASFFrameDriftHUD::DrawHUD()
 		const FTransform FrameTransform = Frame->GetFrameTransform();
 		const FVector LocalOmega = FrameTransform.InverseTransformVectorNoScale(Omega);
 		const FVector LocalAccel = FrameTransform.InverseTransformVectorNoScale(
-			Ship->GetLinearAccelMetersPerSecSq());
+			Frame->GetLinearAccelMetersPerSecSq());
 
 		const FVector Felt = StarForge::ShipFrame::ComputeFeltAcceleration(
 			LocalAccel, LocalOmega, Local / 100.0);

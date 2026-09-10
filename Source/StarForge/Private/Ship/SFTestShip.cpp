@@ -431,12 +431,12 @@ void ASFTestShip::Tick(float DeltaSeconds)
 		LogFlightState(DeltaSeconds);
 	}
 
-	// Measured from what the body actually did, not from what was commanded. In the
-	// scripted mode the two agree; under thrust they do not, and the grav-plate
-	// readout has to show the ship real acceleration or it is showing nothing.
-	const FVector VelocityCms = Hull->GetPhysicsLinearVelocity();
-	LinearAccelMetersPerSecSq = (VelocityCms - PreviousVelocityCms) / DeltaSeconds / 100.0;
-	PreviousVelocityCms = VelocityCms;
+	// Only the speed is kept here, for the readout's profile-phase line. The
+	// acceleration moved to the frame component: the felt-acceleration figure and the
+	// knockdown are read from one instrument, and that instrument is not the test
+	// ship's class -- the movement component must not have to know this class exists
+	// to find out how hard the deck is accelerating.
+	PreviousVelocityCms = Hull->GetPhysicsLinearVelocity();
 }
 
 void ASFTestShip::TickScriptedProfile()
@@ -571,7 +571,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	// what confusing it produces, and this log is where that would show.
 	UE_LOG(LogStarForge, Log,
 		TEXT("Flight: flown by %s | intent lin (%.2f %.2f %.2f) ang (%.2f %.2f %.2f) assist %d | ")
-		TEXT("speed %.1f m/s, ang roll/pitch/yaw (%.1f %.1f %.1f) deg/s | ")
+		TEXT("speed %.1f m/s, accel %.1f m/s2, ang roll/pitch/yaw (%.1f %.1f %.1f) deg/s | ")
 		TEXT("force want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) N | ")
 		TEXT("torque want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) Nm | ")
 		TEXT("throttles %d of %d commanded, %d spooled"),
@@ -580,6 +580,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,
 		Intent.bFlightAssistEnabled ? 1 : 0,
 		State.LinearVelocity.Size(),
+		Frame->GetLinearAccelMetersPerSecSq().Size(),
 		FMath::RadiansToDegrees(State.AngularVelocity.X),
 		FMath::RadiansToDegrees(State.AngularVelocity.Y),
 		FMath::RadiansToDegrees(State.AngularVelocity.Z),
