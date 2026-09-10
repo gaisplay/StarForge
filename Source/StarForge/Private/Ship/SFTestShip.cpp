@@ -9,6 +9,7 @@
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "Ship/SFAutomationOperatorComponent.h"
 #include "Ship/SFConsoleOperatorComponent.h"
+#include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipDataAsset.h"
@@ -55,6 +56,15 @@ namespace
 	constexpr double CubeEdgeCm = 100.0;
 	/** Panel thickness as a mesh scale factor, not centimetres: 0.2 x 100 cm = 20 cm. */
 	constexpr double PanelThickness = 0.2;
+
+	/**
+	 * The hatch in the +Y wall, in centimetres. Two hundred across and two hundred and
+	 * fifty tall from the deck: wide enough for a capsule of radius 34 to walk through
+	 * without brushing a jamb, and tall enough that a standing capsule (88 cm
+	 * half-height, so 176 overall) has head-room instead of reading as a crawl space.
+	 */
+	constexpr double HatchHalfWidthCm = 100.0;
+	constexpr double HatchHeightCm = 250.0;
 
 	/**
 	 * Height above the floor plate at which an occupant is placed, in centimetres.
@@ -251,7 +261,42 @@ ASFTestShip::ASFTestShip()
 	AddBoxPanel(TEXT("Ceiling"), FVector(0.0, 0.0, Half), FVector(Span, Span, PanelThickness));
 	AddBoxPanel(TEXT("WallXPos"), FVector(Half, 0.0, 0.0), FVector(PanelThickness, Span, Span));
 	AddBoxPanel(TEXT("WallXNeg"), FVector(-Half, 0.0, 0.0), FVector(PanelThickness, Span, Span));
-	AddBoxPanel(TEXT("WallYPos"), FVector(0.0, Half, 0.0), FVector(Span, PanelThickness, Span));
+
+	// The +Y wall is three panels with a hatch between them. Every figure is derived
+	// from Half and the panel thickness, so moving a wall moves the hatch and the port
+	// with it -- the same rule the turret mount and the seats already follow.
+	//
+	// Nothing is needed below the opening: the floor panel spans the whole footprint at
+	// Z -410..-390 and the hatch starts at its top face.
+	const double DeckTopZ = -Half + PanelThickness * CubeEdgeCm * 0.5;      // -390
+	const double HatchTopZ = DeckTopZ + HatchHeightCm;                      // -140
+	const double JambWidthCm = Half - HatchHalfWidthCm;                     //  300
+	const double JambCentreXCm = (Half + HatchHalfWidthCm) * 0.5;           //  250
+	const double LintelHeightCm = Half - HatchTopZ;                         //  540
+	const double LintelCentreZCm = (HatchTopZ + Half) * 0.5;                //  130
+
+	AddBoxPanel(TEXT("WallYPosJambXNeg"), FVector(-JambCentreXCm, Half, 0.0),
+		FVector(JambWidthCm / CubeEdgeCm, PanelThickness, Span));
+	AddBoxPanel(TEXT("WallYPosJambXPos"), FVector(JambCentreXCm, Half, 0.0),
+		FVector(JambWidthCm / CubeEdgeCm, PanelThickness, Span));
+	AddBoxPanel(TEXT("WallYPosLintel"), FVector(0.0, Half, LintelCentreZCm),
+		FVector(HatchHalfWidthCm * 2.0 / CubeEdgeCm, PanelThickness, LintelHeightCm / CubeEdgeCm));
+
+	// Centred in the hatch, on the wall's mid-plane: +X out along the ship's +Y, +Z the
+	// deck's up. A yaw of 90 takes local +X onto +Y and leaves +Z alone.
+	//
+	// The cabin is no longer a closed box, and that is a real change to this rig, not
+	// only to the loop. A standing occupant is bounded by the walls and by nothing else
+	// -- falling friction limits only the component along the deck -- so on L_FrameSpike,
+	// where there is no tunnel behind this opening, a knocked-down man now has a way out
+	// of the room. Every figure already recorded was taken standing and is unaffected;
+	// the fact is written down rather than compensated, because closing the hatch on one
+	// map and opening it on another would mean having two ships.
+	DockingPort = CreateDefaultSubobject<USFDockingPortComponent>(TEXT("DockingPort"));
+	DockingPort->SetupAttachment(Hull);
+	DockingPort->SetRelativeLocation(FVector(0.0, Half, DeckTopZ + HatchHeightCm * 0.5));
+	DockingPort->SetRelativeRotation(FRotator(0.0, 90.0, 0.0));
+
 	AddBoxPanel(TEXT("WallYNeg"), FVector(0.0, -Half, 0.0), FVector(Span, PanelThickness, Span));
 
 	// The room had no light of any kind: a black screen makes the one check that
