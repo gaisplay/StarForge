@@ -11,6 +11,11 @@ Design docs are in Russian under `docs/superpowers/`; code, comments and commit 
 - `docs/superpowers/specs/` — the design spec. The authority on *why*. Section numbers (§6, §7, §12) are referenced throughout the code and plans.
 - `docs/superpowers/plans/` — implementation plans, task-by-task with checkboxes.
 - `docs/superpowers/notes/` — checkpoint runbooks and result forms for manual measurements.
+- `docs/superpowers/source/` — the novel the design was originally argued from, read and
+  digested. **Background reading, not a source of requirements.** Development follows the
+  spec and the plans; where the two disagree, the spec wins and the disagreement is not a
+  defect to fix. Its own reconciliation section lists five places the design departs from
+  the book on purpose. Do not open it to plan work.
 
 Read the spec before changing anything structural. Most non-obvious code here is a deliberate answer to a documented failure mode, not an accident.
 
