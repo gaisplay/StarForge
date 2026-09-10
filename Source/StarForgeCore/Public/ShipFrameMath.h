@@ -48,6 +48,32 @@ namespace StarForge::ShipFrame
 	STARFORGECORE_API bool ExceedsGravPlateLimit(const FVector& FeltAccelMetersPerSecSq);
 
 	/**
+	 * What the occupant is left to feel once the plates have absorbed what they can.
+	 *
+	 * Zero up to and including the limit. Above it, the excess -- reversed, because
+	 * FeltAccel is the acceleration of the deck under him and what he experiences is
+	 * its opposite: a deck accelerating toward the spin axis is a man being thrown
+	 * toward the wall. m/s^2 in and out, in the ship's frame.
+	 */
+	STARFORGECORE_API FVector ComputeUncompensatedAcceleration(const FVector& FeltAccelMetersPerSecSq);
+
+	/**
+	 * Whether an occupant is on his feet, with the delay that keeps a manoeuvre sitting
+	 * at the limit from standing him up and knocking him down on alternate frames.
+	 *
+	 * Footing is lost the instant the limit is exceeded and regained only after
+	 * RecoverySeconds continuously under it; any relapse restarts that wait.
+	 */
+	struct STARFORGECORE_API FFootingState
+	{
+		bool bDown = false;
+		double SecondsUnderLimit = 0.0;
+
+		/** Advances one step and returns whether he is down after it. */
+		bool Update(bool bOverLimit, double DeltaSeconds, double RecoverySeconds);
+	};
+
+	/**
 	 * One step of first-person look input, taken in the deck's axes rather than the
 	 * world's.
 	 *

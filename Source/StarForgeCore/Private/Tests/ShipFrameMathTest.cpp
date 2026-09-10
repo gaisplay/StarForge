@@ -231,3 +231,157 @@ bool FShipFrameLookPitchStopsAtZenithTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameUncompensatedBelowLimitIsZeroTest,
+	"StarForge.Core.ShipFrame.UncompensatedBelowLimitIsZero",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameUncompensatedBelowLimitIsZeroTest::RunTest(const FString& Parameters)
+{
+	// Inside the plates' ceiling nothing is left over: a man under 15 m/s^2 of felt
+	// acceleration feels the deck, not a shove.
+	TestTrue(TEXT("below the limit nothing is left for him to feel"),
+		StarForge::ShipFrame::ComputeUncompensatedAcceleration(FVector(0.0, 0.0, 15.0)).IsNearlyZero(1e-12));
+
+	// And exactly at the limit is still nothing: the plates absorb up to and including it.
+	TestTrue(TEXT("at the limit still nothing"),
+		StarForge::ShipFrame::ComputeUncompensatedAcceleration(
+			FVector(StarForge::ShipFrame::GravPlateLimitMetersPerSecSq, 0.0, 0.0)).IsNearlyZero(1e-9));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameUncompensatedIsTheExcessReversedTest,
+	"StarForge.Core.ShipFrame.UncompensatedIsTheExcessReversed",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameUncompensatedIsTheExcessReversedTest::RunTest(const FString& Parameters)
+{
+	// The spec's own worst case: a full roll with a man four metres from the axis.
+	// omega^2 r = pi^2 * 4 = 39.48 m/s^2 of centripetal acceleration, pointing from him
+	// toward the axis, which is -X here. The plates absorb 19.62 of it. What is left,
+	// 19.86, is what he feels, and he feels it the other way: thrown toward the wall,
+	// not pulled toward the axis. A sign error here slides him the wrong way across the
+	// deck and nothing crashes.
+	const double Centripetal = 4.0 * UE_DOUBLE_PI * UE_DOUBLE_PI;
+	const FVector Push = StarForge::ShipFrame::ComputeUncompensatedAcceleration(FVector(-Centripetal, 0.0, 0.0));
+
+	TestTrue(TEXT("the push is the excess over the limit"),
+		FMath::IsNearlyEqual(Push.X, Centripetal - StarForge::ShipFrame::GravPlateLimitMetersPerSecSq, 1e-9));
+	TestTrue(TEXT("and it points away from the axis"), Push.X > 0.0);
+	TestTrue(TEXT("with nothing on the other axes"),
+		FMath::IsNearlyZero(Push.Y, 1e-12) && FMath::IsNearlyZero(Push.Z, 1e-12));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameUncompensatedClampsMagnitudeTest,
+	"StarForge.Core.ShipFrame.UncompensatedClampsMagnitude",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameUncompensatedClampsMagnitudeTest::RunTest(const FString& Parameters)
+{
+	// Off-axis on purpose. Every other fixture here points along one axis, where a
+	// ceiling applied to the vector's length and a ceiling applied to each component
+	// separately give the same answer, so neither would notice the other. They are not
+	// the same thing: the plates hold down what a body feels, and what it feels is one
+	// acceleration with a magnitude, not three that each get their own allowance.
+	//
+	// 15 and 15 is 21.21 long, over the 19.62 ceiling, so the man goes down -- while
+	// component by component nothing reaches the ceiling at all and he would stay on
+	// his feet through a manoeuvre that should have floored him.
+	const FVector Push = StarForge::ShipFrame::ComputeUncompensatedAcceleration(FVector(15.0, 15.0, 0.0));
+
+	const double Length = FMath::Sqrt(2.0) * 15.0;
+	const double Excess = Length - StarForge::ShipFrame::GravPlateLimitMetersPerSecSq;
+	const double PerAxis = -Excess / FMath::Sqrt(2.0);
+
+	TestTrue(TEXT("a diagonal over the ceiling in length is not absorbed"), !Push.IsNearlyZero(1e-9));
+	TestTrue(TEXT("the excess is shared between the axes by direction"),
+		FMath::IsNearlyEqual(Push.X, PerAxis, 1e-9) && FMath::IsNearlyEqual(Push.Y, PerAxis, 1e-9));
+	TestTrue(TEXT("and the push opposes what was felt"), Push.X < 0.0 && Push.Y < 0.0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameFootingDropsAtOnceTest,
+	"StarForge.Core.ShipFrame.FootingDropsAtOnce",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameFootingDropsAtOnceTest::RunTest(const FString& Parameters)
+{
+	StarForge::ShipFrame::FFootingState Footing;
+
+	// Standing, and nothing over the limit: standing.
+	TestFalse(TEXT("starts on his feet"), Footing.Update(false, 1.0 / 60.0, 0.5));
+
+	// One frame over the limit is enough. There is no delay on the way down; the
+	// delay is only on the way back up.
+	TestTrue(TEXT("one frame over the limit and he is down"), Footing.Update(true, 1.0 / 60.0, 0.5));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameFootingRecoversAfterTheDelayTest,
+	"StarForge.Core.ShipFrame.FootingRecoversAfterTheDelay",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameFootingRecoversAfterTheDelayTest::RunTest(const FString& Parameters)
+{
+	StarForge::ShipFrame::FFootingState Footing;
+	Footing.Update(true, 1.0 / 60.0, 0.5);
+
+	// 29 frames under the limit is 0.483 s: not yet.
+	for (int32 i = 0; i < 29; ++i)
+	{
+		Footing.Update(false, 1.0 / 60.0, 0.5);
+	}
+	TestTrue(TEXT("still down short of the delay"), Footing.bDown);
+
+	// 31 frames is 0.517 s: up. Not tested at exactly 30, because thirty sixtieths
+	// summed in double may land a hair under a half and the test would be a coin toss.
+	Footing.Update(false, 1.0 / 60.0, 0.5);
+	Footing.Update(false, 1.0 / 60.0, 0.5);
+	TestFalse(TEXT("up once the delay has passed"), Footing.bDown);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameFootingRelapseRestartsTheDelayTest,
+	"StarForge.Core.ShipFrame.FootingRelapseRestartsTheDelay",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameFootingRelapseRestartsTheDelayTest::RunTest(const FString& Parameters)
+{
+	StarForge::ShipFrame::FFootingState Footing;
+	Footing.Update(true, 1.0 / 60.0, 0.5);
+
+	// Twenty frames of calm, one frame over, twenty more of calm. Forty frames of calm
+	// in total would have stood him up; the relapse in the middle has to have reset
+	// the clock, or a manoeuvre flickering at the limit stands him up mid-flicker.
+	for (int32 i = 0; i < 20; ++i)
+	{
+		Footing.Update(false, 1.0 / 60.0, 0.5);
+	}
+	Footing.Update(true, 1.0 / 60.0, 0.5);
+	for (int32 i = 0; i < 20; ++i)
+	{
+		Footing.Update(false, 1.0 / 60.0, 0.5);
+	}
+	TestTrue(TEXT("still down: the relapse restarted the delay"), Footing.bDown);
+
+	// Eleven more make 31 since the relapse: up.
+	for (int32 i = 0; i < 11; ++i)
+	{
+		Footing.Update(false, 1.0 / 60.0, 0.5);
+	}
+	TestFalse(TEXT("up once the delay has passed since the relapse"), Footing.bDown);
+
+	return true;
+}

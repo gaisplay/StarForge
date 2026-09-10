@@ -2527,7 +2527,7 @@ grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log
 grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log
 ```
 
-Ожидается **55** и `0`: 50 после задачи 1 плюс пять.
+Ожидается **56** и `0`: 50 после задачи 1 плюс пять отсюда и один, добавленный на ревью задачи 6 — `UncompensatedClampsMagnitude`. Пять фикстур ниже лежат на осях, где потолок по длине вектора и потолок по каждой компоненте отдельно дают один ответ; шестой берёт диагональ (15, 15, 0), где они расходятся на всё: по длине это 21.21 при потолке 19.62, а покомпонентно не превышено ничего.
 
 - [ ] **Step 5: Коммит**
 
@@ -3557,7 +3557,7 @@ MSG
 | Ветка та | `git branch --show-current` → `feat/gunner-station` |
 | Коммит | `git rev-parse --short HEAD` → записать в бланк |
 | Дерево чистое | `git status --short` — пусто |
-| Тесты | 55 строк `Result={Success}` в `Saved/Logs/StarForge.log` после команды из `CLAUDE.md` |
+| Тесты | 56 строк `Result={Success}` в `Saved/Logs/StarForge.log` после команды из `CLAUDE.md` |
 
 Если сомневаешься в сборке — пересобрать:
 
