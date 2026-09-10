@@ -7,6 +7,7 @@
 #include "FlightController.h"
 #include "HAL/IConsoleManager.h"
 #include "PhysicsEngine/PhysicsSettings.h"
+#include "Ship/SFAutomationOperatorComponent.h"
 #include "Ship/SFConsoleOperatorComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFPilotStationComponent.h"
@@ -192,6 +193,8 @@ ASFTestShip::ASFTestShip()
 		StarForge::Units::CmToMetres(-GunnerSeatAftCm),
 		0.0,
 		StarForge::Units::CmToMetres(-InteriorHalfExtentCm + SpawnClearanceCm));
+
+	AutomationOperator = CreateDefaultSubobject<USFAutomationOperatorComponent>(TEXT("AutomationOperator"));
 
 	// The ship data asset is wired here rather than assigned on a placed actor
 	// because there is no placed actor to assign it on: L_FrameSpike is deliberately
@@ -389,6 +392,14 @@ void ASFTestShip::BeginPlay()
 	{
 		TargetDrone->SetAnchor(this);
 		TargetDrone->FinishSpawning(DroneSpawn);
+
+		// Components have begun play inside Super::BeginPlay, so the automation is
+		// already in its seat by now; the first station tick is still ahead, and a null
+		// drone until then is reported as no target rather than aimed at.
+		if (AutomationOperator)
+		{
+			AutomationOperator->SetTargetDrone(TargetDrone);
+		}
 	}
 	else
 	{

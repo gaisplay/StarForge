@@ -14,6 +14,7 @@ class USFThrusterArrayComponent;
 class USFPilotStationComponent;
 class USFGunnerStationComponent;
 class USFConsoleOperatorComponent;
+class USFAutomationOperatorComponent;
 class USFTurretComponent;
 class ASFTargetDrone;
 
@@ -138,6 +139,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFConsoleOperatorComponent> ConsoleOperator;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFAutomationOperatorComponent> AutomationOperator;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFTurretComponent> Turret;
