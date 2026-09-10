@@ -68,6 +68,21 @@ public:
 	 */
 	void ClearDemand();
 
+	/**
+	 * Locks the array: ApplyDemand becomes a no-op that also clears the readout.
+	 *
+	 * A docked hull does not simulate, so a wrench applied to it goes nowhere. Without
+	 * the lock the readout would print thrust the ship never felt, which is the stale
+	 * reading this class already has one function to remove.
+	 *
+	 * The array refuses, not the post and not the operator: the post asks whether its
+	 * engines are locked, and neither it nor whoever holds it has to know that docking
+	 * exists. Same shape as the scripted-profile lock one level up.
+	 */
+	void SetLocked(bool bInLocked);
+
+	bool IsLocked() const { return bLocked; }
+
 	/** The most this array can produce on each axis. What assist-off is a fraction of. */
 	StarForge::FWrench GetArrayCapability() const { return Capability; }
 
@@ -114,4 +129,7 @@ private:
 	StarForge::FWrench LastAchieved;
 
 	bool bReady = false;
+
+	/** True while something has locked the array. See SetLocked. */
+	bool bLocked = false;
 };

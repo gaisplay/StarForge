@@ -17,6 +17,7 @@ class USFConsoleOperatorComponent;
 class USFAutomationOperatorComponent;
 class USFTurretComponent;
 class USFDockingPortComponent;
+class USFDockingComponent;
 class ASFTargetDrone;
 
 /**
@@ -84,6 +85,9 @@ public:
 	/** The ship's half of the airlock. Its +X points out through the hatch. */
 	USFDockingPortComponent* GetDockingPort() const { return DockingPort; }
 
+	/** Docking lives on the moving side. The station has a port and no mechanism. */
+	USFDockingComponent* GetDocking() const { return Docking; }
+
 	/** What the gunner post's automation tracks. Spawned by BeginPlay; null if that failed. */
 	ASFTargetDrone* GetTargetDrone() const { return TargetDrone; }
 
@@ -149,6 +153,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFDockingPortComponent> DockingPort;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFDockingComponent> Docking;
 
 	/** The pivot the turret turns; the cone below is attached to it. */
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")

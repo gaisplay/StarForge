@@ -9,6 +9,7 @@
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "Ship/SFAutomationOperatorComponent.h"
 #include "Ship/SFConsoleOperatorComponent.h"
+#include "Ship/SFDockingComponent.h"
 #include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFPilotStationComponent.h"
@@ -297,6 +298,8 @@ ASFTestShip::ASFTestShip()
 	DockingPort->SetRelativeLocation(FVector(0.0, Half, DeckTopZ + HatchHeightCm * 0.5));
 	DockingPort->SetRelativeRotation(FRotator(0.0, 90.0, 0.0));
 
+	Docking = CreateDefaultSubobject<USFDockingComponent>(TEXT("Docking"));
+
 	AddBoxPanel(TEXT("WallYNeg"), FVector(0.0, -Half, 0.0), FVector(Span, PanelThickness, Span));
 
 	// The room had no light of any kind: a black screen makes the one check that
@@ -537,6 +540,51 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		return;
 	}
 	SecondsSinceFlightLog = 0.0;
+
+	// Docking first, because it gates everything below it: a docked ship is a ship whose
+	// engines are locked, and the flight numbers that follow are then correctly zero
+	// rather than suspiciously zero. The variable behind this line is sf.FlightLog, which
+	// is declared in this file -- the docking component's own sf.Dock is read there and
+	// nowhere else, and this line reads the component's accessors instead.
+	if (Docking)
+	{
+		FString DockText;
+
+		switch (Docking->GetState())
+		{
+		case ESFDockingState::Docked:
+			DockText = TEXT("docked");
+			break;
+		case ESFDockingState::Capturing:
+			DockText = FString::Printf(TEXT("capturing %.1f of %.1f s"),
+				Docking->GetCaptureElapsedSeconds(), Docking->GetCaptureSeconds());
+			break;
+		default:
+			if (!Docking->HasStation())
+			{
+				DockText = TEXT("free -- no station");
+			}
+			else
+			{
+				const StarForge::Docking::FDockingApproach Approach = Docking->GetLastApproach();
+				const FString Verdict = Docking->CanDockNow()
+					? FString(TEXT("CAN DOCK"))
+					: FString::Printf(TEXT("out of window: %s"),
+						USFDockingComponent::RefusalName(Docking->GetLastRefusal()));
+
+				const FVector At = Docking->GetPortOffsetShipLocalMetres();
+				DockText = FString::Printf(
+					TEXT("free | port %.1f m at (%+.1f %+.1f %+.1f) ship, %.1f m/s, fwd %.1f deg, up %.1f deg -- %s"),
+					Approach.Distance, At.X, At.Y, At.Z, Approach.SpeedMetresPerSec,
+					FMath::RadiansToDegrees(Approach.ForwardAngleRad),
+					FMath::RadiansToDegrees(Approach.UpAngleRad),
+					*Verdict);
+			}
+			break;
+		}
+
+		UE_LOG(LogStarForge, Log, TEXT("Dock: %s"), *DockText);
+	}
 
 	// The turret reports before the thruster check: a ship whose array never built can
 	// still lay a turret, and a line that vanishes with the array would look like a
