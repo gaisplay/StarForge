@@ -17,3 +17,6 @@ Automation_*.sln
 Automation_*.slnx
 *.xcodeproj
 *.xcworkspace
+
+# graphify knowledge graph (derived; rebuild with: python -m graphify update .)
+graphify-out/
