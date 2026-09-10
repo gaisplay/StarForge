@@ -221,13 +221,13 @@ Headless-прогон, которым пользуется весь план (в
 
 **Рысканье всегда идёт через ноль.** Упоры делают достижимую дугу одним отрезком, содержащим ноль, так что подход — прямое движение по отрезку без переворотов через ±180°. При `MaxYawRad` ровно π это по-прежнему правило: цель на +179° из −179° достигается длинным путём. Кольцевое крепление без упора — другая функция, не эта; сказано в комментарии, а не спрятано.
 
-- [ ] **Step 1: Создать ветку**
+- [x] **Step 1: Создать ветку**
 
 ```bash
 git checkout -b feat/gunner-station main
 ```
 
-- [ ] **Step 2: Написать падающие тесты**
+- [x] **Step 2: Написать падающие тесты**
 
 `Source/StarForgeCore/Private/Tests/TurretMathTest.cpp`:
 
@@ -497,7 +497,7 @@ bool FTurretStepSaysCannotBearFromTheFirstStepTest::RunTest(const FString& Param
 }
 ```
 
-- [ ] **Step 3: Убедиться, что не собирается**
+- [x] **Step 3: Убедиться, что не собирается**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -505,7 +505,7 @@ bool FTurretStepSaysCannotBearFromTheFirstStepTest::RunTest(const FString& Param
 
 Ожидается ошибка вида `fatal error C1083: Cannot open include file: 'TurretMath.h'`. **Это шаг, а не формальность:** в плане «а» тесты правки взгляда прошли с первого раза, потому что сборка между ними и реализацией не состоялась, и годность тестов пришлось доказывать, ломая код обратно.
 
-- [ ] **Step 4: Написать заголовок**
+- [x] **Step 4: Написать заголовок**
 
 `Source/StarForgeCore/Public/TurretMath.h`:
 
@@ -634,7 +634,7 @@ namespace StarForge::Turret
 }
 ```
 
-- [ ] **Step 5: Реализовать**
+- [x] **Step 5: Реализовать**
 
 `Source/StarForgeCore/Private/TurretMath.cpp`:
 
@@ -716,7 +716,7 @@ namespace StarForge::Turret
 }
 ```
 
-- [ ] **Step 6: Собрать и прогнать тесты**
+- [x] **Step 6: Собрать и прогнать тесты**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -735,7 +735,7 @@ grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log
 
 Ожидается `50` и `0`. Проверить, что зависимости `StarForgeCore` не изменились: `git diff Source/StarForgeCore/StarForgeCore.Build.cs` пуст.
 
-- [ ] **Step 7: Коммит**
+- [x] **Step 7: Коммит**
 
 ```bash
 git add Source/StarForgeCore/Public/TurretMath.h Source/StarForgeCore/Private/TurretMath.cpp Source/StarForgeCore/Private/Tests/TurretMathTest.cpp
@@ -783,7 +783,7 @@ MSG
 
 **Орбита.** Радиус 30 м, 10°/с, плоскость наклонена на 20° к мировой XY вокруг мировой X. Смещение от якоря: `R (cos φ, sin φ · cos 20°, sin φ · sin 20°)`, φ = 10° · t. Наклон нужен, чтобы возвышение менялось; 20° выбрано так, что возвышение с крепления на высоте +2.8 м (задача 3) остаётся в пределах −30..+60° на всей орбите: `z − 2.8 ∈ [−13.06, 7.46]` м при горизонтальной дальности не меньше 28.2 м даёт `[−24.9°, +14.8°]`. Упор по рысканью ±120° при этом срабатывает дважды за оборот — задача 5 это предсказывает по секундам.
 
-- [ ] **Step 1: Написать мишень**
+- [x] **Step 1: Написать мишень**
 
 `Source/StarForge/Public/Ship/SFTargetDrone.h`:
 
@@ -981,7 +981,7 @@ void ASFTargetDrone::Tick(float DeltaSeconds)
 }
 ```
 
-- [ ] **Step 2: Спавнить её из корабля**
+- [x] **Step 2: Спавнить её из корабля**
 
 В `SFTestShip.h` добавить forward-declare `class ASFTargetDrone;`, в public:
 
@@ -1032,7 +1032,7 @@ void ASFTargetDrone::Tick(float DeltaSeconds)
 	}
 ```
 
-- [ ] **Step 3: Собрать и прогнать headless дважды**
+- [x] **Step 3: Собрать и прогнать headless дважды**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -1052,7 +1052,7 @@ LogStarForge: Target drone spawned: orbit 30.0 m radius at 10.0 deg/s, tilted 20
 
 (имя актора — то, что движок дал кораблю, спавненному из `StaticClass()`; важно, что это не `the world origin`). Затем второй прогон с `-ExecCmds="sf.ShipProfile 0, sf.TargetDrone 0"`: `-ExecCmds` выполняется после `BeginPlay`, поэтому ожидается строка спавна с `present` **и** следом `Target drone WITHDRAWN (sf.TargetDrone 0).` Если второй строки нет — переменная не читается из тика, и переключатель не работает как переключатель.
 
-- [ ] **Step 4: Записать переменную в `CLAUDE.md`**
+- [x] **Step 4: Записать переменную в `CLAUDE.md`**
 
 В таблицу консольных переменных `CLAUDE.md`, после строки `sf.DriftDebug`, добавить:
 
@@ -1060,7 +1060,7 @@ LogStarForge: Target drone spawned: orbit 30.0 m radius at 10.0 deg/s, tilted 20
 | `sf.TargetDrone` | 1 | 0 withdraws the rig's target drone; the turret must then report no target rather than aim at the origin |
 ```
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add Source/StarForge/Public/Ship/SFTargetDrone.h Source/StarForge/Private/Ship/SFTargetDrone.cpp Source/StarForge/Public/Ship/SFTestShip.h Source/StarForge/Private/Ship/SFTestShip.cpp CLAUDE.md
@@ -1107,7 +1107,7 @@ MSG
 
 **Высота крепления — вывод, не подбор.** Внутренняя грань потолочной панели: `InteriorHalfExtentCm − PanelThickness × CubeEdgeCm / 2 = 400 − 20/2 = 390` см (`SFTestShip.cpp`, константы `PanelThickness = 0.2`, `CubeEdgeCm = 100`). Ствол длиной 100 см на верхнем упоре +60° поднимается на `100 · sin 60° = 86.6` см над креплением. Зазор 10 см: `390 − 100 − 10 = 280` см. Проверка: `280 + 86.6 = 366.6 < 390`. Вниз на −30° ствол опускается до `280 − 50 = 230`; верх капсулы стоящего — `−300 + 88 = −212` (капсула 34 × 88, `Character.cpp:78`, центр на `−InteriorHalfExtentCm + SpawnClearanceCm = −300`). Между ними четыре с половиной метра.
 
-- [ ] **Step 1: Расширить интерфейс**
+- [x] **Step 1: Расширить интерфейс**
 
 В `Source/StarForge/Public/Ship/SFStationOperator.h` добавить включение после `FlightController.h`:
 
@@ -1129,7 +1129,7 @@ MSG
 	virtual bool ProvideTurretIntent(StarForge::FTurretIntent& Out) { return false; }
 ```
 
-- [ ] **Step 2: Написать исполнителя**
+- [x] **Step 2: Написать исполнителя**
 
 `Source/StarForge/Public/Ship/SFTurretComponent.h`:
 
@@ -1353,7 +1353,7 @@ const TCHAR* USFTurretComponent::StateName(ESFTurretState InState)
 }
 ```
 
-- [ ] **Step 3: Повесить крепление и ствол на корабль**
+- [x] **Step 3: Повесить крепление и ствол на корабль**
 
 В `SFTestShip.h`: forward-declare `class USFTurretComponent;` и `class USceneComponent;`; в public:
 
@@ -1440,7 +1440,7 @@ const TCHAR* USFTurretComponent::StateName(ESFTurretState InState)
 	}
 ```
 
-- [ ] **Step 4: Собрать и прогнать headless**
+- [x] **Step 4: Собрать и прогнать headless**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -1458,7 +1458,7 @@ LogStarForge: Turret mount at ship-local (0 0 280) cm: yaw +/-120, pitch -30..60
 
 `280` — из вывода выше; если число другое, разошлась либо константа, либо арифметика. `barrel attached` — что `SetBarrel` вызван до `BeginPlay` (в конструкторе), а не после.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add Source/StarForge/Public/Ship/SFStationOperator.h Source/StarForge/Public/Ship/SFTurretComponent.h Source/StarForge/Private/Ship/SFTurretComponent.cpp Source/StarForge/Public/Ship/SFTestShip.h Source/StarForge/Private/Ship/SFTestShip.cpp
@@ -1512,7 +1512,7 @@ MSG
 
 **Кресло канонира — полтора метра за пилотским.** По той же высоте и по той же причине, что и пилотское (`SFTestShip.cpp`, комментарий у `PilotStation->SeatLocationMetres`): кресло выше стоячей высоты роняет персонажа в `MOVE_Falling`, и перенос останавливается. Назад по X, а не вбок: ось крена идёт вдоль X, и в точке (−1.5, 0, −3) человек на тех же 3 м от неё, что и в пилотском кресле. В пределах 2 м от точки появления (1.5 < 2), так что оба кресла достижимы с места старта, и решает «ближайшее свободное». Капсула радиусом 34 см занимает X от −184 до −116; внутренняя грань кормовой стены на −390; маркер-цилиндр в (−300, 0, 0) с полуразмером 25 см — на три метра выше кресла.
 
-- [ ] **Step 1: Сделать имя оператора общим**
+- [x] **Step 1: Сделать имя оператора общим**
 
 В `Source/StarForge/Public/Ship/SFShipStationComponent.h`, в public, после `GetOperator()`:
 
@@ -1553,7 +1553,7 @@ FString USFShipStationComponent::GetOperatorDisplayName() const
 
 (остальное тело и комментарий — без изменений).
 
-- [ ] **Step 2: Написать пост канонира**
+- [x] **Step 2: Написать пост канонира**
 
 `Source/StarForge/Public/Ship/SFGunnerStationComponent.h`:
 
@@ -1720,7 +1720,7 @@ void USFGunnerStationComponent::TickComponent(
 }
 ```
 
-- [ ] **Step 3: Повесить пост на корабль и писать турель в журнал**
+- [x] **Step 3: Повесить пост на корабль и писать турель в журнал**
 
 В `SFTestShip.h`: forward-declare `class USFGunnerStationComponent;`; в public:
 
@@ -1813,7 +1813,7 @@ void USFGunnerStationComponent::TickComponent(
 
 Включение `Ship/SFTurretComponent.h` в `SFTestShip.cpp` уже есть с задачи 3.
 
-- [ ] **Step 4: Блок канонира на HUD**
+- [x] **Step 4: Блок канонира на HUD**
 
 В `Source/StarForge/Public/Debug/SFFrameDriftHUD.h`, в private, после `DrawFlightBlock`:
 
@@ -1906,7 +1906,7 @@ void ASFFrameDriftHUD::DrawGunnerBlock(double& Y)
 }
 ```
 
-- [ ] **Step 5: Собрать и прогнать headless**
+- [x] **Step 5: Собрать и прогнать headless**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -1924,7 +1924,7 @@ LogStarForge: Turret: gunned by unoccupied | target none firing 0 | bearing none
 
 и **ни одной** строки `Station 'gunner' taken by` — пост есть, оператора ещё нет. Строка `Station 'pilot' taken by console.` по-прежнему есть: пилотский пост не пострадал. **Если `Turret:` нет вообще** — строка стоит после проверки массива, а не до, и на корабле без ассета турель молчала бы.
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git add Source/StarForge/Public/Ship/SFShipStationComponent.h Source/StarForge/Private/Ship/SFShipStationComponent.cpp Source/StarForge/Public/Ship/SFPilotStationComponent.h Source/StarForge/Private/Ship/SFPilotStationComponent.cpp Source/StarForge/Public/Ship/SFGunnerStationComponent.h Source/StarForge/Private/Ship/SFGunnerStationComponent.cpp Source/StarForge/Public/Ship/SFTestShip.h Source/StarForge/Private/Ship/SFTestShip.cpp Source/StarForge/Public/Debug/SFFrameDriftHUD.h Source/StarForge/Private/Debug/SFFrameDriftHUD.cpp
@@ -1987,7 +1987,7 @@ MSG
 
 Допуски: пеленг ±0.5° (кадр между спавном мишени и строкой журнала — 0.17° орбиты); aim на цели — равен пеленгу в пределах 0.5°; строки на 12-й и 24-й секундах примыкают к переходам и могут лечь по любую сторону. Скорость обхода 90°/с против 11.5°/с максимальной угловой скорости пеленга означает, что вне упоров ствол **никогда** не отстаёт: состояние `slewing` в этом прогоне появляется только в первые кадры (подход к −5.3° начального возвышения за четыре кадра) и в две с лишним секунды перекладки через ноль.
 
-- [ ] **Step 1: Написать автоматику**
+- [x] **Step 1: Написать автоматику**
 
 `Source/StarForge/Public/Ship/SFAutomationOperatorComponent.h`:
 
@@ -2173,7 +2173,7 @@ bool USFAutomationOperatorComponent::ProvideTurretIntent(StarForge::FTurretInten
 }
 ```
 
-- [ ] **Step 2: Посадить её на корабль и выдать ей мишень**
+- [x] **Step 2: Посадить её на корабль и выдать ей мишень**
 
 В `SFTestShip.h`: forward-declare `class USFAutomationOperatorComponent;`; в private, рядом с `ConsoleOperator`:
 
@@ -2206,7 +2206,7 @@ bool USFAutomationOperatorComponent::ProvideTurretIntent(StarForge::FTurretInten
 		}
 ```
 
-- [ ] **Step 3: Собрать и прогнать четыре раза**
+- [x] **Step 3: Собрать и прогнать четыре раза**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -2256,7 +2256,7 @@ LogStarForge: Turret: gunned by automation | target none firing 0 | bearing none
 
 Ожидается `Flight: flown by console (standing down)` — пилот стоит вольно — и одновременно `Turret: gunned by automation | ... | slewing` либо `CANNOT BEAR`, **без** `(standing down)`: канонир работает под профилем. `ON TARGET` здесь редок или отсутствует: крен 180°/с вдвое быстрее обхода. Это ожидаемо и записывается как факт, не как дефект.
 
-- [ ] **Step 4: Записать переменные в `CLAUDE.md`**
+- [x] **Step 4: Записать переменные в `CLAUDE.md`**
 
 В таблицу переменных `CLAUDE.md`, после строки `sf.TargetDrone`, добавить две строки. Вторая закрывает пропуск: `sf.ConsoleOperator` существует с плана «б», но в таблице её нет.
 
@@ -2265,7 +2265,7 @@ LogStarForge: Turret: gunned by automation | target none firing 0 | bearing none
 | `sf.ConsoleOperator` | 1 | 1 the console operator takes the pilot seat at startup and holds it; 0 leaves the seat free for a person |
 ```
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add Source/StarForge/Public/Ship/SFAutomationOperatorComponent.h Source/StarForge/Private/Ship/SFAutomationOperatorComponent.cpp Source/StarForge/Public/Ship/SFTestShip.h Source/StarForge/Private/Ship/SFTestShip.cpp CLAUDE.md
@@ -2310,7 +2310,7 @@ MSG
 
 **Граница тестов гистерезиса не на полсекунды ровно.** Тридцать шагов по 1/60 в `double` могут дать 0.49999999999999994, и тест на ровно тридцатом шаге стал бы лотереей. Проверяется 29 шагов (0.483 с — ещё лежит) и 31 (0.517 с — встал).
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Дописать в конец `Source/StarForgeCore/Private/Tests/ShipFrameMathTest.cpp`:
 
@@ -2440,7 +2440,7 @@ bool FShipFrameFootingRelapseRestartsTheDelayTest::RunTest(const FString& Parame
 }
 ```
 
-- [ ] **Step 2: Убедиться, что не собирается**
+- [x] **Step 2: Убедиться, что не собирается**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -2448,7 +2448,7 @@ bool FShipFrameFootingRelapseRestartsTheDelayTest::RunTest(const FString& Parame
 
 Ожидается ошибка `'ComputeUncompensatedAcceleration': is not a member of 'StarForge::ShipFrame'` (и следом об `FFootingState`).
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 В `Source/StarForgeCore/Public/ShipFrameMath.h`, внутри `namespace StarForge::ShipFrame`, после `ExceedsGravPlateLimit`:
 
@@ -2512,7 +2512,7 @@ bool FShipFrameFootingRelapseRestartsTheDelayTest::RunTest(const FString& Parame
 	}
 ```
 
-- [ ] **Step 4: Собрать и прогнать тесты**
+- [x] **Step 4: Собрать и прогнать тесты**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -2529,7 +2529,7 @@ grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log
 
 Ожидается **56** и `0`: 50 после задачи 1 плюс пять отсюда и один, добавленный на ревью задачи 6 — `UncompensatedClampsMagnitude`. Пять фикстур ниже лежат на осях, где потолок по длине вектора и потолок по каждой компоненте отдельно дают один ответ; шестой берёт диагональ (15, 15, 0), где они расходятся на всё: по длине это 21.21 при потолке 19.62, а покомпонентно не превышено ничего.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add Source/StarForgeCore/Public/ShipFrameMath.h Source/StarForgeCore/Private/ShipFrameMath.cpp Source/StarForgeCore/Private/Tests/ShipFrameMathTest.cpp
@@ -2570,7 +2570,7 @@ MSG
 
 **Арифметика, которую проверяет прогон.** `DA_TestShip` (таблица задачи 4 плана `2026-09-07-ship-on-chaos.md`): четыре двигателя вдоль +X по `MaxThrustNewtons` 200 000, `MassKg` 50 000 (`DefaultHullMassKg` в `SFTestShip.cpp` — то же число для стенда без ассета). `a = F/m = 800 000 / 50 000 = 16.0 м/с²`. С ассистом спрос `(200 − v)·m·LinearGain` при `LinearGain` 2.0 (`FFlightLimits`, `FlightController.h`; `ComputeDemandedWrench` в `FlightController.cpp`) равен `(200 − v)·100 000` Н и превышает 800 кН, пока `200 − v > 8`, то есть до 192 м/с — двенадцатая секунда. До неё ускорение ровно 16.0; после — экспонента с постоянной времени `1/LinearGain` = 0.5 с. Раскрутка `ResponseTimeSeconds` 0.05 с заканчивается в первой четверти секунды, раньше первой строки журнала.
 
-- [ ] **Step 1: Объявить скорость и ускорение у компонента**
+- [x] **Step 1: Объявить скорость и ускорение у компонента**
 
 В `Source/StarForge/Public/Ship/SFShipFrameComponent.h`, в public, после `GetAngularVelocityRadPerSec`:
 
@@ -2603,7 +2603,7 @@ MSG
 	bool bHasVelocitySample = false;
 ```
 
-- [ ] **Step 2: Считать их**
+- [x] **Step 2: Считать их**
 
 В `Source/StarForge/Private/Ship/SFShipFrameComponent.cpp` включение:
 
@@ -2635,7 +2635,7 @@ MSG
 		bHasVelocitySample = true;
 ```
 
-- [ ] **Step 3: Убрать второй прибор с корабля и напечатать ускорение в журнал**
+- [x] **Step 3: Убрать второй прибор с корабля и напечатать ускорение в журнал**
 
 В `SFTestShip.h` удалить две строки
 
@@ -2671,7 +2671,7 @@ MSG
 
 `Frame` — default subobject, создаётся в конструкторе и нулём быть не может; проверка на null здесь напечатала бы «0.0» вместо отсутствующего прибора, а это ровно тот ноль, который проект запрещает.
 
-- [ ] **Step 4: HUD читает компонент**
+- [x] **Step 4: HUD читает компонент**
 
 В `Source/StarForge/Private/Debug/SFFrameDriftHUD.cpp`, в `DrawHUD`, заменить
 
@@ -2689,7 +2689,7 @@ MSG
 
 Остальное в этом блоке задача 8 заменит целиком; здесь трогается одна строка, без которой не собирается.
 
-- [ ] **Step 5: Собрать и прогнать дважды**
+- [x] **Step 5: Собрать и прогнать дважды**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -2711,7 +2711,7 @@ MSG
 
 Профиль пишет скорость `400·sin(2πt/8)` м/с, откуда ускорение `400·2π/8 = 314.16·cos(πt/4)` м/с². Строка `k` выходит на `t ≈ k` с и печатает семпл на полтора кадра раньше (`−1.5/60` с, сдвиг фазы 0.02 рад). Ожидается `accel`: строки 4 и 8 — **312–315**; строки 2 и 6 — **меньше 12**; строки 1, 3, 5, 7 — **214–229**. Это проверка всего пути `см → м → /dt → /dt` независимо от тяги: ошибка в сто раз или в `dt` не пролезет ни в одну из трёх полос.
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git add Source/StarForge/Public/Ship/SFShipFrameComponent.h Source/StarForge/Private/Ship/SFShipFrameComponent.cpp Source/StarForge/Public/Ship/SFTestShip.h Source/StarForge/Private/Ship/SFTestShip.cpp Source/StarForge/Private/Debug/SFFrameDriftHUD.cpp
@@ -2764,7 +2764,7 @@ MSG
 9. **Почему отрицательный контроль отныне с `sf.Knockdown 0`.** При `sf.ShipGravity 0` под профилем ощущаемое ускорение с первых кадров за пределом (314 м/с² линейного), и с включённой механикой человек уронен раньше, чем палуба стала непроходимой; `bStayBasedInAir` держит опору, перенос продолжается, `Carry NOT RUNNING` не появляется. Контроль, показывающий ничего, — не контроль. Прогон D ниже — с выключенной механикой, и это записано в `CLAUDE.md`.
 10. **Два сантиметра, которые прогон B покажет как увод.** Ходящая капсула висит над полом между `MIN_FLOOR_DIST` 1.9 и `MAX_FLOOR_DIST` 2.4 см (cpp 98–99); падающая лежит на контакте. Уроненный на месте опускается на эти два сантиметра, и `drift now` показывает их рядом со словом `KNOCKED DOWN`. Это иллюстрация R7, а не дефект: цифра та же, смысл назван.
 
-- [ ] **Step 1: Заголовок компонента движения**
+- [x] **Step 1: Заголовок компонента движения**
 
 В `Source/StarForge/Public/Player/SFShipboardMovementComponent.h` включение после `GameFramework/CharacterMovementComponent.h`:
 
@@ -2873,7 +2873,7 @@ protected:
 	double SecondsSinceGapLog = 0.0;
 ```
 
-- [ ] **Step 2: Реализация в компоненте движения**
+- [x] **Step 2: Реализация в компоненте движения**
 
 В `Source/StarForge/Private/Player/SFShipboardMovementComponent.cpp` включения:
 
@@ -3182,7 +3182,7 @@ FString USFShipboardMovementComponent::DescribeFooting() const
 	KnockedDownSeconds = 0.0;
 ```
 
-- [ ] **Step 3: Персонаж — пристёгнут в кресле, ноги не работают лёжа**
+- [x] **Step 3: Персонаж — пристёгнут в кресле, ноги не работают лёжа**
 
 В `Source/StarForge/Private/Player/SFCharacter.cpp`, в `PollMovementInput`, после первого `if (IsSeated()) { return; }`:
 
@@ -3257,7 +3257,7 @@ FString USFShipboardMovementComponent::DescribeFooting() const
 
 Комментарий над этим блоком (про `MOVE_Walking` и `IsSeated`) остаётся: он по-прежнему верен.
 
-- [ ] **Step 4: HUD — строка опоры и смысл увода**
+- [x] **Step 4: HUD — строка опоры и смысл увода**
 
 В `Source/StarForge/Private/Debug/SFFrameDriftHUD.cpp`, в `DrawHUD`, после блока `CARRY NOT RUNNING` и до строки `elapsed`:
 
@@ -3334,7 +3334,7 @@ FString USFShipboardMovementComponent::DescribeFooting() const
 
 `PanelHeight` не трогать: 760 из задачи 4 уже посчитаны с этой строкой.
 
-- [ ] **Step 5: Собрать и прогнать четыре раза**
+- [x] **Step 5: Собрать и прогнать четыре раза**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -3414,7 +3414,7 @@ LogStarForge: Warning: Carry NOT RUNNING: 6x frames since the occupant was last 
 
 **Что доказано этими четырьмя.** Прогон, где перенос сломан (D), и прогон, где человека всего лишь уронило (B, C), различаются в журнале **словами**, а не только цифрами: `Carry NOT RUNNING` и тишина прибора против `Footing LOST` и `KNOCKED DOWN … skipped carries 0` — R7. Рецепт по умолчанию (A) печатает время «сбит с ног» нулём — R8(а). База точки проверки 1 воспроизводится и подписана — R8(в). Перенос не прекращается ни в одном прогоне с включённой механикой — R6.
 
-- [ ] **Step 6: `CLAUDE.md`**
+- [x] **Step 6: `CLAUDE.md`**
 
 В таблицу переменных, после строки `sf.ConsoleOperator`:
 
@@ -3474,7 +3474,7 @@ And read the `footing` line before judging a drift over budget: a slide while kn
 down is not a carry failure, and the line says which it was.
 ```
 
-- [ ] **Step 7: Коммит**
+- [x] **Step 7: Коммит**
 
 ```bash
 git add Source/StarForge/Public/Player/SFShipboardMovementComponent.h Source/StarForge/Private/Player/SFShipboardMovementComponent.cpp Source/StarForge/Private/Player/SFCharacter.cpp Source/StarForge/Private/Debug/SFFrameDriftHUD.cpp CLAUDE.md
@@ -3527,7 +3527,7 @@ MSG
 
 **Числа, которые runbook просит сверить, выведены здесь.** Мишень: орбита 30 м, 10°/с, наклон 20°; упор по рысканью ±120° срабатывает на `φ = 118.5°` и `241.5°` (задача 5), то есть на 11.9-й и 24.2-й секундах каждого 36-секундного оборота. Ориентиры каюты: шар +X, конус +Y, цилиндр −X (`SFTestShip.cpp`, `MarkerOffsetCm` 300), так что `aim yaw 0` — ствол на шар, `+90` — на конус, `−90` — от конуса, `±120` — на 30° дальше конуса/от конуса к цилиндру; `pitch` положительный — к потолку. Рысканье `sf.Intent.Yaw 1` — 120°/с вокруг Z; стоящий в центре и крепление — **на оси Z**, ощущаемое у обоих ноль, никто не падает, а пеленг на мишень бежит в системе крепления на 120°/с против обхода 90°/с: ствол видимо отстаёт и упирается. Крен `sf.Intent.Roll 1` в центре — задача 8, прогон B: 146.5°/с, 0.9–1.1 с, `felt 29.6`, толчок в пол. Под конусом, в `(0 300 −300)`: `r = √(3² + 3²) = 4.24` м, порог `√(19.62/4.24) = 2.15 рад/с = 123°/с`, ощущаемое при 180°/с `π²·4.24 = 41.9`, избыток 22.2 м/с² **от оси** — по `(0 1 −1)/√2`, боковая часть 15.7 м/с² к стене +Y; установившаяся `15.7/4 = 3.9` м/с, до стены `390 − 34 − 300 = 56` см — прижат к ней за секунду, `ship-local` Y ≈ 356. Вставание: `sf.Intent.Roll 0` тормозит крен на 171.9°/с² — под 146.5 за 0.2 с, плюс полсекунды гистерезиса: от команды до `Footing regained` около 0.7 с, а число `after N s down` в этой строке считается от сбивания — сколько держали крен плюс эти 0.7.
 
-- [ ] **Step 1: Написать runbook**
+- [x] **Step 1: Написать runbook**
 
 `docs/superpowers/notes/2026-09-09-checkpoint-5-runbook.md`:
 
@@ -3764,7 +3764,7 @@ left by automation.`, панель `gunned by unoccupied` жёлтым, `turret 
 Заполнить [бланк](2026-09-09-checkpoint-5-results.md).
 ````
 
-- [ ] **Step 2: Написать бланк**
+- [x] **Step 2: Написать бланк**
 
 `docs/superpowers/notes/2026-09-09-checkpoint-5-results.md`:
 
@@ -3917,7 +3917,7 @@ left by automation.`, панель `gunned by unoccupied` жёлтым, `turret 
 **Обоснование:** ____
 ````
 
-- [ ] **Step 3: Коммит**
+- [x] **Step 3: Коммит**
 
 ```bash
 git add docs/superpowers/notes/2026-09-09-checkpoint-5-runbook.md docs/superpowers/notes/2026-09-09-checkpoint-5-results.md
