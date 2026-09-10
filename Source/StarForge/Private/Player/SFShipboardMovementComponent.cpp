@@ -100,12 +100,30 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 		const FVector OldDown = -OldFrame->GetFrameTransform().GetUnitAxis(EAxis::Z);
 		const FVector NewDown = -NewFrame->GetFrameTransform().GetUnitAxis(EAxis::Z);
 
+		if (bHandoverPending)
+		{
+			// The crossing about to be overwritten, said out loud. The record of crossings is
+			// this instrument's entire output, and a second binding before the first carry
+			// consumed the first one used to erase it with nothing logged -- one line where
+			// two were expected, and no way to tell that from a crossing that never happened.
+			// Named rather than queued: a queue can grow without bound, and one line naming
+			// the loss is what a reader needs.
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Frame handover %s -> %s was superseded by %s -> %s before any carry consumed it. ")
+				TEXT("The first crossing is not in the record; only this line says it happened."),
+				*PendingHandoverOldName, *PendingHandoverNewName,
+				OldFrame->GetOwner() ? *OldFrame->GetOwner()->GetActorNameOrLabel() : TEXT("none"),
+				NewFrame->GetOwner() ? *NewFrame->GetOwner()->GetActorNameOrLabel() : TEXT("none"));
+		}
+
 		PendingHandoverOldName = OldFrame->GetOwner()
 			? OldFrame->GetOwner()->GetActorNameOrLabel() : TEXT("none");
 		PendingHandoverNewName = NewFrame->GetOwner()
 			? NewFrame->GetOwner()->GetActorNameOrLabel() : TEXT("none");
 		PendingHandoverGravityTurnDeg = FMath::RadiansToDegrees(
 			FMath::Acos(FMath::Clamp(FVector::DotProduct(OldDown, NewDown), -1.0, 1.0)));
+		PendingHandoverFrame = GFrameCounter;
+		bPendingHandoverCarryGap = false;
 		bHandoverPending = true;
 	}
 
@@ -292,6 +310,11 @@ void USFShipboardMovementComponent::DetectCarryGap()
 		LastFrameTransform = ShipFrame->GetFrameTransform();
 		bBaselineValid = false;
 
+		// The re-seed above is what makes a pending handover unmeasurable: the carry that
+		// consumes it would compare the ship against a pose taken this instant, not against
+		// the pose it had when the binding happened, and report a zero it never measured.
+		bPendingHandoverCarryGap = true;
+
 		// He has just landed, and the velocity that came with it is not drift.
 		// Restart the settle window too, or the next whole interval banks the
 		// landing as a failure.
@@ -335,7 +358,12 @@ void USFShipboardMovementComponent::UpdateFrameCrossCheck(float DeltaSeconds)
 	// frame of tick order cannot produce it -- and then one a second for as long as it
 	// lasts. The same reason Carry NOT RUNNING repeats: a single line at frame ten does
 	// not say that the disagreement has been going on for a minute.
-	if (MismatchFrames == 10 || SecondsSinceMismatchLog >= 1.0)
+	//
+	// The repeat arm is gated on the threshold as well, or it outruns it: at a tenth of a
+	// second per frame the second's worth of seconds is reached on the first mismatching
+	// frame, and the line fires for exactly the single frame of tick order the ten-frame
+	// threshold exists to exclude.
+	if (MismatchFrames >= 10 && (MismatchFrames == 10 || SecondsSinceMismatchLog >= 1.0))
 	{
 		UE_LOG(LogStarForge, Warning,
 			TEXT("Standing on %s's floor while bound to %s's frame for %d frames. ")
@@ -376,18 +404,49 @@ void USFShipboardMovementComponent::CarryWithFrame()
 	// controls are judged on the cross-check and on the carry, not on this line.
 	if (bHandoverPending)
 	{
-		LastHandoverJumpCm = Delta.Size();
-		LastHandoverGravityTurnDeg = PendingHandoverGravityTurnDeg;
-		LastHandoverText = FString::Printf(TEXT("%s -> %s, %.3f cm, %.1f deg"),
-			*PendingHandoverOldName, *PendingHandoverNewName,
-			LastHandoverJumpCm, LastHandoverGravityTurnDeg);
+		// How long the figure was taken over. The binding and the carry that consumes it are
+		// not the same frame: he may have had no movement base for twenty frames, and the
+		// carrier moves through every one of them. Without the count, one frame of travel
+		// and twenty read the same on the line, and a number too big to explain has no
+		// interval to be checked against.
+		const int32 HandoverFrames = static_cast<int32>(GFrameCounter - PendingHandoverFrame);
 
-		UE_LOG(LogStarForge, Display,
-			TEXT("Frame handover: %s -> %s, first carry moved him %.3f cm, gravity turned %.1f deg"),
-			*PendingHandoverOldName, *PendingHandoverNewName,
-			LastHandoverJumpCm, LastHandoverGravityTurnDeg);
+		LastHandoverGravityTurnDeg = PendingHandoverGravityTurnDeg;
+
+		if (bPendingHandoverCarryGap)
+		{
+			// Not a measurement, and it must not be dressed as one. A zero printed here would
+			// be the exact text of a perfect handover, produced by an instrument whose
+			// reference pose was replaced under it while the carry was stopped.
+			LastHandoverJumpCm = 0.0;
+			LastHandoverText = FString::Printf(
+				TEXT("%s -> %s, distance UNMEASURED over %d frame(s), %.1f deg"),
+				*PendingHandoverOldName, *PendingHandoverNewName,
+				HandoverFrames, LastHandoverGravityTurnDeg);
+
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Frame handover: %s -> %s over %d frame(s), distance UNMEASURED: the carry had ")
+				TEXT("stopped between the binding and this one, and the pose it measures against was ")
+				TEXT("re-seeded. Gravity turned %.1f deg."),
+				*PendingHandoverOldName, *PendingHandoverNewName,
+				HandoverFrames, LastHandoverGravityTurnDeg);
+		}
+		else
+		{
+			LastHandoverJumpCm = Delta.Size();
+			LastHandoverText = FString::Printf(TEXT("%s -> %s, %.3f cm over %d frame(s), %.1f deg"),
+				*PendingHandoverOldName, *PendingHandoverNewName,
+				LastHandoverJumpCm, HandoverFrames, LastHandoverGravityTurnDeg);
+
+			UE_LOG(LogStarForge, Display,
+				TEXT("Frame handover: %s -> %s, first carry moved him %.3f cm over %d frame(s), ")
+				TEXT("gravity turned %.1f deg"),
+				*PendingHandoverOldName, *PendingHandoverNewName,
+				LastHandoverJumpCm, HandoverFrames, LastHandoverGravityTurnDeg);
+		}
 
 		bHandoverPending = false;
+		bPendingHandoverCarryGap = false;
 	}
 
 	const FQuat FrameDelta =

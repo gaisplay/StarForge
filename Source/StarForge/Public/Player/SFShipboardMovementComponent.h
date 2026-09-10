@@ -355,6 +355,18 @@ private:
 	FString PendingHandoverNewName;
 	double PendingHandoverGravityTurnDeg = 0.0;
 
+	/**
+	 * The frame the handover was armed on, and whether the carry stopped before it was
+	 * consumed. Both exist because "the first carry moved him X cm" is a figure over an
+	 * interval the line did not name: the consuming carry can be one frame after the
+	 * binding or twenty-two, and a reader cannot tell a measurement from an artefact
+	 * without the count. A carry gap in between is worse than a long interval -- the gap
+	 * re-seeds the transform the carry measures against, so the figure would be a zero
+	 * taken over nothing at all, and zero is the verdict this instrument exists to issue.
+	 */
+	uint64 PendingHandoverFrame = 0;
+	bool bPendingHandoverCarryGap = false;
+
 	double LastHandoverJumpCm = 0.0;
 	double LastHandoverGravityTurnDeg = 0.0;
 	FString LastHandoverText;
