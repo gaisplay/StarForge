@@ -124,6 +124,33 @@ void ASFFrameDriftHUD::DrawHUD()
 			FLinearColor::Red);
 	}
 
+	// The third of the lines that give the drift figure its meaning. The two above say
+	// the carry failed; this one says the man was knocked down, and a slide under it is
+	// not a carry failure -- "drift" used to mean only the first. Yellow with the
+	// mechanic off, because that run is not comparable with one that has it.
+	if (!Movement->IsKnockdownEnabled())
+	{
+		DrawLine(TEXT("footing  KNOCKDOWN OFF (sf.Knockdown 0) - checkpoint 1's rig, not this plan's"), Y, FLinearColor::Yellow);
+	}
+	else if (Movement->IsKnockedDown())
+	{
+		const FVector Push = Movement->GetKnockdownPushMetersPerSecSq();
+
+		// The length of this fall, not the interval's tally. The tally is dropped with
+		// the peaks on every frame of the settle window, so a man lying on the deck
+		// would be printed as down for 0.0 s through the whole half second the
+		// instrument spends restarting -- a readout looking broken while it works.
+		DrawLine(FString::Printf(TEXT("footing  KNOCKED DOWN %.1f s   push (%.1f %.1f %.1f) m/s2 ship axes   %s"),
+			Movement->GetCurrentKnockdownSeconds(), Push.X, Push.Y, Push.Z, *Movement->DescribeFooting()),
+			Y, FLinearColor(1.0f, 0.45f, 0.0f));
+	}
+	else
+	{
+		DrawLine(FString::Printf(TEXT("footing  intact%s   knocked down %.1f s this interval   %s"),
+			Movement->IsStrappedIn() ? TEXT(" (strapped in)") : TEXT(""),
+			Movement->GetKnockedDownSeconds(), *Movement->DescribeFooting()), Y);
+	}
+
 	DrawLine(FString::Printf(TEXT("elapsed              %.1f s"), ElapsedSeconds), Y);
 	DrawLine(FString::Printf(TEXT("drift now            %.3f cm"), Movement->GetDriftCm()), Y);
 
@@ -137,10 +164,20 @@ void ASFFrameDriftHUD::DrawHUD()
 	const double PeakDrift = Movement->GetPeakDriftCm();
 	const bool bWithinBudget = bMeasured && PeakDrift <= 1.0;
 
+	// Orange, not red, when the interval had him on the deck: the figure is over
+	// budget because he slid, and the word beside it says so. Red stays for a figure
+	// over budget with him on his feet, which is the carry's own failure.
+	//
+	// Read from the state as well as the tally, for the reason the footing line gives:
+	// through the settle window the tally is zero on every frame, and this colour would
+	// go red for the very spec 6 case the mechanic was written to produce.
+	const bool bDownThisInterval = Movement->IsKnockedDown() || Movement->GetKnockedDownSeconds() > 0.0;
 	DrawLine(
-		FString::Printf(TEXT("drift peak           %.3f cm   [budget 1.0 cm/min]"), PeakDrift),
+		FString::Printf(TEXT("drift peak           %.3f cm   [budget 1.0 cm/min]%s"), PeakDrift,
+			bDownThisInterval ? TEXT("   <- includes his slide while knocked down") : TEXT("")),
 		Y,
-		bWithinBudget ? FLinearColor::Green : (bMeasured ? FLinearColor::Red : FLinearColor::Yellow));
+		bWithinBudget ? FLinearColor::Green
+			: (bMeasured ? (bDownThisInterval ? FLinearColor(1.0f, 0.45f, 0.0f) : FLinearColor::Red) : FLinearColor::Yellow));
 
 	const FString MeasuredWarning = bMeasured
 		? FString()
@@ -172,14 +209,13 @@ void ASFFrameDriftHUD::DrawHUD()
 	const bool bBestMeasured = BestSeconds >= MinimumValidMeasurementSeconds;
 	const bool bBestWithinBudget = bBestMeasured && BestPeakDrift <= 1.0;
 
-	const FLinearColor BestColor = bBestWithinBudget
-		? FLinearColor::Green
-		: (bBestMeasured ? FLinearColor::Red : FLinearColor::Yellow);
-
+	const bool bBestHadHimDown = Movement->GetBestCompletedKnockedDownSeconds() > 0.0;
 	DrawLine(
-		FString::Printf(TEXT("best drift peak      %.3f cm   [budget 1.0 cm/min]"), BestPeakDrift),
+		FString::Printf(TEXT("best drift peak      %.3f cm   [budget 1.0 cm/min]%s"), BestPeakDrift,
+			bBestHadHimDown ? TEXT("   <- includes a slide while knocked down") : TEXT("")),
 		Y,
-		BestColor);
+		bBestWithinBudget ? FLinearColor::Green
+			: (bBestMeasured ? (bBestHadHimDown ? FLinearColor(1.0f, 0.45f, 0.0f) : FLinearColor::Red) : FLinearColor::Yellow));
 
 	DrawLine(
 		FString::Printf(TEXT("best measured        %.1f s of settled time"), BestSeconds),
@@ -214,24 +250,21 @@ void ASFFrameDriftHUD::DrawHUD()
 		DrawLine(FString::Printf(TEXT("angular rate         %.1f deg/s   [combined ceiling %.1f]"),
 			FMath::RadiansToDegrees(Omega.Size()), CombinedCeilingDegPerSec), Y);
 
-		// omega x (omega x r) is the centripetal term of one frame only. The angular
-		// velocity and the ship's linear acceleration are both world-space while the
-		// offset is ship-local, so mixing them produced a figure wrong by an amount
-		// that swung with the ship's attitude. Bring the two vectors into the ship.
-		const FTransform FrameTransform = Frame->GetFrameTransform();
-		const FVector LocalOmega = FrameTransform.InverseTransformVectorNoScale(Omega);
-		const FVector LocalAccel = FrameTransform.InverseTransformVectorNoScale(
-			Frame->GetLinearAccelMetersPerSecSq());
-
-		const FVector Felt = StarForge::ShipFrame::ComputeFeltAcceleration(
-			LocalAccel, LocalOmega, Local / 100.0);
-
-		const bool bKnockdown = StarForge::ShipFrame::ExceedsGravPlateLimit(Felt);
+		// The figure the footing decision was taken on, not a second computation of it
+		// here: the screen has to show the number the mechanic saw, or the two can
+		// disagree and nobody will know which to believe.
+		const FVector Felt = Movement->GetFeltAccelerationMetersPerSecSq();
+		const bool bOverLimit = StarForge::ShipFrame::ExceedsGravPlateLimit(Felt);
 		DrawLine(
-			FString::Printf(TEXT("felt acceleration    %.2f m/s2   [limit %.2f]"),
-				Felt.Size(), StarForge::ShipFrame::GravPlateLimitMetersPerSecSq),
+			FString::Printf(TEXT("felt acceleration    %.2f m/s2   [limit %.2f]%s"),
+				Felt.Size(), StarForge::ShipFrame::GravPlateLimitMetersPerSecSq,
+				(bOverLimit && !Movement->IsKnockedDown())
+					? TEXT("   over the limit, on his feet: strapped in or sf.Knockdown 0")
+					: TEXT("")),
 			Y,
-			bKnockdown ? FLinearColor::Yellow : FLinearColor::White);
+			Movement->IsKnockedDown()
+				? FLinearColor(1.0f, 0.45f, 0.0f)
+				: (bOverLimit ? FLinearColor::Yellow : FLinearColor::White));
 	}
 	else
 	{

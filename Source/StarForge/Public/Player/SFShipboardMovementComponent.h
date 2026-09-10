@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "ShipFrameMath.h"
 #include "SFShipboardMovementComponent.generated.h"
 
 class USFShipFrameComponent;
@@ -110,6 +111,69 @@ public:
 
 	virtual void UpdateBasedMovement(float DeltaSeconds) override;
 
+	/**
+	 * Whether the occupant is knocked off his feet (spec 6): the movement mode is
+	 * falling, walking is refused, and the carry and the gravity alignment go on
+	 * exactly as before. Standing up again takes half a second continuously under
+	 * the grav-plate limit.
+	 */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	bool IsKnockedDown() const { return Footing.bDown; }
+
+	/** Whether sf.Knockdown is on. Off is a different rig, and every readout says so. */
+	bool IsKnockdownEnabled() const;
+
+	/**
+	 * A seated occupant is strapped in and never loses his footing, whatever the ship
+	 * does. Set by the character on taking and leaving a seat.
+	 */
+	void SetStrappedIn(bool bInStrappedIn) { bStrappedIn = bInStrappedIn; }
+	bool IsStrappedIn() const { return bStrappedIn; }
+
+	/** Seconds spent knocked down during the current settled interval. */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	double GetKnockedDownSeconds() const { return KnockedDownSeconds; }
+
+	/**
+	 * How long the knockdown in progress has lasted, in seconds; zero on his feet.
+	 *
+	 * This is the figure to print beside the word "down", and the one above is not:
+	 * the interval's count is dropped with the peaks on every frame of the settle
+	 * window, so a man lying on the deck reads as zero seconds down for the whole half
+	 * second in which the instrument keeps restarting.
+	 */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	double GetCurrentKnockdownSeconds() const { return CurrentKnockdownSeconds; }
+
+	/** Knocked-down seconds belonging to the interval reported by GetBestCompletedSeconds. */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	double GetBestCompletedKnockedDownSeconds() const { return BestCompletedKnockedDownSeconds; }
+
+	/** The felt acceleration the last footing decision was taken on, ship frame, m/s^2. */
+	FVector GetFeltAccelerationMetersPerSecSq() const { return FeltAccelMetersPerSecSq; }
+
+	/** What pushes him while he is down, ship frame, m/s^2. Zero on his feet. */
+	FVector GetKnockdownPushMetersPerSecSq() const { return PushMetersPerSecSq; }
+
+	/**
+	 * What the drift figure means right now, in words, for the log and the HUD alike:
+	 * the carry failed, or the man was knocked down, or neither. The number alone
+	 * cannot say, and it used to mean only the first.
+	 */
+	FString DescribeFooting() const;
+
+	/** False while knocked down: a man who is down does not land. See the cpp. */
+	virtual bool IsValidLandingSpot(const FVector& CapsuleLocation, const FHitResult& Hit) const override;
+
+	virtual void TickComponent(
+		float DeltaTime,
+		ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
+
+protected:
+	/** No landing while knocked down, whichever path asks. See the cpp. */
+	virtual void ProcessLanded(const FHitResult& Hit, float remainingTime, int32 Iterations) override;
+
 private:
 	void CarryWithFrame();
 	void UpdateDriftMeasurement(float DeltaSeconds);
@@ -140,6 +204,26 @@ private:
 	 * after the occupant has left the deck.
 	 */
 	void LogDiagnostics(float DeltaSeconds);
+
+	/**
+	 * Decides whether he keeps his feet this frame and acts on it: enters falling with
+	 * the base kept, pushes him with what the plates could not absorb, stands him up
+	 * again. Once per frame, like UpdateDriftMeasurement, and for the same reason.
+	 *
+	 * Called from the carry while there is a movement base and from TickComponent when
+	 * there is not. The engine calls UpdateBasedMovement only while a base is set
+	 * (CharacterMovementComponent.cpp 2476-2487), and a man who lost his base while
+	 * down would otherwise stay down for the rest of the session: no walking, and no
+	 * landing either, since IsValidLandingSpot refuses one while he is down.
+	 */
+	void UpdateFooting(float DeltaSeconds);
+
+	/**
+	 * Reports, from outside the carry, a carry gap that is still open. The counter in
+	 * DetectCarryGap cannot: it lives inside the function the engine has stopped
+	 * calling. Once a second, for as long as the gap lasts.
+	 */
+	void LogOpenCarryGap(float DeltaSeconds);
 
 	TWeakObjectPtr<USFShipFrameComponent> ShipFrame;
 
@@ -207,4 +291,27 @@ private:
 
 	/** False until the carry has run once, so the very first tick is not read as a gap. */
 	bool bHasCarriedOnce = false;
+
+	StarForge::ShipFrame::FFootingState Footing;
+
+	/** Ship-frame figures behind the last footing decision, for the readouts. */
+	FVector FeltAccelMetersPerSecSq = FVector::ZeroVector;
+	FVector PushMetersPerSecSq = FVector::ZeroVector;
+
+	/** Set while he holds a seat. Strapped in, he is never knocked down. */
+	bool bStrappedIn = false;
+
+	/** Knocked-down time in the current settled interval; reset with the peaks. */
+	double KnockedDownSeconds = 0.0;
+
+	/** Length of the knockdown in progress, for the line that says how long he was down. */
+	double CurrentKnockdownSeconds = 0.0;
+
+	double BestCompletedKnockedDownSeconds = 0.0;
+
+	/** Same guard as LastMeasuredFrame, for the same reason: two calls a frame would push twice. */
+	uint64 LastFootingFrame = TNumericLimits<uint64>::Max();
+
+	/** Throttle for LogOpenCarryGap. */
+	double SecondsSinceGapLog = 0.0;
 };

@@ -108,6 +108,15 @@ void ASFCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 
 		SeatedStation = nullptr;
+
+		// Unstrapped wherever the seat is given up, not only where a person stands up
+		// by hand. Left set, the flag outlives the seat and makes him permanently
+		// immune to the knockdown while the readout says "footing intact (strapped
+		// in)" -- the mechanic silently off, with an instrument saying all is well.
+		if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
+		{
+			Movement->SetStrappedIn(false);
+		}
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -127,6 +136,18 @@ void ASFCharacter::PollMovementInput()
 	if (IsSeated())
 	{
 		return;
+	}
+
+	// Legs do not work lying down. Refused here, at the input, rather than through the
+	// movement mode: while he is down the mode is falling, and walking input there is
+	// air control -- the stock five per cent of it is exactly the kind of motion that
+	// would read as drift with nobody's name on it.
+	if (const USFShipboardMovementComponent* Movement = GetShipboardMovement())
+	{
+		if (Movement->IsKnockedDown())
+		{
+			return;
+		}
 	}
 
 	const APlayerController* PC = Cast<APlayerController>(GetController());
@@ -227,6 +248,14 @@ void ASFCharacter::ToggleSeat()
 		SeatedStation->Vacate();
 		SeatedStation = nullptr;
 
+		// Unstrapped the moment he stands. Under a manoeuvre over the limit the next
+		// footing update knocks him down, which is what spec 6 says happens to a man
+		// who leaves his seat in one.
+		if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
+		{
+			Movement->SetStrappedIn(false);
+		}
+
 		// Walking resumes exactly where he was. He is already in the ship's frame and
 		// the carry has been holding him all along; standing up changes what reads his
 		// input, not where he is. Nothing to restore on the movement component either:
@@ -234,7 +263,16 @@ void ASFCharacter::ToggleSeat()
 		return;
 	}
 
-	USFShipFrameComponent* Frame = GetShipboardMovement() ? GetShipboardMovement()->GetShipFrame() : nullptr;
+	USFShipboardMovementComponent* Movement = GetShipboardMovement();
+	if (Movement && Movement->IsKnockedDown())
+	{
+		// A man on the deck cannot reach for a harness. Said out loud, because the key
+		// doing nothing is otherwise the "out of reach" case, and the two differ.
+		UE_LOG(LogStarForge, Display, TEXT("No seat while knocked down."));
+		return;
+	}
+
+	USFShipFrameComponent* Frame = Movement ? Movement->GetShipFrame() : nullptr;
 	if (!Frame || !Frame->GetOwner())
 	{
 		return;
@@ -307,9 +345,13 @@ void ASFCharacter::ToggleSeat()
 	// DetectCarryGap would bank the whole absence as skipped carries when he stood.
 	// What stops him walking is IsSeated(), checked at the top of PollMovementInput --
 	// not the movement mode.
-	if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
+	if (Movement)
 	{
 		Movement->StopMovementImmediately();
+
+		// Strapped in: seated, he is never knocked down, whatever the felt figure says.
+		// Checkpoint 4's run C -- seated through the full profile -- depends on it.
+		Movement->SetStrappedIn(true);
 	}
 }
 

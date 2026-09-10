@@ -1,11 +1,13 @@
 #include "Player/SFShipboardMovementComponent.h"
 
 #include "CoreGlobals.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "HAL/IConsoleManager.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "StarForgeLog.h"
+#include "Units.h"
 
 namespace
 {
@@ -15,6 +17,30 @@ namespace
 	 * enough that a one-minute standing test is nearly all measurement.
 	 */
 	constexpr double SettleSeconds = 0.5;
+
+	/**
+	 * How long continuously under the grav-plate limit before a knocked-down occupant
+	 * gets his feet back. The same 0.5 the FFootingState tests use.
+	 */
+	constexpr double KnockdownRecoverySeconds = 0.5;
+
+	/**
+	 * Lateral friction while he slides, per second. ApplyVelocityBraking multiplies
+	 * this by BrakingFrictionFactor, which the engine defaults to 2.0
+	 * (CharacterMovementComponent.cpp 734, 4384-4385), so the coefficient that acts is
+	 * 4/s and a steady push along the deck settles at a quarter of the excess: the
+	 * spec's worst case, 19.86 m/s^2 four metres from the axis in a full roll, slides
+	 * him at 5 m/s.
+	 *
+	 * It bounds the part of the push lying along the deck and nothing else. PhysFalling
+	 * hands this friction to CalcVelocity for ProjectToGravityFloor(Velocity) alone
+	 * (cpp 4896-4936), leaving the component along the ship's own down to the floor and
+	 * the ceiling to stop. Measured under the scripted profile, whose push swings
+	 * through every axis at 216 deg/s: a knocked-down occupant reached 358 m/s inside an
+	 * eight-metre cabin, so this number is not what keeps him off the walls -- the walls
+	 * are. Do not read it as a speed limit on a knockdown.
+	 */
+	constexpr float KnockdownSlideFriction = 2.0f;
 }
 
 static TAutoConsoleVariable<int32> CVarShipGravity(
@@ -32,6 +58,14 @@ static TAutoConsoleVariable<int32> CVarDriftDebug(
 	TEXT("Diagnostic only, and off by default: during a real measurement it is noise, and the summary line already says what a good run looks like."),
 	ECVF_Default);
 
+static TAutoConsoleVariable<int32> CVarKnockdown(
+	TEXT("sf.Knockdown"),
+	1,
+	TEXT("1: an occupant on his feet is knocked down when the felt acceleration exceeds the grav-plate limit (spec 6): falling, walking refused, still carried.\n")
+	TEXT("0: he keeps his feet whatever the ship does. Needed to reproduce checkpoint 1's baseline, whose scripted profile is over the limit almost continuously, ")
+	TEXT("and for the sf.ShipGravity 0 negative control, which the knockdown would otherwise mask by keeping the movement base."),
+	ECVF_Default);
+
 USFShipboardMovementComponent::USFShipboardMovementComponent()
 {
 	// This flag does nothing on the frame path. CarryWithFrame applies the ship's
@@ -42,6 +76,11 @@ USFShipboardMovementComponent::USFShipboardMovementComponent()
 	// exactly one moving base and it is the ship, so nothing in it reaches that
 	// case; a game with lifts and turntables in it would not get off so lightly.
 	bIgnoreBaseRotation = true;
+
+	// The slide has to stop somewhere short of the far wall on its own. The default,
+	// zero, would let a steady push accelerate him without limit; see
+	// KnockdownSlideFriction for the number and the factor hidden in it.
+	FallingLateralFriction = KnockdownSlideFriction;
 }
 
 void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame)
@@ -60,6 +99,15 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 	SkippedCarryFrames = 0;
 	bHasCarriedOnce = false;
 
+	// A new frame is a new footing. The flag is the one that keeps the base through a
+	// knockdown, and it must not outlive the knockdown it was set for.
+	Footing = StarForge::ShipFrame::FFootingState();
+	bStayBasedInAir = false;
+	FeltAccelMetersPerSecSq = FVector::ZeroVector;
+	PushMetersPerSecSq = FVector::ZeroVector;
+	CurrentKnockdownSeconds = 0.0;
+	LastFootingFrame = TNumericLimits<uint64>::Max();
+
 	RestartMeasurementInterval();
 
 	// The latched result belongs to whichever frame produced it. Binding to a new
@@ -69,6 +117,7 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 	BestCompletedSeconds = 0.0;
 	BestCompletedPeakDriftCm = 0.0;
 	BestCompletedPeakJitterCm = 0.0;
+	BestCompletedKnockedDownSeconds = 0.0;
 }
 
 int64 USFShipboardMovementComponent::GetFramesSinceLastCarry() const
@@ -122,6 +171,10 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 	}
 
 	CarryWithFrame();
+
+	// Footing before the measurement, so the figure taken this frame already carries
+	// what this frame decided about him.
+	UpdateFooting(DeltaSeconds);
 	UpdateDriftMeasurement(DeltaSeconds);
 }
 
@@ -146,7 +199,17 @@ void USFShipboardMovementComponent::LogDiagnostics(float DeltaSeconds)
 	const FString State = FString::Printf(TEXT("%s|%s"),
 		*GetMovementName(), Base ? *Base->GetName() : TEXT("none"));
 
-	DebugSecondsSinceLog += DeltaSeconds;
+	// Only on the frame's first call. This function runs twice per frame for the same
+	// reason UpdateDriftMeasurement does, and accumulating on both ran this throttle at
+	// exactly twice real time: a line every half second under a comment promising one a
+	// second, so twenty-five seconds of run produced fifty lines and anyone counting
+	// them to recover a duration got double. The doubled clock this project already
+	// found once, relocated into the log's own pacing. The call counter above is
+	// deliberately not guarded -- counting the calls is what it is for.
+	if (DebugCallsThisFrame == 1)
+	{
+		DebugSecondsSinceLog += DeltaSeconds;
+	}
 
 	// One line a second, and one the instant the mode or the base changes. The
 	// transitions are where the answer is, and a once-a-second sample steps straight
@@ -319,8 +382,9 @@ void USFShipboardMovementComponent::UpdateDriftMeasurement(float DeltaSeconds)
 	{
 		UE_LOG(LogStarForge, Log,
 			TEXT("Shipboard drift: %.1f s settled, drift now %.3f cm, peak drift %.3f cm, ")
-			TEXT("peak jitter %.3f cm/tick, skipped carries %lld"),
-			MeasuredSeconds, DriftCm, PeakDriftCm, PeakJitterCm, SkippedCarryFrames);
+			TEXT("peak jitter %.3f cm/tick, skipped carries %lld, knocked down %.1f s -- %s"),
+			MeasuredSeconds, DriftCm, PeakDriftCm, PeakJitterCm, SkippedCarryFrames,
+			KnockedDownSeconds, *DescribeFooting());
 		NextPeriodicLogSeconds += 10.0;
 	}
 }
@@ -336,6 +400,7 @@ void USFShipboardMovementComponent::RestartMeasurementInterval()
 		BestCompletedSeconds = MeasuredSeconds;
 		BestCompletedPeakDriftCm = PeakDriftCm;
 		BestCompletedPeakJitterCm = PeakJitterCm;
+		BestCompletedKnockedDownSeconds = KnockedDownSeconds;
 	}
 
 	// A completed interval worth reading is one line on disk, so a run's outcome
@@ -346,8 +411,9 @@ void USFShipboardMovementComponent::RestartMeasurementInterval()
 	{
 		UE_LOG(LogStarForge, Log,
 			TEXT("Shipboard drift interval complete: %.1f s, peak drift %.3f cm, ")
-			TEXT("peak jitter %.3f cm/tick, skipped carries %lld"),
-			MeasuredSeconds, PeakDriftCm, PeakJitterCm, SkippedCarryFrames);
+			TEXT("peak jitter %.3f cm/tick, skipped carries %lld, knocked down %.1f s -- %s"),
+			MeasuredSeconds, PeakDriftCm, PeakJitterCm, SkippedCarryFrames,
+			KnockedDownSeconds, *DescribeFooting());
 	}
 
 	// Peaks and clock go together or not at all. Carrying peaks across a restart
@@ -359,4 +425,243 @@ void USFShipboardMovementComponent::RestartMeasurementInterval()
 	PeakJitterCm = 0.0;
 	MeasuredSeconds = 0.0;
 	NextPeriodicLogSeconds = 10.0;
+	KnockedDownSeconds = 0.0;
+}
+
+bool USFShipboardMovementComponent::IsKnockdownEnabled() const
+{
+	return CVarKnockdown.GetValueOnGameThread() != 0;
+}
+
+void USFShipboardMovementComponent::UpdateFooting(float DeltaSeconds)
+{
+	// Once a frame, for the reason UpdateDriftMeasurement gives: the engine calls
+	// UpdateBasedMovement twice a frame, and a push added on both calls would be twice
+	// the push the maths says -- the doubled clock all over again, in velocity. The
+	// same guard makes the call from TickComponent free whenever the carry has already
+	// settled his footing this frame.
+	const uint64 ThisFrame = GFrameCounter;
+	if (ThisFrame == LastFootingFrame)
+	{
+		return;
+	}
+	LastFootingFrame = ThisFrame;
+
+	if (!ShipFrame.IsValid() || !UpdatedComponent)
+	{
+		return;
+	}
+
+	// Read once: the two questions below are asked about the same instant, and nothing
+	// between them can change the answer.
+	const bool bHasBase = GetMovementBaseObject() != nullptr;
+
+	// The flag keeps the movement base through the fall it was set for, and nothing
+	// else. With the base gone there is nothing left to keep, and a flag still on would
+	// survive into the next walking-to-falling transition -- the one the negative
+	// control depends on losing its base at.
+	if (bStayBasedInAir && !bHasBase)
+	{
+		bStayBasedInAir = false;
+	}
+
+	// Everything in the ship's frame, in SI, from the one instrument. The frame
+	// component samples in TG_PostPhysics, so on this pre-physics call these are last
+	// frame's figures; a frame of lag against a half-second hysteresis is nothing.
+	const FTransform FrameTransform = ShipFrame->GetFrameTransform();
+	const FVector LocalOmega = FrameTransform.InverseTransformVectorNoScale(ShipFrame->GetAngularVelocityRadPerSec());
+	const FVector LocalAccel = FrameTransform.InverseTransformVectorNoScale(ShipFrame->GetLinearAccelMetersPerSecSq());
+
+	const FVector LocalCm = GetLocalLocation();
+	const FVector LocalOffsetMetres(
+		StarForge::Units::CmToMetres(LocalCm.X),
+		StarForge::Units::CmToMetres(LocalCm.Y),
+		StarForge::Units::CmToMetres(LocalCm.Z));
+
+	FeltAccelMetersPerSecSq = StarForge::ShipFrame::ComputeFeltAcceleration(LocalAccel, LocalOmega, LocalOffsetMetres);
+
+	// Strapped in, or with the mechanic off, nothing is over the limit as far as
+	// footing is concerned. Routed through Update rather than skipped, so a man who is
+	// down when the switch is thrown stands up through the same half second as
+	// everyone else, not by a second path.
+	//
+	// No movement base is the third of those: a man with nothing under his feet has no
+	// footing to lose, and the mechanic must not be the reason he never gets one. While
+	// he is down IsValidLandingSpot refuses him a landing, landing is the only way to a
+	// base, and the base is what the carry needs -- so a knockdown taken before he ever
+	// had one strands him for the rest of the session. Measured, not argued: the rig's
+	// occupant spawns a hand's breadth above the deck and falls to it over nine frames,
+	// and with the scripted profile already over the limit he was knocked down on frame
+	// three, never landed, was never carried once in twenty-five seconds, and the ship
+	// left at 282 m/s without him. The state still advances here whether he is based or
+	// not, which is what stands him up again after the deck has let go of him.
+	const bool bOverLimit = IsKnockdownEnabled() && !bStrappedIn && bHasBase
+		&& StarForge::ShipFrame::ExceedsGravPlateLimit(FeltAccelMetersPerSecSq);
+
+	const bool bWasDown = Footing.bDown;
+	Footing.Update(bOverLimit, DeltaSeconds, KnockdownRecoverySeconds);
+
+	if (Footing.bDown && !bWasDown)
+	{
+		// Set BEFORE the mode change. OnMovementModeChanged reads it on entry to
+		// falling and, with it on, skips both the imparting of base velocity and the
+		// clearing of the base (CharacterMovementComponent.cpp 1454-1471). The base is
+		// what MaybeUpdateBasedMovement checks before calling UpdateBasedMovement at
+		// all; losing it stops the carry, and stopping the carry at 400 m/s is not
+		// knocking a man down, it is deleting him.
+		bStayBasedInAir = true;
+		SetMovementMode(MOVE_Falling);
+		CurrentKnockdownSeconds = 0.0;
+
+		UE_LOG(LogStarForge, Display,
+			TEXT("Footing LOST at t=%.2f s, ship-local (%.0f %.0f %.0f) cm: felt %.2f m/s2 over the %.2f limit, ")
+			TEXT("ship turning %.1f deg/s; falling, walking refused, still carried."),
+			GetWorld()->GetTimeSeconds(), LocalCm.X, LocalCm.Y, LocalCm.Z,
+			FeltAccelMetersPerSecSq.Size(), StarForge::ShipFrame::GravPlateLimitMetersPerSecSq,
+			FMath::RadiansToDegrees(LocalOmega.Size()));
+	}
+
+	if (Footing.bDown)
+	{
+		// What the plates could not absorb, reversed, as this frame's change of
+		// velocity. Straight into Velocity rather than AddForce: PerformMovement applies
+		// accumulated forces after this call and before StartNewPhysics (2840, 2871,
+		// 3034), so either would land in this frame's PhysFalling, but AddForce also
+		// divides by the character's Mass on the way and this is an acceleration already.
+		PushMetersPerSecSq = StarForge::ShipFrame::ComputeUncompensatedAcceleration(FeltAccelMetersPerSecSq);
+
+		const FVector PushWorld = FrameTransform.TransformVectorNoScale(PushMetersPerSecSq);
+		Velocity += FVector(
+			StarForge::Units::MetresToCm(PushWorld.X),
+			StarForge::Units::MetresToCm(PushWorld.Y),
+			StarForge::Units::MetresToCm(PushWorld.Z)) * DeltaSeconds;
+
+		KnockedDownSeconds += DeltaSeconds;
+		CurrentKnockdownSeconds += DeltaSeconds;
+		return;
+	}
+
+	PushMetersPerSecSq = FVector::ZeroVector;
+
+	if (bWasDown)
+	{
+		// Off the moment his footing returns. The only transition that reads the flag
+		// is walking into falling, and until he lands there is none. Left on for good
+		// it would hide the negative control: a deck made unwalkable by sf.ShipGravity 0
+		// would keep its base instead of losing it, and the control would show nothing.
+		bStayBasedInAir = false;
+
+		UE_LOG(LogStarForge, Display,
+			TEXT("Footing regained at t=%.2f s after %.1f s down, ship-local (%.0f %.0f %.0f) cm; landing is the engine's again."),
+			GetWorld()->GetTimeSeconds(), CurrentKnockdownSeconds, LocalCm.X, LocalCm.Y, LocalCm.Z);
+
+		CurrentKnockdownSeconds = 0.0;
+	}
+}
+
+bool USFShipboardMovementComponent::IsValidLandingSpot(const FVector& CapsuleLocation, const FHitResult& Hit) const
+{
+	// PhysFalling asks this on every blocking hit and lands him the moment it says
+	// yes (cpp 5050-5054): in the same frame, under the very acceleration that took
+	// his feet. With no, the hit goes to HandleImpact, then ComputeSlideVector, and the
+	// velocity is re-derived from the slide (5078, 5122, 5135): while he is down the
+	// deck is something to slide along, not something to stand on.
+	if (Footing.bDown)
+	{
+		return false;
+	}
+
+	return Super::IsValidLandingSpot(CapsuleLocation, Hit);
+}
+
+void USFShipboardMovementComponent::ProcessLanded(const FHitResult& Hit, float remainingTime, int32 Iterations)
+{
+	// The one landing the answer above cannot refuse: a character wedged between two
+	// walls is landed by PhysFalling without asking (cpp 5221-5225). Landing is
+	// SetMovementMode(MOVE_Walking), and walking takes its base from the floor under
+	// him (1442-1452) -- a man pinned in a ceiling corner has none, and would come off
+	// the ship. While he is down there is no landing by any path; the time is spent
+	// falling, as the stock function would have spent it after landing.
+	if (Footing.bDown)
+	{
+		StartNewPhysics(remainingTime, Iterations);
+		return;
+	}
+
+	Super::ProcessLanded(Hit, remainingTime, Iterations);
+}
+
+void USFShipboardMovementComponent::TickComponent(
+	float DeltaTime,
+	ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// The footing again, from the one path that runs whether or not he has a movement
+	// base. With a base the carry has already decided it this frame and the frame guard
+	// makes this free; without one the engine never calls UpdateBasedMovement at all
+	// (cpp 2476-2487), and a man left down for want of a call would never walk or land
+	// again, since IsValidLandingSpot refuses him a landing while he is down.
+	UpdateFooting(DeltaTime);
+
+	// After the engine's own tick, so "did the carry run this frame" has its answer.
+	LogOpenCarryGap(DeltaTime);
+}
+
+void USFShipboardMovementComponent::LogOpenCarryGap(float DeltaSeconds)
+{
+	if (!ShipFrame.IsValid())
+	{
+		return;
+	}
+
+	// The HUD's threshold, for the HUD's reason: one frame is tick order, two is a gap.
+	const int64 Frames = GetFramesSinceLastCarry();
+	if (Frames <= 1)
+	{
+		SecondsSinceGapLog = 0.0;
+		return;
+	}
+
+	// The first line the moment the gap is seen, then one a second. This is the log's
+	// only word on a base loss that never ends: DetectCarryGap counts skipped carries
+	// from inside the carry, and a carry the engine has stopped calling counts nothing.
+	SecondsSinceGapLog += DeltaSeconds;
+	if (Frames == 2 || SecondsSinceGapLog >= 1.0)
+	{
+		const UObject* Base = GetMovementBaseObject();
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Carry NOT RUNNING: %lld frames since the occupant was last carried (mode %s, base %s). ")
+			TEXT("He has come off the ship -- this is the breakage, not a knockdown."),
+			Frames, *GetMovementName(), Base ? *Base->GetName() : TEXT("none"));
+		SecondsSinceGapLog = 0.0;
+	}
+}
+
+FString USFShipboardMovementComponent::DescribeFooting() const
+{
+	// In order of what invalidates what. Skipped carries are the defect this
+	// instrument exists to find and outrank everything; the mechanic being off makes
+	// the run a different rig; a knockdown explains a drift figure that is otherwise
+	// over budget; only then is the figure the carry's own.
+	if (SkippedCarryFrames > 0)
+	{
+		return TEXT("CARRY FAILED: the skipped carries are the defect");
+	}
+	if (!IsKnockdownEnabled())
+	{
+		return TEXT("knockdown off (sf.Knockdown 0)");
+	}
+
+	// The state as well as the interval's tally, because the tally alone cannot see a
+	// man who is on the deck right now: RestartMeasurementInterval drops it with the
+	// peaks on every frame of the settle window, so through that half second the
+	// verdict would read "footing intact" beside a readout already saying he is down.
+	if (Footing.bDown || KnockedDownSeconds > 0.0)
+	{
+		return TEXT("KNOCKED DOWN: the drift is his slide, not the carry");
+	}
+
+	return TEXT("footing intact");
 }
