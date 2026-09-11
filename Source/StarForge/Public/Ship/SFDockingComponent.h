@@ -83,9 +83,12 @@ public:
 	 *     sqrt(400^2 + 265^2) = 4.80 m off the hull's centre, so turning through the
 	 *     window's 10 degrees of allowed misalignment adds 2 * 4.80 * sin(5 deg) = 0.84 m.
 	 *     At the window's edge d is 3.84 m and 6d/T^2 is 23.0 m/s^2.
-	 *   - The angular term is 6 * 10 deg / T^2 = 1.047 rad/s^2, which is 4.19 m/s^2 at a
-	 *     four-metre radius, and it peaks in the SAME frame: smoothstep's second derivative
-	 *     is largest at alpha 0 and alpha 1, not in the middle.
+	 *   - The angular term is 6 * 10 deg / T^2 = 1.047 rad/s^2, and it peaks in the SAME
+	 *     frame: smoothstep's second derivative is largest at alpha 0 and alpha 1, not in
+	 *     the middle. As a felt acceleration it is a figure PER RADIUS, so the radius goes
+	 *     with it or the number means nothing: 4.19 m/s^2 four metres off the axis of the
+	 *     turn, and four metres is not the far side of this cabin. A man in the corner
+	 *     stands sqrt(2) * 4 = 5.66 m off the centreline and feels 5.9.
 	 *   - The first frame is a step of its own: stopping the simulation kills the hull's
 	 *     velocity in one frame, which at the window's 1 m/s limit is 60 m/s^2 at 60 fps.
 	 *
@@ -203,6 +206,16 @@ private:
 	 * has never read anything. The same defect as a drift of zero with no measured time.
 	 */
 	StarForge::Docking::EDockingRefusal LastRefusal = StarForge::Docking::EDockingRefusal::Distance;
+
+	/**
+	 * Whether the refusal above stands on a figure anything actually measured.
+	 *
+	 * False until the first complete pass of UpdateApproach, and false again whenever a
+	 * port is missing and it returns early. The refusal it leaves behind is a real
+	 * refusal -- nothing may dock on an unread instrument -- but it is not one of the four
+	 * window conditions, and reporting it as one prints a distance nobody measured.
+	 */
+	bool bApproachMeasured = false;
 
 	FTransform CaptureStart = FTransform::Identity;
 	FTransform CaptureTarget = FTransform::Identity;

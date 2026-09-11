@@ -23,6 +23,11 @@ void USFDockingPortComponent::BeginPlay()
 	const FVector Up = Relative.GetAxisZ();
 	const FVector Location = GetRelativeLocation();
 
+	// "hull-local" is fixed in the format on purpose, though the station prints through
+	// this same line and has no hull. The runbook quotes the line verbatim and the
+	// operator matches it by eye; a word that changed with the carrier would break that
+	// match for nothing, and the coordinates are the component's own relative location
+	// either way.
 	UE_LOG(LogStarForge, Display,
 		TEXT("Docking port on %s at hull-local (%.0f %.0f %.0f) cm, out along (%.2f %.2f %.2f), deck up (%.2f %.2f %.2f)."),
 		GetOwner() ? *GetOwner()->GetActorNameOrLabel() : TEXT("nothing"),

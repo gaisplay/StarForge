@@ -284,6 +284,16 @@ void ASFFrameDriftHUD::DrawHUD()
 			const FVector At = Docking->GetPortOffsetShipLocalMetres();
 			const bool bCanDock = Docking->CanDockNow();
 
+			// Named, and built before the line rather than inside it, exactly as
+			// LogFlightState builds the same verdict. A Printf temporary inside a ternary
+			// arm does survive to the end of the full expression, so the shorter form is
+			// correct -- but it is one refactor away from a dangling TCHAR*, and the two
+			// places that print this verdict should not differ in how safe they are.
+			const FString Verdict = bCanDock
+				? FString(TEXT("CAN DOCK"))
+				: FString::Printf(TEXT("out of window: %s"),
+					USFDockingComponent::RefusalName(Docking->GetLastRefusal()));
+
 			// Green only when the key would be accepted this instant. A window that
 			// reported itself open while the command would refuse is the same defect as a
 			// turret at its stop reporting itself on target.
@@ -292,9 +302,7 @@ void ASFFrameDriftHUD::DrawHUD()
 					Approach.Distance, At.X, At.Y, At.Z, Approach.SpeedMetresPerSec,
 					FMath::RadiansToDegrees(Approach.ForwardAngleRad),
 					FMath::RadiansToDegrees(Approach.UpAngleRad),
-					bCanDock ? TEXT("CAN DOCK")
-						: *FString::Printf(TEXT("out of window: %s"),
-							USFDockingComponent::RefusalName(Docking->GetLastRefusal()))),
+					*Verdict),
 				Y,
 				bCanDock ? FLinearColor::Green : FLinearColor::White);
 			break;

@@ -140,6 +140,13 @@ void USFDockingComponent::UpdateApproach()
 	const AActor* Owner = GetOwner();
 	if (!Port || !StationPort || !Owner)
 	{
+		// A refusal is still the right answer -- CanDockNow must not go green on an
+		// instrument that read nothing -- but none of the four window conditions is what
+		// happened, and the zeroed approach below is not a measurement. The flag records
+		// that, so the refusal line can say it could not measure instead of reading the
+		// stored reason out and printing "distance 0.0 m over 3.0": a verdict against a
+		// figure that is INSIDE its own limit.
+		bApproachMeasured = false;
 		LastApproachSI = StarForge::Docking::FDockingApproach();
 		LastPortOffsetShipLocalMetres = FVector::ZeroVector;
 		LastRefusal = StarForge::Docking::EDockingRefusal::Distance;
@@ -180,10 +187,26 @@ void USFDockingComponent::UpdateApproach()
 		StarForge::Units::CmToMetres(PortToPortShipCm.Z));
 
 	LastRefusal = StarForge::Docking::CanDock(LastApproachSI, BuildLimits());
+	bApproachMeasured = true;
 }
 
 void USFDockingComponent::LogRefusal() const
 {
+	if (!bApproachMeasured)
+	{
+		// Handled here and not in the enum: EDockingRefusal is the maths module's
+		// vocabulary for the four conditions of the window, and a missing port is an
+		// engine-side fact about this component, not a thing the approach did -- the same
+		// separation HasStation() already keeps. Which one is missing, because "could not
+		// measure" on its own sends the reader to check all three.
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Dock: refused -- the approach could not be measured: no %s."),
+			!Port ? TEXT("port on this ship")
+				: !StationPort ? TEXT("station port")
+				: TEXT("owner"));
+		return;
+	}
+
 	FString Detail;
 	switch (LastRefusal)
 	{

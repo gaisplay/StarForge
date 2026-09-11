@@ -62,7 +62,9 @@ namespace StarForge::Docking
 		// four guards and answers None -- permission to dock, granted on a question that
 		// could not be evaluated. Negated, it fails the first condition instead. Both
 		// paths in are reachable: the speed is carried from the caller's instrument
-		// untouched, and a port location that is not finite makes FVector::Dist NaN.
+		// untouched, and a port location that is not finite carries into FVector::Dist --
+		// as NaN if a coordinate is NaN, as +Infinity if one is merely infinite. The
+		// negation refuses both; `> Limit` would refuse only the infinite one.
 		if (!(ApproachSI.Distance <= Limits.DistanceMetres))
 		{
 			return EDockingRefusal::Distance;
