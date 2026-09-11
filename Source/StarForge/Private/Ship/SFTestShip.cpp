@@ -268,8 +268,12 @@ ASFTestShip::ASFTestShip()
 	// from Half and the panel thickness, so moving a wall moves the hatch and the port
 	// with it -- the same rule the turret mount and the seats already follow.
 	//
-	// Nothing is needed below the opening: the floor panel spans the whole footprint at
-	// Z -410..-390 and the hatch starts at its top face.
+	// The hatch starts at the deck's top face, Z -390, so no sill panel is needed under
+	// it -- but not because the floor reaches all the way out. The floor slab stops at
+	// Y 400 while the wall's slabs run from 390 to 410, which leaves a notch under the
+	// opening 200 wide, 10 deep and 20 tall with nothing beneath it. Harmless twice
+	// over: a capsule of radius 34 cannot enter a 10 cm gap, and docked, the tunnel's
+	// own floor lies across it.
 	const double DeckTopZ = -Half + PanelThickness * CubeEdgeCm * 0.5;      // -390
 	const double HatchTopZ = DeckTopZ + HatchHeightCm;                      // -140
 	const double JambWidthCm = Half - HatchHalfWidthCm;                     //  300
@@ -532,15 +536,25 @@ void ASFTestShip::TickScriptedProfile()
 	// The profile commands a physics body, and a hull that is not simulating is not one:
 	// the velocities below go nowhere, and yet the ship reads them straight back out of
 	// Chaos into its readout, printing speed it never had beside the word "docked". The
-	// lock on the thruster array closes the other route into that same lie and cannot
-	// close this one, because this writes velocity rather than force.
+	// lock on the thruster array shuts the other route into that same lie by itself and
+	// cannot shut this one, because this writes velocity rather than force: the lock has
+	// to be READ here, which is what the second half of the condition does.
 	//
-	// Asked as "is this body simulating" rather than as a question about docking on
-	// purpose: that is the profile's true precondition, and putting it this way means the
-	// rig never learns that docking exists, exactly as the pilot's post never does.
+	// A locked array is the second refusal, and it is the same one the pilot's post makes
+	// one level up: locked means nothing may command this hull, whatever locked it, and
+	// the profile is a commander like any other with no standing the seat does not have.
+	//
+	// Both are asked as questions about the hull rather than about docking, on purpose:
+	// those are the profile's true preconditions, and putting them this way means the rig
+	// never learns that docking exists, exactly as the pilot's post never does. The two
+	// coincide today because the only thing that locks the array -- docking -- also stops
+	// the simulation, and they part the moment something locks a hull that is still
+	// simulating: a damaged ship, a powered-down ship, a hull taken by a pirate. All three
+	// are stage 4's, and all three reach for SetLocked. Neither predicate is therefore a
+	// restatement of the other, and dropping either one is a decision, not a tidy-up.
 	//
 	// Silent, because it would run every frame.
-	if (!Hull->IsSimulatingPhysics())
+	if (!Hull->IsSimulatingPhysics() || (Thrusters && Thrusters->IsLocked()))
 	{
 		return;
 	}

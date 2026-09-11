@@ -72,7 +72,7 @@ public:
 
 	USFShipFrameComponent* GetFrameComponent() const { return Frame; }
 
-	/** The simulated body. Task 5 applies thrust here. */
+	/** The simulated body: the thruster array applies its wrench to this. */
 	UBoxComponent* GetHull() const { return Hull; }
 
 	USFThrusterArrayComponent* GetThrusters() const { return Thrusters; }
