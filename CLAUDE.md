@@ -72,6 +72,36 @@ movement base through the fall, the carry keeps running, and the control shows n
 A carry that has genuinely stopped is reported by `Carry NOT RUNNING` once a second,
 from outside the carry, because the counter inside it cannot report a gap that never ends.
 
+**The loop rig lives on a second map, and the default map has not changed.** `L_FrameSpike`
+does not move a single default: every figure this project has recorded was taken on it. The
+loop — station, ship spawned already docked, person in the cabin — is `ASFLoopGameMode`, and
+there are two ways to reach it.
+
+By map, once `Content/Maps/L_Loop.umap` exists. The level is empty and carries one thing, a
+`GameMode Override` of `SFLoopGameMode`; the mode spawns the station, the ship and the pawn.
+
+```bash
+"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Loop -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log
+```
+
+By overriding the game mode on the URL, which needs no map at all. **Quote the first
+argument**: `?` is a shell metacharacter, and unquoted the command silently loses everything
+after it and runs the ordinary spike rig instead.
+
+```bash
+"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFLoopGameMode" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log
+```
+
+The two differ in exactly one thing: which map file is loaded. Both maps are empty and the
+mode assembles the world either way, so the second form does not touch a byte of a map —
+which is why every headless figure stage 3 recorded was taken that way, before `L_Loop`
+existed. The map is what a person needs: a URL cannot be typed into a shortcut.
+
+`ASFLoopGameMode` forces `sf.ShipProfile 0` and says so in the log; the ship is docked before
+the world begins play, so there is no frame in which it is adrift. **Run every flight check on
+this rig at `-fps=400` as well as `-fps=60`**: undocking recreates the hull's physics state,
+and whether `SleepFamily` survives that is a question for a run, not for a header.
+
 Console variables the rig understands:
 
 | Variable | Default | What it does |
@@ -87,6 +117,8 @@ Console variables the rig understands:
 | `sf.DriftDebug` | 0 | 1 logs carry calls per frame, movement mode, base and ship-local position |
 | `sf.TargetDrone` | 1 | 0 withdraws the rig's target drone; the turret must then report no target rather than aim at the origin |
 | `sf.AutomationOperator` | 1 | 1 the ship's automation holds the gunner's seat; 0 leaves it free. The gunner's post is what tests spec §4's claim that the ship cannot tell who holds a post, so it is held by something that is not a person by default |
+| `sf.Dock` | -1 | Docking from the console, the headless twin of the `F` key. `1` docks if the approach is inside the window, `0` undocks, `-1` is no command. Acted on when the value **changes**, not on its level. `2` is the headless cycle — undock now and dock again one capture later — and it exists because `-ExecCmds` applies its whole list at startup, so `sf.Dock 0, sf.Dock 1` leaves only the last value and "docked → free → docked" cannot be asked for in one run at all |
+| `sf.BindFrame` | *(empty)* | `ship` or `station`: binds the occupant to that carrier's frame **wherever he is standing**. The negative control for the handover, and the same trick as `sf.ShipGravity 0` for the carry. Docked, it is a legitimate handover and everything stays quiet; undocked and under thrust it is knowingly wrong, and the cross-check must warn within ten frames and the carry must stop about a second later; bound the other way round — to the moving ship from the station's floor — the `Frame handover` line must show one frame of the ship's travel, never zero |
 
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
 
