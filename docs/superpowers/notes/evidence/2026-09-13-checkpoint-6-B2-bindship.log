@@ -1,0 +1,28 @@
+LogInit: Command Line: /Game/Maps/L_Loop -game -windowed -ResX=1600 -ResY=900
+[2026.09.13-23.00.49:462][  0]LogWorld: Bringing World /Game/Maps/L_Loop.L_Loop up for play (max tick rate 0) at 2026.09.14-02.00.49
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Docking: station found, window 3.0 m, 1.0 m/s, fwd 10 deg, up 10 deg, capture 1.0 s.
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Dock: docked.
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Docking port on Station at hull-local (0 -600 -265) cm, out along (0.00 -1.00 0.00), deck up (0.00 0.00 1.00).
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Station at world (0 0 0) cm: 12 x 8 x 8 m box, hatch in the -Y wall, 200 cm tunnel, frame present, no physics body.
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Thruster array ready: 24 thrusters, 50000 kg, inertia (533333, 533333, 533333) kg m^2.
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Station 'pilot' taken by console.
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Station 'gunner' taken by automation.
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Docking port on Ship at hull-local (0 400 -265) cm, out along (0.00 1.00 0.00), deck up (0.00 0.00 1.00).
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Turret mount at ship-local (0 0 280) cm: yaw +/-120, pitch -30..60 deg, traverse 90 deg/s, on target within 0.5 deg, barrel attached.
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Physics: async block mode (cvar absent), substepping off. Drift figures are only comparable across runs where these match.
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Target drone spawned: orbit 30.0 m radius at 10.0 deg/s, tilted 20.0 deg, anchored to Ship, present.
+[2026.09.13-23.00.49:466][  0]LogStarForge: Display: Loop rig: scripted profile off; the ship spawns docked; the man stands in the cabin.
+[2026.09.13-23.00.49:873][  2]LogStarForge: Display: Frame handover: Station -> Ship, first carry moved him 0.000 cm over 2 frame(s), gravity turned 0.0 deg
+[2026.09.13-23.01.00:369][443]LogStarForge: Shipboard drift: 10.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-23.01.08:665][ 58]LogStarForge: Display: Thruster array ready: 24 thrusters, 50000 kg, inertia (533333, 533333, 533333) kg m^2.
+[2026.09.13-23.01.08:665][ 58]LogStarForge: Display: Dock: undocked.
+[2026.09.13-23.01.10:366][599]LogStarForge: Shipboard drift: 20.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-23.01.20:366][754]LogStarForge: Shipboard drift: 30.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-23.01.30:366][907]LogStarForge: Shipboard drift: 40.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-23.01.39:483][796]LogStarForge: Display: Frame bound by console to Ship (sf.BindFrame). This ignores where he is standing, which is the point: it is a negative control.
+[2026.09.13-23.01.40:369][ 79]LogStarForge: Shipboard drift: 50.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-23.01.50:367][247]LogStarForge: Shipboard drift: 60.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-23.02.00:368][406]LogStarForge: Shipboard drift: 70.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-23.02.10:365][592]LogStarForge: Shipboard drift: 80.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-23.02.20:369][777]LogStarForge: Shipboard drift: 90.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-23.02.24:604][786]Log file closed, 09/14/26 02:02:24
