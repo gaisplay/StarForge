@@ -109,6 +109,54 @@ public:
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	FVector GetLocalLocation() const;
 
+	/** The bound frame's owner, by name, or "none". What the readout prints. */
+	FString GetFrameName() const;
+
+	/** How far the first carry after the last handover moved him, in centimetres. */
+	double GetLastHandoverJumpCm() const { return LastHandoverJumpCm; }
+
+	/** By how much the deck's down turned across that handover, in degrees. */
+	double GetLastHandoverGravityTurnDeg() const { return LastHandoverGravityTurnDeg; }
+
+	/** The whole handover as one phrase, empty before the first one. */
+	const FString& GetLastHandoverText() const { return LastHandoverText; }
+
+	/**
+	 * Consecutive frames on which the floor under him belonged to a different carrier
+	 * than the frame he is bound to. Zero is the only healthy value.
+	 *
+	 * An instrument that costs one line, because the engine already knows what he is
+	 * standing on: the movement base has an owner, and that owner either carries the
+	 * frame he rides or it does not.
+	 */
+	int32 GetFrameMismatchFrames() const { return MismatchFrames; }
+	double GetFrameMismatchSeconds() const { return MismatchSeconds; }
+
+	/**
+	 * True once the disagreement has lasted long enough to be reported. The readout
+	 * colours its frame line on this and nothing else, so the panel and the log agree on
+	 * what counts as a mismatch: the same threshold, in the same unit.
+	 */
+	bool IsFrameMismatchReported() const { return bMismatchReported; }
+
+	/**
+	 * How long the floor and the frame may disagree before it is a finding: a sixth of a
+	 * second, which is the ten frames at 60 fps the instrument was designed around.
+	 *
+	 * A TIME, not a frame count, and the difference was measured. Walking through the
+	 * hatch binds the occupant to the new carrier when the edge of his capsule touches its
+	 * volume, while the floor under him switches when the capsule's centre crosses the
+	 * panel boundary: 34 cm on the way out and 24 cm on the way back, 57 and 40 ms at
+	 * walking speed. At 60 fps that is three frames and two, under any threshold; at the
+	 * 320 fps of the first manual run it is eighteen and thirteen, and a threshold of ten
+	 * frames warned on every single crossing -- twelve false findings in one session. A
+	 * frame count is a frame rate, which is the shape of the Chaos sleep defect again.
+	 * A sixth of a second clears the seam at any rate and still reports a wrong binding
+	 * within it -- and a man who stops on the seam itself is reported, as he should be:
+	 * if the ship leaves then, the seam leaves without him.
+	 */
+	static constexpr double FrameMismatchThresholdSeconds = 1.0 / 6.0;
+
 	virtual void UpdateBasedMovement(float DeltaSeconds) override;
 
 	/**
@@ -190,6 +238,18 @@ private:
 	 * report.
 	 */
 	void DetectCarryGap();
+
+	/**
+	 * Compares the owner of the floor he is standing on against the frame he is bound to,
+	 * and complains when the two disagree for FrameMismatchThresholdSeconds running.
+	 *
+	 * Latched to one call per frame like the drift measurement, and for a related reason:
+	 * the engine calls UpdateBasedMovement once a frame for a base that is not simulating
+	 * and twice for one that is (CharacterMovementComponent.cpp 2476-2510). Unlatched,
+	 * "ten frames" would mean ten frames docked and five flying -- an instrument whose
+	 * threshold moves with the state of the ship.
+	 */
+	void UpdateFrameCrossCheck(float DeltaSeconds);
 
 	/**
 	 * Diagnostic only, behind sf.DriftDebug. Reports how many times the carry runs
@@ -314,4 +374,33 @@ private:
 
 	/** Throttle for LogOpenCarryGap. */
 	double SecondsSinceGapLog = 0.0;
+
+	/** Set by SetShipFrame, consumed by the first carry that follows it. */
+	bool bHandoverPending = false;
+	FString PendingHandoverOldName;
+	FString PendingHandoverNewName;
+	double PendingHandoverGravityTurnDeg = 0.0;
+
+	/**
+	 * The frame the handover was armed on, and whether the carry stopped before it was
+	 * consumed. Both exist because "the first carry moved him X cm" is a figure over an
+	 * interval the line did not name: the consuming carry can be one frame after the
+	 * binding or twenty-two, and a reader cannot tell a measurement from an artefact
+	 * without the count. A carry gap in between is worse than a long interval -- the gap
+	 * re-seeds the transform the carry measures against, so the figure would be a zero
+	 * taken over nothing at all, and zero is the verdict this instrument exists to issue.
+	 */
+	uint64 PendingHandoverFrame = 0;
+	bool bPendingHandoverCarryGap = false;
+
+	double LastHandoverJumpCm = 0.0;
+	double LastHandoverGravityTurnDeg = 0.0;
+	FString LastHandoverText;
+
+	/** Cross-check state; see UpdateFrameCrossCheck and FrameMismatchThresholdSeconds. */
+	int32 MismatchFrames = 0;
+	double MismatchSeconds = 0.0;
+	bool bMismatchReported = false;
+	uint64 LastCrossCheckFrame = TNumericLimits<uint64>::Max();
+	double SecondsSinceMismatchLog = 0.0;
 };

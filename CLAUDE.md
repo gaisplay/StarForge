@@ -72,6 +72,45 @@ movement base through the fall, the carry keeps running, and the control shows n
 A carry that has genuinely stopped is reported by `Carry NOT RUNNING` once a second,
 from outside the carry, because the counter inside it cannot report a gap that never ends.
 
+**The loop rig lives on a second map, and the default map has not changed.** `L_FrameSpike`
+does not move a single default: every figure this project has recorded was taken on it. The
+loop — station, ship spawned already docked, person in the cabin — is `ASFLoopGameMode`, and
+there are two ways to reach it.
+
+By map, once `Content/Maps/L_Loop.umap` exists. The level is empty and carries one thing, a
+`GameMode Override` of `SFLoopGameMode`; the mode spawns the station, the ship and the pawn.
+
+```bash
+MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Loop -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log
+```
+
+**From Git Bash the map argument needs `MSYS_NO_PATHCONV=1` in front of the command.** MSYS
+rewrites an argument that starts with `/` as a Windows path — `/Game/Maps/L_Loop` reaches the
+engine as `C:/Program Files/Git/Game/Maps/L_Loop` — and the engine then finds no map, brings
+up no world and sits in an empty level for the whole run: no station, no `Loop rig:` line,
+`dock free -- NO STATION in this level`, and an exit code of 0. Measured on 2026-09-13; the
+tell in the log is `LogInit: Command Line: "C:/Program Files/Git/Game/Maps/L_Loop" …` with no
+`Bringing World` line at all. From cmd or PowerShell the plain form is fine. The URL form
+below was not rewritten in any recorded run.
+
+By overriding the game mode on the URL, which needs no map at all. **Quote the first
+argument**: `?` is a shell metacharacter, and unquoted the command silently loses everything
+after it and runs the ordinary spike rig instead.
+
+```bash
+"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFLoopGameMode" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log
+```
+
+The two differ in exactly one thing: which map file is loaded. Both maps are empty and the
+mode assembles the world either way, so the second form does not touch a byte of a map —
+which is why every headless figure stage 3 recorded was taken that way, before `L_Loop`
+existed. The map is what a person needs: a URL cannot be typed into a shortcut.
+
+`ASFLoopGameMode` forces `sf.ShipProfile 0` and says so in the log; the ship is docked before
+the world begins play, so there is no frame in which it is adrift. **Run every flight check on
+this rig at `-fps=400` as well as `-fps=60`**: undocking recreates the hull's physics state,
+and whether `SleepFamily` survives that is a question for a run, not for a header.
+
 Console variables the rig understands:
 
 | Variable | Default | What it does |
@@ -87,6 +126,8 @@ Console variables the rig understands:
 | `sf.DriftDebug` | 0 | 1 logs carry calls per frame, movement mode, base and ship-local position |
 | `sf.TargetDrone` | 1 | 0 withdraws the rig's target drone; the turret must then report no target rather than aim at the origin |
 | `sf.AutomationOperator` | 1 | 1 the ship's automation holds the gunner's seat; 0 leaves it free. The gunner's post is what tests spec §4's claim that the ship cannot tell who holds a post, so it is held by something that is not a person by default |
+| `sf.Dock` | -1 | Docking from the console, the headless twin of the `F` key. `1` docks if the approach is inside the window, `0` undocks, `-1` is no command. Acted on when the value **changes**, not on its level. `2` is the headless cycle — undock now and dock again one capture later — and it exists because `-ExecCmds` applies its whole list at startup, so `sf.Dock 0, sf.Dock 1` leaves only the last value and "docked → free → docked" cannot be asked for in one run at all |
+| `sf.BindFrame` | *(empty)* | `ship` or `station`: binds the occupant to that carrier's frame **wherever he is standing**. The negative control for the handover, and the same trick as `sf.ShipGravity 0` for the carry. Docked, it is a legitimate handover and everything stays quiet; undocked and under thrust it is knowingly wrong, and the cross-check must warn within ten frames and the carry must stop about a second later; bound the other way round — to the moving ship from the station's floor — the `Frame handover` line must show one frame of the ship's travel, never zero |
 
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
 
@@ -94,7 +135,7 @@ Console variables the rig understands:
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject"
 ```
 
-**Close the editor before building.** A running editor holds the Live Coding lock and the build will fail. Check with `tasklist | findstr Unreal`.
+**Close the editor before building.** A running editor holds the Live Coding lock and the build will fail. Check with `tasklist | findstr Unreal`. From Git Bash, `taskkill /F` does not work — MSYS turns the switch `/F` into the path `F:/` — so once everything is saved close it with `powershell -NoProfile -Command "Stop-Process -Name UnrealEditor -Force"`.
 
 ## Module split — the load-bearing boundary
 
@@ -316,6 +357,15 @@ Things in the code that look like mistakes and are not:
   first step of any commanded thrust keeps it awake. Waking the body wherever a wrench is
   applied was tried first and measured to change nothing — being awake is not what is in
   question — and the reason it cannot work is written where that attempt stood.
+- **The frame cross-check's threshold is a time, `FrameMismatchThresholdSeconds`, not a
+  frame count.** It was ten frames until the first manual run of the loop at 320 fps, which
+  printed `Standing on … while bound to …` on every single walk through the hatch — twelve
+  false findings in one session, in an instrument whose red line the runbook says stops the
+  run. A volume binds the occupant when the *edge* of his capsule touches it; the floor
+  under him switches when its *centre* crosses the panel boundary; the 24–34 cm between
+  the two is two or three frames at 60 fps and thirteen to eighteen at 320. A frame count
+  is a frame rate — the same shape as the Chaos sleep counter — and any threshold added to
+  this project from now on is written in seconds and tested at 400 fps as well as 60.
 - **A second console key, `F1`, in `Config/DefaultInput.ini`.** The engine binds the console
   to `Tilde` alone, and on a keyboard layout that does not produce Tilde from the key left of
   "1" the console never opens — silently, with nothing in the log. It cost a whole run of
@@ -332,3 +382,13 @@ which it was.
 doubled clock and the hull's drag — were caught by comparing logged figures against
 arithmetic, not by looking at the HUD. `sf.FlightLog` and `sf.DriftDebug` exist for
 that, and a figure transcribed from a screen is a figure nobody can check next week.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `python -m graphify query "<question>"` when graphify-out/graph.json exists. Use `python -m graphify path "<A>" "<B>"` for relationships and `python -m graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `python -m graphify update .` to keep the graph current (AST-only, no API cost).

@@ -132,6 +132,20 @@ void USFPilotStationComponent::TickComponent(
 		return;
 	}
 
+	// Locked engines, for whatever reason locked them. The post does not know that
+	// docking exists and must not: it knows that the thing it commands is refusing
+	// commands, and the honest report of that is the same one it makes when the rig is
+	// flying itself -- nobody in that seat is flying this ship. The same lesson as the
+	// scripted-profile lock, one level down: the lock belongs to the executor, and the
+	// post reads it rather than being told about the reason for it.
+	if (Thrusters->IsLocked())
+	{
+		LastIntent = StarForge::FFlightIntent();
+		bOperatorFlying = false;
+		Thrusters->ClearDemand();
+		return;
+	}
+
 	// An operator who is not flying says so rather than handing back a zeroed intent:
 	// zero means "stick centred", which with assist on is a command to stop.
 	StarForge::FFlightIntent Intent;

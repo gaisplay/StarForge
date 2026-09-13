@@ -2,6 +2,7 @@
 
 #include "CoreGlobals.h"
 #include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "HAL/IConsoleManager.h"
@@ -85,6 +86,47 @@ USFShipboardMovementComponent::USFShipboardMovementComponent()
 
 void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame)
 {
+	USFShipFrameComponent* OldFrame = ShipFrame.Get();
+
+	// A handover is a change of carrier, not a rebinding to the same one. Walking back
+	// into a volume he never left fires the overlap again, and treating that as a
+	// handover would reset the drift instrument every time he crossed his own doorway.
+	if (OldFrame && NewFrame && OldFrame != NewFrame)
+	{
+		// The angle between the two decks' down vectors. It is the number spec 8 means by
+		// "the gravity direction changes only by the leftover tolerance": mated ports
+		// hold both +Z parallel to within the up-angle limit, so a person walking through
+		// the airlock should read a fraction of a degree here and never ten.
+		const FVector OldDown = -OldFrame->GetFrameTransform().GetUnitAxis(EAxis::Z);
+		const FVector NewDown = -NewFrame->GetFrameTransform().GetUnitAxis(EAxis::Z);
+
+		if (bHandoverPending)
+		{
+			// The crossing about to be overwritten, said out loud. The record of crossings is
+			// this instrument's entire output, and a second binding before the first carry
+			// consumed the first one used to erase it with nothing logged -- one line where
+			// two were expected, and no way to tell that from a crossing that never happened.
+			// Named rather than queued: a queue can grow without bound, and one line naming
+			// the loss is what a reader needs.
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Frame handover %s -> %s was superseded by %s -> %s before any carry consumed it. ")
+				TEXT("The first crossing is not in the record; only this line says it happened."),
+				*PendingHandoverOldName, *PendingHandoverNewName,
+				OldFrame->GetOwner() ? *OldFrame->GetOwner()->GetActorNameOrLabel() : TEXT("none"),
+				NewFrame->GetOwner() ? *NewFrame->GetOwner()->GetActorNameOrLabel() : TEXT("none"));
+		}
+
+		PendingHandoverOldName = OldFrame->GetOwner()
+			? OldFrame->GetOwner()->GetActorNameOrLabel() : TEXT("none");
+		PendingHandoverNewName = NewFrame->GetOwner()
+			? NewFrame->GetOwner()->GetActorNameOrLabel() : TEXT("none");
+		PendingHandoverGravityTurnDeg = FMath::RadiansToDegrees(
+			FMath::Acos(FMath::Clamp(FVector::DotProduct(OldDown, NewDown), -1.0, 1.0)));
+		PendingHandoverFrame = GFrameCounter;
+		bPendingHandoverCarryGap = false;
+		bHandoverPending = true;
+	}
+
 	ShipFrame = NewFrame;
 
 	if (NewFrame)
@@ -118,6 +160,24 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 	BestCompletedPeakDriftCm = 0.0;
 	BestCompletedPeakJitterCm = 0.0;
 	BestCompletedKnockedDownSeconds = 0.0;
+
+	// The cross-check belongs to the binding it was taken against.
+	MismatchFrames = 0;
+	MismatchSeconds = 0.0;
+	bMismatchReported = false;
+	LastCrossCheckFrame = TNumericLimits<uint64>::Max();
+	SecondsSinceMismatchLog = 0.0;
+}
+
+FString USFShipboardMovementComponent::GetFrameName() const
+{
+	const USFShipFrameComponent* Frame = ShipFrame.Get();
+	if (!Frame || !Frame->GetOwner())
+	{
+		return TEXT("none");
+	}
+
+	return Frame->GetOwner()->GetActorNameOrLabel();
 }
 
 int64 USFShipboardMovementComponent::GetFramesSinceLastCarry() const
@@ -154,6 +214,7 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 	}
 
 	DetectCarryGap();
+	UpdateFrameCrossCheck(DeltaSeconds);
 
 	// CMC decides what is walkable by comparing a floor normal against gravity, and
 	// gravity points at world down until something says otherwise. A deck rolling at
@@ -251,6 +312,11 @@ void USFShipboardMovementComponent::DetectCarryGap()
 		LastFrameTransform = ShipFrame->GetFrameTransform();
 		bBaselineValid = false;
 
+		// The re-seed above is what makes a pending handover unmeasurable: the carry that
+		// consumes it would compare the ship against a pose taken this instant, not against
+		// the pose it had when the binding happened, and report a zero it never measured.
+		bPendingHandoverCarryGap = true;
+
 		// He has just landed, and the velocity that came with it is not drift.
 		// Restart the settle window too, or the next whole interval banks the
 		// landing as a failure.
@@ -259,6 +325,63 @@ void USFShipboardMovementComponent::DetectCarryGap()
 
 	LastCarryFrame = ThisFrame;
 	bHasCarriedOnce = true;
+}
+
+void USFShipboardMovementComponent::UpdateFrameCrossCheck(float DeltaSeconds)
+{
+	const uint64 ThisFrame = GFrameCounter;
+	if (ThisFrame == LastCrossCheckFrame)
+	{
+		return;
+	}
+	LastCrossCheckFrame = ThisFrame;
+
+	// The engine already knows what he is standing on. The base is a component, its owner
+	// is an actor, and that actor either carries the frame he rides or it does not.
+	const UActorComponent* Base = Cast<UActorComponent>(GetMovementBaseObject());
+	const AActor* BaseOwner = Base ? Base->GetOwner() : nullptr;
+	const USFShipFrameComponent* BaseFrame =
+		BaseOwner ? BaseOwner->FindComponentByClass<USFShipFrameComponent>() : nullptr;
+
+	// No base, or a base whose owner carries no frame at all, is not a mismatch. The
+	// first is a carry failure and has two instruments of its own; the second is a crate
+	// or a drone, and standing on one says nothing about which ship you belong to.
+	if (!BaseFrame || BaseFrame == ShipFrame.Get())
+	{
+		MismatchFrames = 0;
+		MismatchSeconds = 0.0;
+		bMismatchReported = false;
+		SecondsSinceMismatchLog = 0.0;
+		return;
+	}
+
+	++MismatchFrames;
+	MismatchSeconds += DeltaSeconds;
+	SecondsSinceMismatchLog += DeltaSeconds;
+
+	// The first line once the disagreement has lasted a sixth of a second -- long enough
+	// that neither a single frame of tick order nor the hatch seam can produce it -- and
+	// then one a second for as long as it lasts. The same reason Carry NOT RUNNING
+	// repeats: a single line does not say that the disagreement has been going on for a
+	// minute.
+	//
+	// The threshold is a TIME. It was ten frames until 2026-09-13, when the first manual
+	// run at 320 fps produced one warning on every walk through the hatch: the volume
+	// binds at the capsule's edge and the floor switches at its centre, and the 24-34 cm
+	// between them is two or three frames at 60 fps and thirteen to eighteen at 320. See
+	// FrameMismatchThresholdSeconds for the arithmetic. The frame count is still printed,
+	// because it is what tells a reader which frame rate the run was at.
+	if (MismatchSeconds >= FrameMismatchThresholdSeconds
+		&& (!bMismatchReported || SecondsSinceMismatchLog >= 1.0))
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Standing on %s's floor while bound to %s's frame for %d frames (%.2f s). ")
+			TEXT("One of the two is wrong, and the carry is following the frame."),
+			BaseOwner ? *BaseOwner->GetActorNameOrLabel() : TEXT("nothing"),
+			*GetFrameName(), MismatchFrames, MismatchSeconds);
+		bMismatchReported = true;
+		SecondsSinceMismatchLog = 0.0;
+	}
 }
 
 void USFShipboardMovementComponent::CarryWithFrame()
@@ -279,6 +402,62 @@ void USFShipboardMovementComponent::CarryWithFrame()
 		/*bSweep=*/false,
 		/*OutHit=*/nullptr,
 		ETeleportType::TeleportPhysics);
+
+	// The instrument spec 8 asks for, and it measures the carry's own delta rather than
+	// the difference between two positions. Between the binding and this call the man may
+	// have taken a step of his own, and his step is his; the carry's delta is exactly the
+	// part the handover caused.
+	//
+	// With both carriers docked it is required to be zero, because neither is moving with
+	// respect to the other -- which is "visually unnoticeable" written as a number. It is
+	// zero for a WRONG binding to a still carrier too, and that is why the negative
+	// controls are judged on the cross-check and on the carry, not on this line.
+	if (bHandoverPending)
+	{
+		// How long the figure was taken over. The binding and the carry that consumes it are
+		// not the same frame: he may have had no movement base for twenty frames, and the
+		// carrier moves through every one of them. Without the count, one frame of travel
+		// and twenty read the same on the line, and a number too big to explain has no
+		// interval to be checked against.
+		const int32 HandoverFrames = static_cast<int32>(GFrameCounter - PendingHandoverFrame);
+
+		LastHandoverGravityTurnDeg = PendingHandoverGravityTurnDeg;
+
+		if (bPendingHandoverCarryGap)
+		{
+			// Not a measurement, and it must not be dressed as one. A zero printed here would
+			// be the exact text of a perfect handover, produced by an instrument whose
+			// reference pose was replaced under it while the carry was stopped.
+			LastHandoverJumpCm = 0.0;
+			LastHandoverText = FString::Printf(
+				TEXT("%s -> %s, distance UNMEASURED over %d frame(s), %.1f deg"),
+				*PendingHandoverOldName, *PendingHandoverNewName,
+				HandoverFrames, LastHandoverGravityTurnDeg);
+
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Frame handover: %s -> %s over %d frame(s), distance UNMEASURED: the carry had ")
+				TEXT("stopped between the binding and this one, and the pose it measures against was ")
+				TEXT("re-seeded. Gravity turned %.1f deg."),
+				*PendingHandoverOldName, *PendingHandoverNewName,
+				HandoverFrames, LastHandoverGravityTurnDeg);
+		}
+		else
+		{
+			LastHandoverJumpCm = Delta.Size();
+			LastHandoverText = FString::Printf(TEXT("%s -> %s, %.3f cm over %d frame(s), %.1f deg"),
+				*PendingHandoverOldName, *PendingHandoverNewName,
+				LastHandoverJumpCm, HandoverFrames, LastHandoverGravityTurnDeg);
+
+			UE_LOG(LogStarForge, Display,
+				TEXT("Frame handover: %s -> %s, first carry moved him %.3f cm over %d frame(s), ")
+				TEXT("gravity turned %.1f deg"),
+				*PendingHandoverOldName, *PendingHandoverNewName,
+				LastHandoverJumpCm, HandoverFrames, LastHandoverGravityTurnDeg);
+		}
+
+		bHandoverPending = false;
+		bPendingHandoverCarryGap = false;
+	}
 
 	const FQuat FrameDelta =
 		CurrentFrameTransform.GetRotation() * LastFrameTransform.GetRotation().Inverse();

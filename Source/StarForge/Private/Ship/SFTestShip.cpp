@@ -9,7 +9,10 @@
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "Ship/SFAutomationOperatorComponent.h"
 #include "Ship/SFConsoleOperatorComponent.h"
+#include "Ship/SFDockingComponent.h"
+#include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
+#include "Ship/SFInteriorVolumeComponent.h"
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
@@ -55,6 +58,15 @@ namespace
 	constexpr double CubeEdgeCm = 100.0;
 	/** Panel thickness as a mesh scale factor, not centimetres: 0.2 x 100 cm = 20 cm. */
 	constexpr double PanelThickness = 0.2;
+
+	/**
+	 * The hatch in the +Y wall, in centimetres. Two hundred across and two hundred and
+	 * fifty tall from the deck: wide enough for a capsule of radius 34 to walk through
+	 * without brushing a jamb, and tall enough that a standing capsule (88 cm
+	 * half-height, so 176 overall) has head-room instead of reading as a crawl space.
+	 */
+	constexpr double HatchHalfWidthCm = 100.0;
+	constexpr double HatchHeightCm = 250.0;
 
 	/**
 	 * Height above the floor plate at which an occupant is placed, in centimetres.
@@ -251,8 +263,59 @@ ASFTestShip::ASFTestShip()
 	AddBoxPanel(TEXT("Ceiling"), FVector(0.0, 0.0, Half), FVector(Span, Span, PanelThickness));
 	AddBoxPanel(TEXT("WallXPos"), FVector(Half, 0.0, 0.0), FVector(PanelThickness, Span, Span));
 	AddBoxPanel(TEXT("WallXNeg"), FVector(-Half, 0.0, 0.0), FVector(PanelThickness, Span, Span));
-	AddBoxPanel(TEXT("WallYPos"), FVector(0.0, Half, 0.0), FVector(Span, PanelThickness, Span));
+
+	// The +Y wall is three panels with a hatch between them. Every figure is derived
+	// from Half and the panel thickness, so moving a wall moves the hatch and the port
+	// with it -- the same rule the turret mount and the seats already follow.
+	//
+	// The hatch starts at the deck's top face, Z -390, so no sill panel is needed under
+	// it -- but not because the floor reaches all the way out. The floor slab stops at
+	// Y 400 while the wall's slabs run from 390 to 410, which leaves a notch under the
+	// opening 200 wide, 10 deep and 20 tall with nothing beneath it. Harmless twice
+	// over: a capsule of radius 34 cannot enter a 10 cm gap, and docked, the tunnel's
+	// own floor lies across it.
+	const double DeckTopZ = -Half + PanelThickness * CubeEdgeCm * 0.5;      // -390
+	const double HatchTopZ = DeckTopZ + HatchHeightCm;                      // -140
+	const double JambWidthCm = Half - HatchHalfWidthCm;                     //  300
+	const double JambCentreXCm = (Half + HatchHalfWidthCm) * 0.5;           //  250
+	const double LintelHeightCm = Half - HatchTopZ;                         //  540
+	const double LintelCentreZCm = (HatchTopZ + Half) * 0.5;                //  130
+
+	AddBoxPanel(TEXT("WallYPosJambXNeg"), FVector(-JambCentreXCm, Half, 0.0),
+		FVector(JambWidthCm / CubeEdgeCm, PanelThickness, Span));
+	AddBoxPanel(TEXT("WallYPosJambXPos"), FVector(JambCentreXCm, Half, 0.0),
+		FVector(JambWidthCm / CubeEdgeCm, PanelThickness, Span));
+	AddBoxPanel(TEXT("WallYPosLintel"), FVector(0.0, Half, LintelCentreZCm),
+		FVector(HatchHalfWidthCm * 2.0 / CubeEdgeCm, PanelThickness, LintelHeightCm / CubeEdgeCm));
+
+	// Centred in the hatch, on the wall's mid-plane: +X out along the ship's +Y, +Z the
+	// deck's up. A yaw of 90 takes local +X onto +Y and leaves +Z alone.
+	//
+	// The cabin is no longer a closed box, and that is a real change to this rig, not
+	// only to the loop. A standing occupant is bounded by the walls and by nothing else
+	// -- falling friction limits only the component along the deck -- so on L_FrameSpike,
+	// where there is no tunnel behind this opening, a knocked-down man now has a way out
+	// of the room. Every figure already recorded was taken standing and is unaffected;
+	// the fact is written down rather than compensated, because closing the hatch on one
+	// map and opening it on another would mean having two ships.
+	DockingPort = CreateDefaultSubobject<USFDockingPortComponent>(TEXT("DockingPort"));
+	DockingPort->SetupAttachment(Hull);
+	DockingPort->SetRelativeLocation(FVector(0.0, Half, DeckTopZ + HatchHeightCm * 0.5));
+	DockingPort->SetRelativeRotation(FRotator(0.0, 90.0, 0.0));
+
+	Docking = CreateDefaultSubobject<USFDockingComponent>(TEXT("Docking"));
+
 	AddBoxPanel(TEXT("WallYNeg"), FVector(0.0, -Half, 0.0), FVector(Span, PanelThickness, Span));
+
+	// The cabin, out to the inner faces of the panels: half-extent 390 on every axis,
+	// which along +Y is exactly the hatch plane. Everything inside the hull is the ship;
+	// the tunnel and beyond are the station (spec 8), and the two volumes meet at this
+	// plane with the wall's twenty centimetres between them -- ten to each side of the
+	// pair's midline. Nobody is claimed in that gap, and the last binding holds through it.
+	Interior = CreateDefaultSubobject<USFInteriorVolumeComponent>(TEXT("Interior"));
+	Interior->SetupAttachment(Hull);
+	Interior->SetRelativeLocation(FVector::ZeroVector);
+	Interior->SetBoxExtent(FVector(Half - PanelThickness * CubeEdgeCm * 0.5));
 
 	// The room had no light of any kind: a black screen makes the one check that
 	// matters most after drift -- whether the interior holds still in front of the
@@ -470,6 +533,32 @@ void ASFTestShip::Tick(float DeltaSeconds)
 
 void ASFTestShip::TickScriptedProfile()
 {
+	// The profile commands a physics body, and a hull that is not simulating is not one:
+	// the velocities below go nowhere, and yet the ship reads them straight back out of
+	// Chaos into its readout, printing speed it never had beside the word "docked". The
+	// lock on the thruster array shuts the other route into that same lie by itself and
+	// cannot shut this one, because this writes velocity rather than force: the lock has
+	// to be READ here, which is what the second half of the condition does.
+	//
+	// A locked array is the second refusal, and it is the same one the pilot's post makes
+	// one level up: locked means nothing may command this hull, whatever locked it, and
+	// the profile is a commander like any other with no standing the seat does not have.
+	//
+	// Both are asked as questions about the hull rather than about docking, on purpose:
+	// those are the profile's true preconditions, and putting them this way means the rig
+	// never learns that docking exists, exactly as the pilot's post never does. The two
+	// coincide today because the only thing that locks the array -- docking -- also stops
+	// the simulation, and they part the moment something locks a hull that is still
+	// simulating: a damaged ship, a powered-down ship, a hull taken by a pirate. All three
+	// are stage 4's, and all three reach for SetLocked. Neither predicate is therefore a
+	// restatement of the other, and dropping either one is a decision, not a tidy-up.
+	//
+	// Silent, because it would run every frame.
+	if (!Hull->IsSimulatingPhysics() || (Thrusters && Thrusters->IsLocked()))
+	{
+		return;
+	}
+
 	const double Phase = 2.0 * UE_DOUBLE_PI * ElapsedSeconds / ProfilePeriodSeconds;
 
 	const FVector VelocityCms(PeakSpeedCms * FMath::Sin(Phase), 0.0, 0.0);
@@ -492,6 +581,51 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		return;
 	}
 	SecondsSinceFlightLog = 0.0;
+
+	// Docking first, because it gates everything below it: a docked ship is a ship whose
+	// engines are locked, and the flight numbers that follow are then correctly zero
+	// rather than suspiciously zero. The variable behind this line is sf.FlightLog, which
+	// is declared in this file -- the docking component's own sf.Dock is read there and
+	// nowhere else, and this line reads the component's accessors instead.
+	if (Docking)
+	{
+		FString DockText;
+
+		switch (Docking->GetState())
+		{
+		case ESFDockingState::Docked:
+			DockText = TEXT("docked");
+			break;
+		case ESFDockingState::Capturing:
+			DockText = FString::Printf(TEXT("capturing %.1f of %.1f s"),
+				Docking->GetCaptureElapsedSeconds(), Docking->GetCaptureSeconds());
+			break;
+		default:
+			if (!Docking->HasStation())
+			{
+				DockText = TEXT("free -- no station");
+			}
+			else
+			{
+				const StarForge::Docking::FDockingApproach Approach = Docking->GetLastApproach();
+				const FString Verdict = Docking->CanDockNow()
+					? FString(TEXT("CAN DOCK"))
+					: FString::Printf(TEXT("out of window: %s"),
+						USFDockingComponent::RefusalName(Docking->GetLastRefusal()));
+
+				const FVector At = Docking->GetPortOffsetShipLocalMetres();
+				DockText = FString::Printf(
+					TEXT("free | port %.1f m at (%+.1f %+.1f %+.1f) ship, %.1f m/s, fwd %.1f deg, up %.1f deg -- %s"),
+					Approach.Distance, At.X, At.Y, At.Z, Approach.SpeedMetresPerSec,
+					FMath::RadiansToDegrees(Approach.ForwardAngleRad),
+					FMath::RadiansToDegrees(Approach.UpAngleRad),
+					*Verdict);
+			}
+			break;
+		}
+
+		UE_LOG(LogStarForge, Log, TEXT("Dock: %s"), *DockText);
+	}
 
 	// The turret reports before the thruster check: a ship whose array never built can
 	// still lay a turret, and a line that vanishes with the array would look like a

@@ -16,6 +16,9 @@ class USFGunnerStationComponent;
 class USFConsoleOperatorComponent;
 class USFAutomationOperatorComponent;
 class USFTurretComponent;
+class USFDockingPortComponent;
+class USFDockingComponent;
+class USFInteriorVolumeComponent;
 class ASFTargetDrone;
 
 /**
@@ -69,7 +72,7 @@ public:
 
 	USFShipFrameComponent* GetFrameComponent() const { return Frame; }
 
-	/** The simulated body. Task 5 applies thrust here. */
+	/** The simulated body: the thruster array applies its wrench to this. */
 	UBoxComponent* GetHull() const { return Hull; }
 
 	USFThrusterArrayComponent* GetThrusters() const { return Thrusters; }
@@ -79,6 +82,15 @@ public:
 	USFGunnerStationComponent* GetGunnerStation() const { return GunnerStation; }
 
 	USFTurretComponent* GetTurret() const { return Turret; }
+
+	/** The ship's half of the airlock. Its +X points out through the hatch. */
+	USFDockingPortComponent* GetDockingPort() const { return DockingPort; }
+
+	/** Docking lives on the moving side. The station has a port and no mechanism. */
+	USFDockingComponent* GetDocking() const { return Docking; }
+
+	/** The cabin as a volume. Whoever walks in rides this ship's frame. */
+	USFInteriorVolumeComponent* GetInterior() const { return Interior; }
 
 	/** What the gunner post's automation tracks. Spawned by BeginPlay; null if that failed. */
 	ASFTargetDrone* GetTargetDrone() const { return TargetDrone; }
@@ -142,6 +154,15 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFTurretComponent> Turret;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFDockingPortComponent> DockingPort;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFDockingComponent> Docking;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFInteriorVolumeComponent> Interior;
 
 	/** The pivot the turret turns; the cone below is attached to it. */
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")

@@ -1,0 +1,49 @@
+LogInit: Command Line: /Game/Maps/L_Loop -game -windowed -ResX=1600 -ResY=900
+[2026.09.13-22.59.15:816][  0]LogWorld: Bringing World /Game/Maps/L_Loop.L_Loop up for play (max tick rate 0) at 2026.09.14-01.59.15
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Docking: station found, window 3.0 m, 1.0 m/s, fwd 10 deg, up 10 deg, capture 1.0 s.
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Dock: docked.
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Docking port on Station at hull-local (0 -600 -265) cm, out along (0.00 -1.00 0.00), deck up (0.00 0.00 1.00).
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Station at world (0 0 0) cm: 12 x 8 x 8 m box, hatch in the -Y wall, 200 cm tunnel, frame present, no physics body.
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Thruster array ready: 24 thrusters, 50000 kg, inertia (533333, 533333, 533333) kg m^2.
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Station 'pilot' taken by console.
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Station 'gunner' taken by automation.
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Docking port on Ship at hull-local (0 400 -265) cm, out along (0.00 1.00 0.00), deck up (0.00 0.00 1.00).
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Turret mount at ship-local (0 0 280) cm: yaw +/-120, pitch -30..60 deg, traverse 90 deg/s, on target within 0.5 deg, barrel attached.
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Physics: async block mode (cvar absent), substepping off. Drift figures are only comparable across runs where these match.
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Target drone spawned: orbit 30.0 m radius at 10.0 deg/s, tilted 20.0 deg, anchored to Ship, present.
+[2026.09.13-22.59.15:819][  0]LogStarForge: Display: Loop rig: scripted profile off; the ship spawns docked; the man stands in the cabin.
+[2026.09.13-22.59.16:226][  2]LogStarForge: Display: Frame handover: Station -> Ship, first carry moved him 0.000 cm over 2 frame(s), gravity turned 0.0 deg
+[2026.09.13-22.59.26:721][615]LogStarForge: Shipboard drift: 10.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-22.59.32:362][384]LogStarForge: Display: Station 'pilot' left by console.
+[2026.09.13-22.59.36:719][775]LogStarForge: Shipboard drift: 20.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, peak jitter 0.000 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-22.59.37:130][907]LogStarForge: Display: Station 'pilot' taken by player.
+[2026.09.13-22.59.38:602][375]LogStarForge: Display: Thruster array ready: 24 thrusters, 50000 kg, inertia (533333, 533333, 533333) kg m^2.
+[2026.09.13-22.59.38:602][375]LogStarForge: Display: Dock: undocked.
+[2026.09.13-22.59.45:289][503]LogStarForge: Shipboard drift interval complete: 28.6 s, peak drift 0.150 cm, peak jitter 0.150 cm/tick, skipped carries 0, knocked down 0.0 s -- footing intact
+[2026.09.13-22.59.45:290][503]LogStarForge: Display: Frame bound by console to Station (sf.BindFrame). This ignores where he is standing, which is the point: it is a negative control.
+[2026.09.13-22.59.45:290][503]LogStarForge: Display: Frame handover: Ship -> Station, first carry moved him 0.000 cm over 0 frame(s), gravity turned 0.0 deg
+[2026.09.13-22.59.45:454][555]LogStarForge: Warning: Standing on Ship's floor while bound to Station's frame for 53 frames (0.17 s). One of the two is wrong, and the carry is following the frame.
+[2026.09.13-22.59.46:454][869]LogStarForge: Warning: Standing on Ship's floor while bound to Station's frame for 367 frames (1.17 s). One of the two is wrong, and the carry is following the frame.
+[2026.09.13-22.59.47:455][174]LogStarForge: Warning: Standing on Ship's floor while bound to Station's frame for 672 frames (2.17 s). One of the two is wrong, and the carry is following the frame.
+[2026.09.13-22.59.47:982][336]LogStarForge: Warning: Carry NOT RUNNING: 2 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.48:982][668]LogStarForge: Warning: Carry NOT RUNNING: 334 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.49:986][ 15]LogStarForge: Warning: Carry NOT RUNNING: 681 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.50:986][362]LogStarForge: Warning: Carry NOT RUNNING: 1028 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.51:987][709]LogStarForge: Warning: Carry NOT RUNNING: 1375 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.52:989][ 57]LogStarForge: Warning: Carry NOT RUNNING: 1723 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.53:991][406]LogStarForge: Warning: Carry NOT RUNNING: 2072 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.54:992][763]LogStarForge: Warning: Carry NOT RUNNING: 2429 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.55:993][123]LogStarForge: Warning: Carry NOT RUNNING: 2789 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.56:997][484]LogStarForge: Warning: Carry NOT RUNNING: 3150 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.57:998][844]LogStarForge: Warning: Carry NOT RUNNING: 3510 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-22.59.59:001][205]LogStarForge: Warning: Carry NOT RUNNING: 3871 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-23.00.00:002][564]LogStarForge: Warning: Carry NOT RUNNING: 4230 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-23.00.01:004][921]LogStarForge: Warning: Carry NOT RUNNING: 4587 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-23.00.02:005][277]LogStarForge: Warning: Carry NOT RUNNING: 4943 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-23.00.03:006][634]LogStarForge: Warning: Carry NOT RUNNING: 5300 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-23.00.04:008][991]LogStarForge: Warning: Carry NOT RUNNING: 5657 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-23.00.05:009][346]LogStarForge: Warning: Carry NOT RUNNING: 6012 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-23.00.06:009][702]LogStarForge: Warning: Carry NOT RUNNING: 6368 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-23.00.07:011][ 59]LogStarForge: Warning: Carry NOT RUNNING: 6725 frames since the occupant was last carried (mode Falling, base none). He has come off the ship -- this is the breakage, not a knockdown.
+[2026.09.13-23.00.07:162][111]LogStarForge: Display: Station 'pilot' left by player.
+[2026.09.13-23.00.07:840][111]Log file closed, 09/14/26 02:00:07

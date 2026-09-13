@@ -75,7 +75,11 @@
 
 ### Решения, которые пришлось принять сверх этого
 
-- **Доводка идёт по `smoothstep`, и это не украшение.** Линейная интерполяция стартует и останавливается мгновенно, а компонент системы отсчёта дифференцирует положение дважды: скачок скорости 0 → 3 м/с за кадр — это 180 м/с², и каждая стыковка роняла бы всех стоящих. `smoothstep` (`α²(3−2α)`) даёт пиковое ускорение `6d/T²`: при `d = 3.0` м (край окна) и `T = 1.0` с это **18.0 м/с²**, под порогом гравиплит 19.62 м/с² из §6 на 8%. Три числа спеки, а не подобранное. Следствие названо в коде: окно шире 3.27 м или доводка быстрее 0.958 с начнут ронять людей.
+- **Доводка идёт по `smoothstep`, и это не украшение, но и под порог гравиплит она не укладывается.** Линейная интерполяция стартует и останавливается мгновенно: скачок скорости 0 → 3 м/с за кадр — это 180 м/с², и каждая стыковка роняла бы всех стоящих. `smoothstep` (`α²(3−2α)`) снижает пик до `6d/T²`, и это на порядок лучше, но **под 19.62 м/с² не уходит на краю окна**, и первая редакция этого плана утверждала обратное. Считать надо по трём слагаемым, а не по одному:
+  - `d` — путь **корпуса**, а не расстояние между узлами. Узел стоит на плече `√(400² + 265²) = 4.80` м от центра корпуса, поэтому разворот на допустимые 10° добавляет корпусу `2 · 4.80 · sin 5° = 0.84` м. На краю окна `d = 3.84` м, и `6d/T²` при `T = 1.0` с даёт **23.0 м/с²**.
+  - Угловая часть — `6Δθ/T² = 1.047` рад/с², то есть **4.19 м/с²** на плече 4 м, и вторая производная `smoothstep` максимальна по модулю при `α = 0` и `α = 1`, а **не** в середине, поэтому оба пика приходятся на один кадр.
+  - Первый кадр доводки — отдельная ступенька: `SetSimulatePhysics(false)` останавливает корпус за кадр, и вход в окно на пределе 1 м/с — это **60 м/с²** на 60 fps.
+  Ни одно из трёх не компенсируется, и решение это принимает сознательно: **команда стыковки приходит из кресла пилота, а пристёгнутого не роняет по построению**, и в срезе на борту в этот момент больше никого нет. Число, которое надо назвать в бланке точки проверки 6, — 23.0 м/с² на краю окна, а не 18.0.
 - **`sf.Dock` принимает значение `2` — отладочный цикл.** `-ExecCmds` применяет весь список при старте, поэтому «`sf.Dock 0, sf.Dock 1`» оставляет только последнее значение, и цикл «пристыкован → свободен → пристыкован» нельзя запросить одним прогоном вообще. `2` просит весь цикл одним фронтом: отстыковаться сейчас, пристыковаться через одну доводку.
 - **Массив двигателей перестраивается при отстыковке.** `Rebuild()` читает массу и тензор инерции **обратно из Chaos**, а корпус, проведший старт кинематическим, мог отдать свойства кинематического тела. Перестроение делается ровно в тот момент, когда корпус снова начинает симулироваться, то есть когда эти числа снова означают что-то, и когда никто не летит.
 - **Перекрёстная проверка защёлкнута «раз в кадр».** `UpdateBasedMovement` зовётся **один раз** за кадр при несимулируемой опоре и **дважды** при симулируемой (`CharacterMovementComponent.cpp` 2476–2510). Без защёлки порог «десять кадров» означал бы десять кадров у пристыкованного корабля и пять у летящего — прибор, чей порог зависит от состояния стыковки.
@@ -154,7 +158,9 @@ docs/superpowers/notes/
 | Пристыкованный корабль | центр в station-local `(0, −1000, 0)` без поворота; **выводится `TargetHullPose`**, константа живёт только в тесте |
 | Объём корабля | полуразмеры `(390, 390, 390)`, центр `(0, 0, 0)` — ровно до плоскости люка по Y |
 | Объём станции | полуразмеры `(590, 500, 390)`, центр `(0, −100, 0)` — коробка Y `[−400 … +400]` плюс тоннель Y `[−600 … −400]` |
-| Зазор между объёмами | корабельный кончается на station-local `−610`, станционный начинается на `−600`: 10 см толщины стены, где действует последняя привязка |
+| Зазор между объёмами | корабельный кончается на station-local `−610`, станционный начинается на `−600`: внутренние 10 см толщины корабельной стены, где действует последняя привязка |
+
+**«Плоскость люка» здесь и во всех рабочих документах — внутренняя грань стены**, у корабля это ship-local Y `390`, а не середина её толщины на `400`. Одно слово, одно значение: это поверхность, до которой человек может дотянуться, от неё же посчитаны полуразмеры объёмов, и «плоскость, через которую проходишь» читатель понимает именно так. Объём станции поэтому начинается не на плоскости люка, а на 10 см наружу от неё.
 
 Проверка позы пристыкованного корабля вручную: узел станции на `−600`, полуразмер каюты 400, узел корабля на его `+400` ⇒ центр корпуса на `−600 − 400 = −1000`, и узел корабля оказывается на `−1000 + 400 = −600` — там же, где станционный. Оси: корабельный `+X` = `+Y` мира, станционный `+X` = `−Y` мира, встречно. Обе `+Z` совпадают.
 
@@ -1463,7 +1469,9 @@ MSG
 
 **Почему `Rebuild()` при отстыковке.** Массив читает массу и тензор инерции **обратно из Chaos**, а корпус, проведший старт кинематическим, мог отдать свойства кинематического тела. Перестроение делается ровно в тот момент, когда корпус снова начинает симулироваться, и никто в этот момент не летит.
 
-**Почему доводка сглажена.** Пиковое ускорение `smoothstep` за время `T` на пути `d` есть `6d/T²`. При `d = 3.0` м (край окна) и `T = 1.0` с это **18.0 м/с²** — под порогом гравиплит 19.62 м/с² из §6 на 8%. Линейная интерполяция дала бы скачок скорости 0 → 3 м/с за один кадр, то есть 180 м/с² на 60 fps, и роняла бы всех стоящих при каждой стыковке. Угловая часть на порядок меньше: 10° за секунду по `smoothstep` — это 1.05 рад/с², то есть 4.2 м/с² на плече 4 м, и центростремительная добавка 0.3 м/с².
+**Почему доводка сглажена — и почему под порог она всё равно не уходит.** Пиковое ускорение `smoothstep` за время `T` на пути `d` есть `6d/T²`, против мгновенной ступеньки у линейной интерполяции: 0 → 3 м/с за кадр, то есть 180 м/с² на 60 fps. Но `d` здесь — путь **корпуса**, а не расстояние между узлами: узел стоит на плече 4.80 м от центра, разворот на допустимые 10° добавляет корпусу 0.84 м, и на краю окна `6d/T²` даёт **23.0 м/с²** при пороге гравиплит 19.62. К этому прибавляется угловая часть — 1.047 рад/с², то есть 4.19 м/с² на плече 4 м, — и оба пика приходятся на **один** кадр, потому что вторая производная `smoothstep` максимальна по модулю при `α = 0` и `α = 1`, а не в середине. Плюс ступенька первого кадра: `SetSimulatePhysics(false)` гасит скорость корпуса за кадр, что на пределе 1 м/с есть 60 м/с².
+
+Это принято сознательно, а не проглядено. **Команду стыковки подаёт пилот из кресла, а пристёгнутого не роняет по построению**, и второго человека на борту в срезе нет. Сглаживание оставлено потому, что оно снимает порядок величины даром; выводить `CaptureSeconds` из фактического пути — механизм ради случая, которого срез достичь не может. Числа обязаны быть названы в комментарии к `CaptureSeconds` и в бланке точки проверки 6; спрятать их за «18.0, запас 8%» нельзя — это и была ошибка первой редакции.
 
 **Почему в строке `dock` есть тройка `at (x y z) ship`.** У каюты нет окон, а станция снаружи не освещена: пилот ведёт сближение по числам, и расстояние без направления — не то число, по которому можно действовать. Тройка — вектор от корабельного узла к станционному в осях корабля, в метрах: `+Y` — сторона люка, клавиша `D`; после отстыковки она читается `(+0.0 +0.0 +0.0)`, а после отхода клавишей `A` растёт её `Y`. Считается там же, где расстояние, и пишется рядом с ним, потому что должна совпадать с ним в единицах на глаз.
 
@@ -1617,11 +1625,27 @@ public:
 	/**
 	 * How long the run-in takes, in seconds.
 	 *
-	 * Not free to shorten. The run-in is eased, so its peak acceleration is 6d/T^2 for a
-	 * path of d; at the window's edge of 3 m and one second that is 18.0 m/s^2, under the
-	 * 19.62 grav-plate ceiling of spec 6 by eight per cent. Below about 0.958 s -- or with
-	 * DistanceMetres above about 3.27 -- the capture itself starts knocking standing
-	 * occupants off their feet.
+	 * The run-in is eased, so its peak acceleration is 6d/T^2 -- an order of magnitude
+	 * below a linear run-in, which would step the velocity from zero to full inside one
+	 * frame (180 m/s^2 over three metres at sixty frames). It does NOT bring the capture
+	 * under the 19.62 m/s^2 grav-plate ceiling of spec 6, and the arithmetic is written out
+	 * here rather than rounded off, because an earlier version of this comment claimed a
+	 * margin that does not exist:
+	 *
+	 *   - d is the HULL's path, not the distance between the ports. The port sits
+	 *     sqrt(400^2 + 265^2) = 4.80 m off the hull's centre, so turning through the
+	 *     window's 10 degrees of allowed misalignment adds 2 * 4.80 * sin(5 deg) = 0.84 m.
+	 *     At the window's edge d is 3.84 m and 6d/T^2 is 23.0 m/s^2.
+	 *   - The angular term is 6 * 10 deg / T^2 = 1.047 rad/s^2, which is 4.19 m/s^2 at a
+	 *     four-metre radius, and it peaks in the SAME frame: smoothstep's second derivative
+	 *     is largest at alpha 0 and alpha 1, not in the middle.
+	 *   - The first frame is a step of its own: stopping the simulation kills the hull's
+	 *     velocity in one frame, which at the window's 1 m/s limit is 60 m/s^2 at 60 fps.
+	 *
+	 * None of that is compensated, deliberately. The command comes from the pilot's seat and
+	 * a strapped-in occupant cannot be knocked down; the slice has nobody else aboard.
+	 * Deriving this figure from the actual path would be mechanism for a case the slice
+	 * cannot reach -- the moment a standing passenger exists, it stops being optional.
 	 */
 	UPROPERTY(EditAnywhere, Category = "StarForge|Docking")
 	double CaptureSeconds = 1.0;
@@ -2017,12 +2041,13 @@ void USFDockingComponent::AdvanceCapture(double DeltaSeconds)
 		return;
 	}
 
-	// Eased, not linear, and this is a correctness requirement rather than polish. The
-	// frame component differences its owner's position twice to get acceleration, and a
-	// linear run-in steps the velocity from zero to its full value inside one frame: over
-	// three metres in a second that is 180 m/s^2 at sixty frames, and every standing
-	// occupant would be knocked off his feet at the start of every dock. Smoothstep peaks
-	// at 6d/T^2 -- 18.0 m/s^2 at the window's edge, under spec 6's 19.62 by eight per cent.
+	// Eased, not linear, though it does not buy as much as it looks. The frame component
+	// differences its owner's position twice to get acceleration, and a linear run-in
+	// steps the velocity from zero to its full value inside one frame: over three metres
+	// in a second that is 180 m/s^2 at sixty frames. Smoothstep peaks at 6d/T^2 instead
+	// -- 23.0 m/s^2 at the window's edge once the port's 4.80 m lever arm is counted into
+	// d, which is still over spec 6's 19.62 ceiling. See CaptureSeconds for the whole
+	// arithmetic and for why that is accepted rather than fixed.
 	const double Eased = Alpha * Alpha * (3.0 - 2.0 * Alpha);
 
 	// A teleport, like the carry itself. The hull is kinematic and the occupant rides it
@@ -2355,11 +2380,17 @@ in over a second and the root is attached to the socket, so the relative velocit
 afterwards is zero by construction rather than by convergence -- which is what the
 airlock handover needs and what a physics constraint cannot give.
 
-The run-in is eased and that is arithmetic, not taste. Smoothstep peaks at six times the
-path over the time squared: three metres in one second is 18.0 m/s2, under the
-grav-plate ceiling of 19.62 by eight per cent, so a capture from the window's edge does
-not knock a standing occupant down. A linear run-in would step the velocity from zero in
-a single frame and knock everyone down on every dock.
+The run-in is eased and that is arithmetic, not taste -- but the arithmetic does not end
+where it is comfortable. Smoothstep peaks at six times the path over the time squared
+instead of stepping the velocity from zero in a single frame, which is an order of
+magnitude, and it still does not come under the grav-plate ceiling: the path that matters
+is the hull's, the port sits 4.80 m off the hull's centre, and the window's ten degrees of
+allowed misalignment carry the hull 0.84 m further than the ports are apart. That is
+23.0 m/s2 against a ceiling of 19.62, with the angular term's 4.19 landing in the same
+frame. It is accepted rather than fixed because the command comes from the pilot's seat
+and a strapped-in occupant cannot be knocked down, and the slice has nobody else aboard.
+The figures are written out in the property's comment so the next person inherits the
+truth rather than a margin that was never there.
 
 The lock belongs to the thruster array, not to the post and not to the operator. The
 post asks whether its engines are locked and stands down exactly as it does under the
@@ -2597,7 +2628,7 @@ git commit -m "feat(loop): add the empty level the loop rig assembles itself int
 - две строки `Docking port on …`: `Ship` с `(0 400 -265)` / `out along (0.00 1.00 0.00)` и `Station` с `(0 -600 -265)` / `out along (0.00 -1.00 0.00)`;
 - `Docking: station found, window 3.0 m, 1.0 m/s, fwd 10 deg, up 10 deg, capture 1.0 s.`
 - `Dock: docked.` — один раз, при старте;
-- `Loop rig: scripted profile forced off; the ship spawns docked.`
+- `Loop rig: scripted profile off; the ship spawns docked; the man stands in the cabin.` — строка отчитывается о трёх **прочитанных обратно** состояниях; слово в верхнем регистре в любом из трёх означает несобравшийся стенд и выходит уровнем `Error`;
 - строка `Dock: docked` в **первой же** секундной записи журнала;
 - `Flight: flown by console (standing down) …` — пост стоит в стороне, потому что двигатели заперты;
 - `Thruster array ready: 24 thrusters, 50000 kg, inertia (…)` — **записать три числа инерции**. Если они читаются `533333, 533333, 533333`, кинематический корпус отдаёт свои свойства массы и всё в порядке; если нули или что-то иное, это Chaos, отвечающий за кинематическое тело, и годным считается число в строке, которая появится **после** `Dock: undocked.` в прогоне (б). Оба исхода приемлемы; проверка полётом — прогон (б);
@@ -2893,8 +2924,14 @@ void USFInteriorVolumeComponent::HandleBeginOverlap(
 	//
 	// It does not touch the ship's. Docked, the ship's cabin ends at station-local -610
 	// and this begins at -600: ten centimetres of wall, deliberately unclaimed.
-	const double InteriorHalfYCm = (Station::HalfYCm + Station::TunnelLengthCm) * 0.5;        // 500
-	const double InteriorCentreYCm = Station::HalfYCm - InteriorHalfYCm;             // -100
+	// The span runs from the tunnel's outboard mouth at -600 to the far wall at +400, so it
+	// is 2*HalfYCm + TunnelLengthCm long -- a thousand centimetres, half-extent 500, centred
+	// at -100. Writing it as (HalfYCm + TunnelLengthCm)/2 gives 300 and looks close enough to
+	// pass a reading; it leaves the whole tunnel and two metres of the station's own deck
+	// inside no volume at all, which is a man who stays bound to the ship for four metres
+	// after walking out of it.
+	const double InteriorHalfYCm = (2.0 * Station::HalfYCm + Station::TunnelLengthCm) * 0.5;  // 500
+	const double InteriorCentreYCm = Station::HalfYCm - InteriorHalfYCm;                      // -100
 
 	Interior = CreateDefaultSubobject<USFInteriorVolumeComponent>(TEXT("Interior"));
 	Interior->SetupAttachment(Root);
@@ -3555,7 +3592,7 @@ MSG
 
 **Абзац «Current state» в `CLAUDE.md` этой задачей не трогается.** Он описывает то, что на `main`, а этот план ещё на ветке; переписывает его слияние после точки проверки 6.
 
-**Числа, которые runbook просит сверить, выведены здесь.** Пристыкованный корабль стоит центром в station-local `(0, −1000, 0)`; проём люка 200 × 250 см, тоннель 200 см, между объёмами 10 см. Порог гравиплит `sqrt(19.62/r)` рад/с при радиусе `r` от оси — в пристыкованном состоянии ничего не вращается, поэтому на станции и в пристыкованной каюте никого не роняет вообще, и это первое, что стоит заметить глазами. Доводка: пик `6d/T²`, при `d = 3.0` м и `T = 1.0` с это 18.0 м/с² — под порогом, но первый кадр доводки к этому не относится: `SetSimulatePhysics(false)` останавливает корпус за один кадр, и на пределе окна это ступенька в 1 м/с за кадр — 60 м/с² на 60 fps, стоящего в этот кадр уронило бы. В момент `F` на борту только пилот, а сидящего не роняет по построению; шов записан в бланк как известный, не как дефект. Отстыковка обнуляет скорости, поэтому сразу после `F` корабль стоит **в окне**: `port 0.0 m … CAN DOCK`, и повторное `F` пристыкует обратно с нулевой доводкой. Тяга 800 кН на 50 т — 16 м/с², половина каюты 4 м проходится за 0.71 с: столько есть у человека, привязанного не к тому носителю, прежде чем под ним кончится пол.
+**Числа, которые runbook просит сверить, выведены здесь.** Пристыкованный корабль стоит центром в station-local `(0, −1000, 0)`; проём люка 200 × 250 см, тоннель 200 см, между объёмами 10 см. Порог гравиплит `sqrt(19.62/r)` рад/с при радиусе `r` от оси — в пристыкованном состоянии ничего не вращается, поэтому на станции и в пристыкованной каюте никого не роняет вообще, и это первое, что стоит заметить глазами. Доводка **выше порога гравиплит на краю окна, и это известно заранее**: пик `6d/T²` считается по пути корпуса, а узел стоит на плече 4.80 м, поэтому разворот на допустимые 10° добавляет 0.84 м и даёт `d = 3.84` м — **23.0 м/с²** против 19.62. Сверх того угловая часть 4.19 м/с² на плече 4 м приходится на тот же кадр (вторая производная `smoothstep` максимальна на концах, а не в середине), и первый кадр доводки — отдельная ступенька в 60 м/с² на 60 fps, потому что `SetSimulatePhysics(false)` гасит скорость корпуса за кадр. Ни одно не компенсируется: команду подаёт пилот из кресла, а пристёгнутого не роняет по построению, и второго человека на борту нет. Поэтому в бланке спрашивается не «уронило ли», а `footing` пилота — если пристёгнутого всё-таки уронило, это находка совсем другого рода. Отстыковка обнуляет скорости, поэтому сразу после `F` корабль стоит **в окне**: `port 0.0 m … CAN DOCK`, и повторное `F` пристыкует обратно с нулевой доводкой. Тяга 800 кН на 50 т — 16 м/с², половина каюты 4 м проходится за 0.71 с: столько есть у человека, привязанного не к тому носителю, прежде чем под ним кончится пол.
 
 - [ ] **Step 1: Две строки в таблицу переменных и рецепт запуска петли**
 
@@ -3729,9 +3766,13 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-10-checkpoin
 - панель `dock capturing 0.x of 1.0 s` оранжевым примерно секунду;
 - `Dock: docked.` и `dock docked` жёлтым.
 
-**Смотреть в этот момент на интерьер.** Он должен ехать плавно и не дёргаться. Ты
-пристёгнут, и ронять тебя доводка не может по построению; если панель `footing` всё же
-показала `KNOCKED DOWN` — записать дословно, это находка.
+**Смотреть в этот момент на интерьер.** Он должен ехать плавно и не дёргаться.
+
+**Доводка с края окна разгоняет корпус до 23.0 м/с², то есть выше порога гравиплит
+19.62 — это посчитано заранее и не дефект.** Стоящего в каюте она уронила бы; тебя не
+роняет потому, что ты пристёгнут в кресле, а больше на борту никого нет. Если панель
+`footing` всё же показала `KNOCKED DOWN` **у пристёгнутого** — записать дословно, это
+находка другого рода: пристёгнутость перестала работать.
 
 **A7. Встать и выйти на станцию.** `E`, дойти до люка (стена с конусом, `+Y`), пройти
 тоннель. В журнале обязана появиться:
@@ -3963,7 +4004,7 @@ Station`, белая.
 | Долг | Состояние |
 |---|---|
 | §8 ждала «ненулевого прыжка» в `Frame handover` при неверной привязке к неподвижной станции; механизм даёт ноль по построению (R11) | **закрыт**: §8 переписана 2026-09-10 вместе с планом — этот контроль судится по перекрёстной проверке и переносу, у прибора передачи свой контроль (B4–B6) |
-| Первый кадр доводки — ступенька скорости до 1 м/с за кадр; стоящего уронило бы, сидящего нет; в момент `F` на борту никто не стоит | записан как шов; чинится кубическим Эрмитом в `CapturePose`, когда появится стоящий пассажир |
+| Доводка превышает порог гравиплит: 23.0 м/с² на краю окна (плечо узла 4.80 м добавляет 0.84 м к пути корпуса), плюс 4.19 м/с² угловой части в тот же кадр, плюс ступенька первого кадра 60 м/с² на 60 fps | записано как шов, не как дефект: команду подаёт пристёгнутый пилот, второго человека на борту в срезе нет. Чинится выводом `CaptureSeconds` из фактического пути и кубическим Эрмитом в `CapturePose` — тогда, когда на борту появится стоящий пассажир, и не раньше |
 | Люк сделал каюту `L_FrameSpike` незакрытой (R12): уроненного может выбросить наружу | ____ |
 | Геймпада нет; аналоговый путь по-прежнему не наблюдался | переносится в этап 4 |
 | §6 «волочёт по палубе» помечена неточной | остаётся отложенной |
@@ -4032,7 +4073,7 @@ MSG
 После задачи 6 — по runbook, руками. Проверить перед слиянием:
 
 - **65** головных тестов проходят из консоли, без редактора; `StarForgeCore` по-прежнему зависит только от `Core` и `CoreUObject`; сборка без предупреждений;
-- корабль появляется **уже пристыкованным**, и в журнале это видно двумя строками рядом — `Dock: docked.` и `Loop rig: scripted profile forced off; the ship spawns docked.`;
+- корабль появляется **уже пристыкованным**, и в журнале это видно двумя строками рядом — `Dock: docked.` и `Loop rig: scripted profile off; the ship spawns docked; the man stands in the cabin.`;
 - перенос переживает смену расписания в обе стороны: `skipped carries 0` и ни одной `Carry NOT RUNNING` в цикле `sf.Dock 2`, на 60 и на 400 fps. Это и есть то, что §8 требует **проверить, а не вывести**;
 - крен после отстыковки выходит на **180.0 °/с на 400 fps** — `SleepFamily` пережил выключение и включение симуляции;
 - передача системы отсчёта через люк читается `0.000 cm` и **не видна глазом**;
