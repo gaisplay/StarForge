@@ -357,6 +357,15 @@ Things in the code that look like mistakes and are not:
   first step of any commanded thrust keeps it awake. Waking the body wherever a wrench is
   applied was tried first and measured to change nothing — being awake is not what is in
   question — and the reason it cannot work is written where that attempt stood.
+- **The frame cross-check's threshold is a time, `FrameMismatchThresholdSeconds`, not a
+  frame count.** It was ten frames until the first manual run of the loop at 320 fps, which
+  printed `Standing on … while bound to …` on every single walk through the hatch — twelve
+  false findings in one session, in an instrument whose red line the runbook says stops the
+  run. A volume binds the occupant when the *edge* of his capsule touches it; the floor
+  under him switches when its *centre* crosses the panel boundary; the 24–34 cm between
+  the two is two or three frames at 60 fps and thirteen to eighteen at 320. A frame count
+  is a frame rate — the same shape as the Chaos sleep counter — and any threshold added to
+  this project from now on is written in seconds and tested at 400 fps as well as 60.
 - **A second console key, `F1`, in `Config/DefaultInput.ini`.** The engine binds the console
   to `Tilde` alone, and on a keyboard layout that does not produce Tilde from the key left of
   "1" the console never opens — silently, with nothing in the log. It cost a whole run of

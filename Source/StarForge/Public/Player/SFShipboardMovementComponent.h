@@ -130,6 +130,32 @@ public:
 	 * frame he rides or it does not.
 	 */
 	int32 GetFrameMismatchFrames() const { return MismatchFrames; }
+	double GetFrameMismatchSeconds() const { return MismatchSeconds; }
+
+	/**
+	 * True once the disagreement has lasted long enough to be reported. The readout
+	 * colours its frame line on this and nothing else, so the panel and the log agree on
+	 * what counts as a mismatch: the same threshold, in the same unit.
+	 */
+	bool IsFrameMismatchReported() const { return bMismatchReported; }
+
+	/**
+	 * How long the floor and the frame may disagree before it is a finding: a sixth of a
+	 * second, which is the ten frames at 60 fps the instrument was designed around.
+	 *
+	 * A TIME, not a frame count, and the difference was measured. Walking through the
+	 * hatch binds the occupant to the new carrier when the edge of his capsule touches its
+	 * volume, while the floor under him switches when the capsule's centre crosses the
+	 * panel boundary: 34 cm on the way out and 24 cm on the way back, 57 and 40 ms at
+	 * walking speed. At 60 fps that is three frames and two, under any threshold; at the
+	 * 320 fps of the first manual run it is eighteen and thirteen, and a threshold of ten
+	 * frames warned on every single crossing -- twelve false findings in one session. A
+	 * frame count is a frame rate, which is the shape of the Chaos sleep defect again.
+	 * A sixth of a second clears the seam at any rate and still reports a wrong binding
+	 * within it -- and a man who stops on the seam itself is reported, as he should be:
+	 * if the ship leaves then, the seam leaves without him.
+	 */
+	static constexpr double FrameMismatchThresholdSeconds = 1.0 / 6.0;
 
 	virtual void UpdateBasedMovement(float DeltaSeconds) override;
 
@@ -215,7 +241,7 @@ private:
 
 	/**
 	 * Compares the owner of the floor he is standing on against the frame he is bound to,
-	 * and complains when the two disagree for ten frames running.
+	 * and complains when the two disagree for FrameMismatchThresholdSeconds running.
 	 *
 	 * Latched to one call per frame like the drift measurement, and for a related reason:
 	 * the engine calls UpdateBasedMovement once a frame for a base that is not simulating
@@ -371,8 +397,10 @@ private:
 	double LastHandoverGravityTurnDeg = 0.0;
 	FString LastHandoverText;
 
-	/** Cross-check state; see UpdateFrameCrossCheck. */
+	/** Cross-check state; see UpdateFrameCrossCheck and FrameMismatchThresholdSeconds. */
 	int32 MismatchFrames = 0;
+	double MismatchSeconds = 0.0;
+	bool bMismatchReported = false;
 	uint64 LastCrossCheckFrame = TNumericLimits<uint64>::Max();
 	double SecondsSinceMismatchLog = 0.0;
 };

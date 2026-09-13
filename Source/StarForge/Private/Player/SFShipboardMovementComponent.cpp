@@ -163,6 +163,8 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 
 	// The cross-check belongs to the binding it was taken against.
 	MismatchFrames = 0;
+	MismatchSeconds = 0.0;
+	bMismatchReported = false;
 	LastCrossCheckFrame = TNumericLimits<uint64>::Max();
 	SecondsSinceMismatchLog = 0.0;
 }
@@ -347,29 +349,37 @@ void USFShipboardMovementComponent::UpdateFrameCrossCheck(float DeltaSeconds)
 	if (!BaseFrame || BaseFrame == ShipFrame.Get())
 	{
 		MismatchFrames = 0;
+		MismatchSeconds = 0.0;
+		bMismatchReported = false;
 		SecondsSinceMismatchLog = 0.0;
 		return;
 	}
 
 	++MismatchFrames;
+	MismatchSeconds += DeltaSeconds;
 	SecondsSinceMismatchLog += DeltaSeconds;
 
-	// The first line at ten frames -- a sixth of a second, long enough that a single
-	// frame of tick order cannot produce it -- and then one a second for as long as it
-	// lasts. The same reason Carry NOT RUNNING repeats: a single line at frame ten does
-	// not say that the disagreement has been going on for a minute.
+	// The first line once the disagreement has lasted a sixth of a second -- long enough
+	// that neither a single frame of tick order nor the hatch seam can produce it -- and
+	// then one a second for as long as it lasts. The same reason Carry NOT RUNNING
+	// repeats: a single line does not say that the disagreement has been going on for a
+	// minute.
 	//
-	// The repeat arm is gated on the threshold as well, or it outruns it: at a tenth of a
-	// second per frame the second's worth of seconds is reached on the first mismatching
-	// frame, and the line fires for exactly the single frame of tick order the ten-frame
-	// threshold exists to exclude.
-	if (MismatchFrames >= 10 && (MismatchFrames == 10 || SecondsSinceMismatchLog >= 1.0))
+	// The threshold is a TIME. It was ten frames until 2026-09-13, when the first manual
+	// run at 320 fps produced one warning on every walk through the hatch: the volume
+	// binds at the capsule's edge and the floor switches at its centre, and the 24-34 cm
+	// between them is two or three frames at 60 fps and thirteen to eighteen at 320. See
+	// FrameMismatchThresholdSeconds for the arithmetic. The frame count is still printed,
+	// because it is what tells a reader which frame rate the run was at.
+	if (MismatchSeconds >= FrameMismatchThresholdSeconds
+		&& (!bMismatchReported || SecondsSinceMismatchLog >= 1.0))
 	{
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Standing on %s's floor while bound to %s's frame for %d frames. ")
+			TEXT("Standing on %s's floor while bound to %s's frame for %d frames (%.2f s). ")
 			TEXT("One of the two is wrong, and the carry is following the frame."),
 			BaseOwner ? *BaseOwner->GetActorNameOrLabel() : TEXT("nothing"),
-			*GetFrameName(), MismatchFrames);
+			*GetFrameName(), MismatchFrames, MismatchSeconds);
+		bMismatchReported = true;
 		SecondsSinceMismatchLog = 0.0;
 	}
 }

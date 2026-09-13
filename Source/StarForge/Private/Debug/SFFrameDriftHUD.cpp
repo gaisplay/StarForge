@@ -242,14 +242,16 @@ void ASFFrameDriftHUD::DrawHUD()
 	// otherwise and mean opposite things. Red when the floor under him has belonged to
 	// somebody else for ten frames: that outranks every figure above it, since the carry
 	// is following the frame and the frame is wrong.
-	const int32 Mismatch = Movement->GetFrameMismatchFrames();
+	// The same threshold the log uses, in the same unit, so the line does not go red on
+	// a crossing the log stayed silent about.
+	const bool bMismatch = Movement->IsFrameMismatchReported();
 	const bool bNoHandoverYet = Movement->GetLastHandoverText().IsEmpty();
 	DrawLine(
 		FString::Printf(TEXT("frame   bound to %s   last handover: %s"),
 			*Movement->GetFrameName(),
 			bNoHandoverYet ? TEXT("none yet") : *Movement->GetLastHandoverText()),
 		Y,
-		(Mismatch >= 10) ? FLinearColor::Red : (bNoHandoverYet ? FLinearColor::Yellow : FLinearColor::White));
+		bMismatch ? FLinearColor::Red : (bNoHandoverYet ? FLinearColor::Yellow : FLinearColor::White));
 
 	// The dock line is about the ship, not about whichever carrier he happens to be
 	// standing in: a man on the station still needs to see whether his ship is attached
