@@ -105,8 +105,18 @@ grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log      # 0
 Запуск — **с картой петли первым аргументом**:
 
 ```bash
-"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Loop -game -windowed -ResX=1600 -ResY=900
+MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Loop -game -windowed -ResX=1600 -ResY=900
 ```
+
+**`MSYS_NO_PATHCONV=1` впереди обязателен, если команда запускается из Git Bash** — а кнопка
+«Run» в приложении запускает именно его. Git Bash переписывает аргумент, начинающийся с `/`,
+как путь Windows: `/Game/Maps/L_Loop` превращается в `C:/Program Files/Git/Game/Maps/L_Loop`,
+движок такой карты не находит и весь прогон сидит в пустом мире — без станции, без строки
+`Loop rig:`, а панель показывает `dock free -- NO STATION in this level`. Проверено 2026-09-13:
+без префикса в журнале `LogInit: Command Line: "C:/Program Files/Git/Game/Maps/L_Loop" …` и ни
+одного `Bringing World`; с префиксом — `Bringing World /Game/Maps/L_Loop.L_Loop`. Из cmd или
+PowerShell префикс не нужен. Форму с подменой по URL это не трогает — ни в одном записанном
+прогоне её не переписало.
 
 Или подменой по URL, если карты ещё нет, — команда выше, в шаге 0. Разница между двумя
 формами ровно одна: какой файл карты грузится. Обе пустые, обе собираются режимом, и
@@ -489,6 +499,11 @@ Frame bound by console to Station (sf.BindFrame). This ignores where he is stand
 **`E` не сажает.** Кресло занято консольным оператором: `sf.ConsoleOperator 0`. Кресло канонира
 занято автоматикой: `sf.AutomationOperator 0`. Пилотское — в центре каюты, канонирское — в
 полутора метрах к корме; `E` обращается к **ближайшему**.
+
+**Панель говорит `dock free -- NO STATION in this level`, а запускал ты `L_Loop` из Git Bash.**
+Карту переписал MSYS — см. предупреждение под командой запуска. Признак в журнале:
+`LogInit: Command Line: "C:/Program Files/Git/Game/Maps/L_Loop"` и ни одного `Bringing World`.
+Лечится префиксом `MSYS_NO_PATHCONV=1`.
 
 **Панель говорит `dock free -- NO STATION in this level`.** Грузится `L_FrameSpike` со своим
 режимом. Либо карта `L_Loop` не создана, либо потерялись кавычки вокруг URL с `?game=`.

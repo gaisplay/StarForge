@@ -81,8 +81,17 @@ By map, once `Content/Maps/L_Loop.umap` exists. The level is empty and carries o
 `GameMode Override` of `SFLoopGameMode`; the mode spawns the station, the ship and the pawn.
 
 ```bash
-"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Loop -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log
+MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Loop -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log
 ```
+
+**From Git Bash the map argument needs `MSYS_NO_PATHCONV=1` in front of the command.** MSYS
+rewrites an argument that starts with `/` as a Windows path — `/Game/Maps/L_Loop` reaches the
+engine as `C:/Program Files/Git/Game/Maps/L_Loop` — and the engine then finds no map, brings
+up no world and sits in an empty level for the whole run: no station, no `Loop rig:` line,
+`dock free -- NO STATION in this level`, and an exit code of 0. Measured on 2026-09-13; the
+tell in the log is `LogInit: Command Line: "C:/Program Files/Git/Game/Maps/L_Loop" …` with no
+`Bringing World` line at all. From cmd or PowerShell the plain form is fine. The URL form
+below was not rewritten in any recorded run.
 
 By overriding the game mode on the URL, which needs no map at all. **Quote the first
 argument**: `?` is a shell metacharacter, and unquoted the command silently loses everything
@@ -126,7 +135,7 @@ Console variables the rig understands:
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject"
 ```
 
-**Close the editor before building.** A running editor holds the Live Coding lock and the build will fail. Check with `tasklist | findstr Unreal`.
+**Close the editor before building.** A running editor holds the Live Coding lock and the build will fail. Check with `tasklist | findstr Unreal`. From Git Bash, `taskkill /F` does not work — MSYS turns the switch `/F` into the path `F:/` — so once everything is saved close it with `powershell -NoProfile -Command "Stop-Process -Name UnrealEditor -Force"`.
 
 ## Module split — the load-bearing boundary
 
