@@ -118,6 +118,16 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 PowerShell префикс не нужен. Форму с подменой по URL это не трогает — ни в одном записанном
 прогоне её не переписало.
 
+**Из Windows Terminal (PowerShell) префикс не нужен** — нужен только оператор вызова `&`
+в начале строки, потому что для PowerShell строка в кавычках — это строка, а не команда
+(проверено 2026-09-14: `Bringing World /Game/Maps/L_Loop.L_Loop`):
+
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "F:\UEProject\StarForge\StarForge.uproject" /Game/Maps/L_Loop -game -windowed -ResX=1600 -ResY=900
+```
+
+Из `cmd.exe` — та же строка без `&`.
+
 Или подменой по URL, если карты ещё нет, — команда выше, в шаге 0. Разница между двумя
 формами ровно одна: какой файл карты грузится. Обе пустые, обе собираются режимом, и
 `L_Loop` нужен только затем, что карту нельзя набрать в ярлыке.
