@@ -19,6 +19,7 @@
 #include "Ship/SFTargetDrone.h"
 #include "Ship/SFThrusterArrayComponent.h"
 #include "Ship/SFTurretComponent.h"
+#include "Ship/SFWeaponComponent.h"
 #include "StarForgeLog.h"
 #include "Units.h"
 #include "UObject/ConstructorHelpers.h"
@@ -390,6 +391,18 @@ ASFTestShip::ASFTestShip()
 	{
 		TurretBarrelMesh->SetStaticMesh(BarrelMesh.Object);
 	}
+
+	// At the apex of the cone. The mesh is offset half its length along the pivot's +X and is
+	// BarrelLengthCm long, so its tip is exactly BarrelLengthCm from the axis the turret turns
+	// about -- and hanging the muzzle off the same pivot means the shot leaves where the
+	// picture says the barrel points.
+	Weapon = CreateDefaultSubobject<USFWeaponComponent>(TEXT("Weapon"));
+	Weapon->SetupAttachment(TurretBarrel);
+	Weapon->SetRelativeLocation(FVector(BarrelLengthCm, 0.0, 0.0));
+	if (ShipDataAsset.Succeeded())
+	{
+		Weapon->ShipData = ShipDataAsset.Object;
+	}
 }
 
 UStaticMeshComponent* ASFTestShip::AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale)
@@ -458,6 +471,11 @@ void ASFTestShip::BeginPlay()
 	if (ConsoleOperator) { ConsoleOperator->SetConsoleControlled(bAnswersConsole); }
 	if (AutomationOperator) { AutomationOperator->SetConsoleControlled(bAnswersConsole); }
 	if (Docking) { Docking->SetConsoleControlled(bAnswersConsole); }
+	if (Weapon)
+	{
+		Weapon->SetConsoleControlled(bAnswersConsole);
+		Weapon->SetWeaponsFree(bWeaponsFree);
+	}
 
 	Super::BeginPlay();
 
@@ -501,7 +519,7 @@ void ASFTestShip::BeginPlay()
 			// drone until then is reported as no target rather than aimed at.
 			if (AutomationOperator)
 			{
-				AutomationOperator->SetTargetDrone(TargetDrone);
+				AutomationOperator->SetTargetActor(TargetDrone);
 			}
 		}
 		else

@@ -6,6 +6,7 @@
 #include "SFGunnerStationComponent.generated.h"
 
 class USFTurretComponent;
+class USFWeaponComponent;
 
 /**
  * The post that lays the turret.
@@ -45,9 +46,14 @@ public:
 
 	USFTurretComponent* GetTurret() const { return Turret; }
 
+	USFWeaponComponent* GetWeapon() const { return Weapon; }
+
 private:
 	UPROPERTY()
 	TObjectPtr<USFTurretComponent> Turret;
+
+	UPROPERTY()
+	TObjectPtr<USFWeaponComponent> Weapon;
 
 	StarForge::FTurretIntent LastIntent;
 

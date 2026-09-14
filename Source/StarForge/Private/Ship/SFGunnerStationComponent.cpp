@@ -2,6 +2,7 @@
 
 #include "GameFramework/Actor.h"
 #include "Ship/SFTurretComponent.h"
+#include "Ship/SFWeaponComponent.h"
 #include "StarForgeLog.h"
 
 USFGunnerStationComponent::USFGunnerStationComponent()
@@ -26,6 +27,7 @@ void USFGunnerStationComponent::BeginPlay()
 	if (AActor* Owner = GetOwner())
 	{
 		Turret = Owner->FindComponentByClass<USFTurretComponent>();
+		Weapon = Owner->FindComponentByClass<USFWeaponComponent>();
 	}
 
 	if (!Turret)
@@ -34,6 +36,15 @@ void USFGunnerStationComponent::BeginPlay()
 		// that will not move, and the readout cannot tell the two apart on its own.
 		UE_LOG(LogStarForge, Error,
 			TEXT("Gunner station on [%s] found no turret; nothing will be aimed."), *GetNameSafe(GetOwner()));
+	}
+
+	if (!Weapon)
+	{
+		// A warning, not an error: a gunner's post without a turret is useless, and one
+		// without a muzzle still aims.
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Gunner station on [%s] found no weapon; the turret will aim and nothing will fire."),
+			*GetNameSafe(GetOwner()));
 	}
 }
 
@@ -44,10 +55,16 @@ void USFGunnerStationComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	// The weapon is told the trigger on every path out of this tick, and told it is released
+	// exactly where the turret is told nobody commanded it. Without that, a post that empties
+	// leaves the trigger held from its last tick and the weapon keeps firing on a stale
+	// reading -- the same failure that cost the thruster array a whole function (ClearDemand)
+	// to remove.
 	if (!Turret)
 	{
 		LastIntent = StarForge::FTurretIntent();
 		bOperatorGunning = false;
+		if (Weapon) { Weapon->ApplyTrigger(false, DeltaTime); }
 		return;
 	}
 
@@ -56,6 +73,7 @@ void USFGunnerStationComponent::TickComponent(
 		LastIntent = StarForge::FTurretIntent();
 		bOperatorGunning = false;
 		Turret->ClearCommand();
+		if (Weapon) { Weapon->ApplyTrigger(false, DeltaTime); }
 		return;
 	}
 
@@ -72,15 +90,19 @@ void USFGunnerStationComponent::TickComponent(
 		LastIntent = StarForge::FTurretIntent();
 		bOperatorGunning = false;
 		Turret->ClearCommand();
+		if (Weapon) { Weapon->ApplyTrigger(false, DeltaTime); }
 		return;
 	}
 
 	LastIntent = Intent;
 	bOperatorGunning = true;
 
+	// With no target the trigger still goes through as the operator holds it, the same value
+	// the turret records: the weapon fires on the trigger, not on the aim.
 	if (!Intent.bHasTarget)
 	{
 		Turret->ApplyNoTarget(Intent.bFiring);
+		if (Weapon) { Weapon->ApplyTrigger(Intent.bFiring, DeltaTime); }
 		return;
 	}
 
@@ -92,8 +114,11 @@ void USFGunnerStationComponent::TickComponent(
 		// A target on the mount itself is not a bearing. Reported as no target rather
 		// than aimed at with a made-up angle.
 		Turret->ApplyNoTarget(Intent.bFiring);
+		if (Weapon) { Weapon->ApplyTrigger(Intent.bFiring, DeltaTime); }
 		return;
 	}
 
+	// After the bearing, so the muzzle a shot leaves from is where this tick's slew put it.
 	Turret->ApplyBearing(Bearing, Intent.bFiring, DeltaTime);
+	if (Weapon) { Weapon->ApplyTrigger(Intent.bFiring, DeltaTime); }
 }

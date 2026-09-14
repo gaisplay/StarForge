@@ -16,6 +16,7 @@ class USFGunnerStationComponent;
 class USFConsoleOperatorComponent;
 class USFAutomationOperatorComponent;
 class USFTurretComponent;
+class USFWeaponComponent;
 class USFDockingPortComponent;
 class USFDockingComponent;
 class USFInteriorVolumeComponent;
@@ -112,6 +113,20 @@ public:
 	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
 	bool bSpawnTargetDrone = true;
 
+	/**
+	 * Whether the gunner's trigger reaches the muzzle.
+	 *
+	 * False by default, and that is what keeps both existing rigs silent: the automation holds
+	 * the trigger whenever it has a target, so with a muzzle on the barrel they would otherwise
+	 * open fire on the drone five times a second, and no figure recorded on them was taken with
+	 * shots in the air. A hull that answers the console still fires on sf.Fire 1 whatever this
+	 * says. The combat rig sets it on both ships.
+	 *
+	 * Handed to the weapon before Super::BeginPlay, like Crewing, and for the same reason.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
+	bool bWeaponsFree = false;
+
 	ESFShipCrewing GetCrewing() const { return Crewing; }
 
 	USFAutomationOperatorComponent* GetAutomationOperator() const { return AutomationOperator; }
@@ -128,6 +143,9 @@ public:
 	USFGunnerStationComponent* GetGunnerStation() const { return GunnerStation; }
 
 	USFTurretComponent* GetTurret() const { return Turret; }
+
+	/** The muzzle, at the tip of the barrel the turret turns. */
+	USFWeaponComponent* GetWeapon() const { return Weapon; }
 
 	/** The ship's half of the airlock. Its +X points out through the hatch. */
 	USFDockingPortComponent* GetDockingPort() const { return DockingPort; }
@@ -216,6 +234,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<UStaticMeshComponent> TurretBarrelMesh;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFWeaponComponent> Weapon;
 
 	/**
 	 * Lights the interior from the room's centre so the walk test is visible at all.

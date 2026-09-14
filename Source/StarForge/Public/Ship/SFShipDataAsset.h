@@ -83,6 +83,46 @@ public:
 	double AngularGain = 3.0;
 
 	/**
+	 * Metres per second along the barrel, added to the carrier's own velocity. Not set in
+	 * the spec; this figure is the stage-4 plan's.
+	 *
+	 * 2.5 times spec 7's 400 m/s boost ceiling, so a ship cannot overtake its own shot. And
+	 * at 60 fps a shot covers 1000 / 60 = 16.67 m a frame, twice the length of the eight-metre
+	 * hull, which is what makes sf.ProjectileSweep 0 a control that can fail rather than one
+	 * that passes by being too slow to tunnel.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Weapon")
+	double MuzzleSpeedMetresPerSec = 1000.0;
+
+	/**
+	 * Seconds between shots. Not set in the spec; this figure is the stage-4 plan's.
+	 *
+	 * Five shots a second: twelve frames apart at 60 fps and eighty at 400, so shots are told
+	 * apart in the log at both rates, and the count over a window has to agree between them --
+	 * which is the check that the cadence is written in seconds and not in frames.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Weapon")
+	double SecondsBetweenShots = 0.2;
+
+	/**
+	 * A shot's life in seconds. Not set in the spec; this figure is the stage-4 plan's.
+	 *
+	 * 1000 m/s x 5.0 s = 5000 m, five times the combat rig's one-kilometre separation, so a
+	 * miss expires far outside the scene rather than hanging in it.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Weapon")
+	double ProjectileLifeSeconds = 5.0;
+
+	/**
+	 * What one hit carries. Not set in the spec; this figure is the stage-4 plan's.
+	 *
+	 * A round hundred, so events can be counted in shots without a calculator: a wrong
+	 * multiplier shows up as a wrong count rather than as a plausible-looking number.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Weapon")
+	double ProjectileDamage = 100.0;
+
+	/**
 	 * Replaces Thrusters with the standard symmetric test layout: four corners, six
 	 * thrusters each, one along every signed axis. Twenty-four records of four fields.
 	 *
