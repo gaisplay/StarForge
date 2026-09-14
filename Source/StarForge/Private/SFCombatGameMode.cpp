@@ -197,6 +197,7 @@ void ASFCombatGameMode::StartPlay()
 	bool bFault = false;
 
 	FString ShipText;
+	bool bSeatLeftFree = false;
 	if (!Ship)
 	{
 		ShipText = TEXT("there is NO PLAYER'S SHIP");
@@ -209,13 +210,34 @@ void ASFCombatGameMode::StartPlay()
 		const USFPilotStationComponent* ShipPilot = Ship->GetPilotStation();
 		const USFConsoleOperatorComponent* Console =
 			Cast<const USFConsoleOperatorComponent>(ShipPilot ? ShipPilot->GetOperator().GetObject() : nullptr);
-		const bool bCrewed = Ship->GetCrewing() == ESFShipCrewing::PlayerShip && Console && Console->GetOwner() == Ship;
-		ShipText = bCrewed
-			? FString(TEXT("the player's ship is crewed"))
-			: FString::Printf(TEXT("the player's ship is NOT CREWED (%s, pilot's post held by %s)"),
-				Ship->GetCrewing() == ESFShipCrewing::PlayerShip ? TEXT("player crewing") : TEXT("AUTOMATED crewing"),
+		const bool bPlayerCrewing = Ship->GetCrewing() == ESFShipCrewing::PlayerShip;
+		const bool bCrewed = bPlayerCrewing && Console && Console->GetOwner() == Ship;
+
+		// An empty seat with sf.ConsoleOperator 0 is a choice a person makes before Play so that he can
+		// take the seat himself, and it is said as that, in a warning naming the variable -- as a pirate
+		// withheld by sf.Pirate 0 is. Any other holder, or an empty seat without that variable, stays an
+		// error. The variable is declared in SFConsoleOperatorComponent.cpp and reached here by name,
+		// like sf.ShipProfile above; a miss leaves the empty seat an error, which is the loud side.
+		const IConsoleVariable* ConsoleOperatorVar =
+			IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ConsoleOperator"));
+		bSeatLeftFree = bPlayerCrewing && ShipPilot && !ShipPilot->IsOccupied()
+			&& ConsoleOperatorVar && ConsoleOperatorVar->GetInt() == 0;
+
+		if (bCrewed)
+		{
+			ShipText = TEXT("the player's ship is crewed");
+		}
+		else if (bSeatLeftFree)
+		{
+			ShipText = TEXT("the player's ship has its pilot's post left free by sf.ConsoleOperator 0");
+		}
+		else
+		{
+			ShipText = FString::Printf(TEXT("the player's ship is NOT CREWED (%s, pilot's post held by %s)"),
+				bPlayerCrewing ? TEXT("player crewing") : TEXT("AUTOMATED crewing"),
 				*CombatRig::DescribeHolder(ShipPilot));
-		bFault = bFault || !bCrewed;
+			bFault = true;
+		}
 
 		// The hull field the rig set, read back, not the weapon's own flag: the weapon exposes no getter.
 		// The hull hands the field to the weapon before Super::BeginPlay, and the weapon's own BeginPlay
@@ -307,7 +329,7 @@ void ASFCombatGameMode::StartPlay()
 	{
 		UE_LOG(LogStarForge, Error, TEXT("%s"), *Report);
 	}
-	else if (bPirateWithheld)
+	else if (bPirateWithheld || bSeatLeftFree)
 	{
 		UE_LOG(LogStarForge, Warning, TEXT("%s"), *Report);
 	}
