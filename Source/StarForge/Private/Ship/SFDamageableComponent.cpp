@@ -10,10 +10,12 @@
 namespace
 {
 	/**
-	 * The shields' negative control. It acts on every hull in the world, automated or not: the
-	 * checkpoint control turns off the PIRATE's shields and reads the pirate's hull, and a switch
-	 * an automated hull ignored could not be run at all. Like sf.ProjectileSweep it is a question
-	 * about the mechanism, not a command addressed to one ship.
+	 * The shields' negative control, and a NAMED EXCEPTION to ESFShipCrewing's rule that an
+	 * Automated hull answers no sf.* variable: every hull reads this one, automated or not. The
+	 * reason is checkpoint 7's control C1, which turns off the PIRATE's shields and reads the
+	 * pirate's hull; a switch the automated hull ignored could not be run at all. It sits beside
+	 * the pursuit operator's sf.PirateAI, the stage's other exception, and like sf.ProjectileSweep
+	 * it is a question about the mechanism rather than a command addressed to the player's ship.
 	 */
 	TAutoConsoleVariable<int32> CVarShields(TEXT("sf.Shields"), 1,
 		TEXT("1: a hit is taken by the shield face it lands on. 0: every hit goes straight to the hull, and\n")
@@ -76,13 +78,15 @@ void USFDamageableComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!bReady)
+	// Not while powered down: charges and timers freeze where the last hit left them. Powered
+	// down means nothing that draws power works, and the shields draw power. A Combat line
+	// reading "powered down" beside faces climbing back up would be false, and it is exactly the
+	// line recorded for a drifting pirate.
+	if (!bReady || bPoweredDown)
 	{
 		return;
 	}
 
-	// Also while powered down. The plan ties a power-down to the thruster lock and to nothing
-	// else, and stopping the shields here would be a second consequence nobody decided.
 	StarForge::Damage::TickShields(Shields, Limits, DeltaTime);
 }
 

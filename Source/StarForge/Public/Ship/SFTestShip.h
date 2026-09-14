@@ -36,6 +36,8 @@ class ASFTargetDrone;
  * also stands down the pirate's. An Automated hull therefore answers none of them. It is not
  * deaf by accident -- its posts are held by automation by definition, and those variables are
  * the player's ship's debug switches.
+ *
+ * Named exceptions, which every hull answers: sf.Shields (see SFDamageableComponent.cpp).
  */
 UENUM()
 enum class ESFShipCrewing : uint8

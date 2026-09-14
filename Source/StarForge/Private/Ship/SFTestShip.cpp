@@ -727,7 +727,14 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	// A line of its own rather than more fields on Flight:, which already takes reading in pieces.
 	// Before the thruster check for the turret's reason: a hull whose array never built can still
 	// be shot, and a Combat line that vanished with the array would read as a hull nobody can hurt.
-	if (Damageable)
+	if (Damageable && !Damageable->IsReady())
+	{
+		// Its accessors read zero, which is also what a ship shot to pieces reads. Said instead,
+		// as the thruster count below says NOT built rather than 0/24.
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Combat: [%s] damageable component NOT ready -- no shield or hull figures to report."), *GetName());
+	}
+	else if (Damageable)
 	{
 		FString ShieldText;
 		for (int32 i = 0; i < StarForge::Damage::FaceCount; ++i)

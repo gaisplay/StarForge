@@ -355,6 +355,11 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	{
 		DrawLine(TEXT("shields -- no ship with a damageable component in the level"), Y, FLinearColor::Red);
 	}
+	else if (!Damageable->IsReady())
+	{
+		// Not six red zeros and a hull of 0.0 / 0.0: that is what a ship shot to pieces looks like.
+		DrawLine(TEXT("shields -- damageable component NOT ready, no shield or hull figures (see the log)"), Y, FLinearColor::Red);
+	}
 	else
 	{
 		// A face on its own in red when it is at zero, because a hit there goes straight to the

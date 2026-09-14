@@ -61,6 +61,12 @@ public:
 	 */
 	void ReceiveHit(const FVector& HitWorldCm, double Damage, AActor* Instigator);
 
+	/**
+	 * False when BeginPlay found no ship data or figures it could not use. The accessors below
+	 * then read zero, which is also what a ship shot to pieces reads, so a readout asks this first.
+	 */
+	bool IsReady() const { return bReady; }
+
 	double GetHullStrength() const { return HullStrength; }
 	double GetHullCapacity() const { return HullCapacity; }
 
@@ -83,7 +89,8 @@ private:
 	bool ApplyToHull(double Damage, const FVector& ShipLocalCm, AActor* Instigator);
 
 	/**
-	 * Locks the thruster array and says so, once.
+	 * Locks the thruster array and says so, once. It also freezes the shields: from here on no
+	 * face regenerates and no timer runs (see TickComponent).
 	 *
 	 * The lock is NOT exclusive, and nothing here pretends it is. SetLocked is a single bool
 	 * with no owner and no reason attached: USFDockingComponent::Undock calls SetLocked(false)
