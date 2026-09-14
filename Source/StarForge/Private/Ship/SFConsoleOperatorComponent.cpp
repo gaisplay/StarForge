@@ -78,7 +78,7 @@ void USFConsoleOperatorComponent::BeginPlay()
 	if (!bConsoleControlled)
 	{
 		UE_LOG(LogStarForge, Display,
-			TEXT("Console operator on '%s' stands down: this hull does not answer sf.*."),
+			TEXT("Console operator on [%s] stands down: this hull does not answer sf.*."),
 			*GetOwner()->GetName());
 		return;
 	}

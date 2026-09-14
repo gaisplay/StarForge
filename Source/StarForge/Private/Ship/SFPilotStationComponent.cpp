@@ -99,9 +99,18 @@ void USFPilotStationComponent::TickComponent(
 	// Read before anything can return early, so the readout tells the truth about the
 	// instrument whether or not anybody is in the seat. The pointer behind it is
 	// resolved once, so this costs an integer read per frame.
-	bool bProfileKnown = true;
-	const bool bScriptedProfile = IsScriptedProfileRunning(bProfileKnown);
-	bScriptedProfileUnknown = !bProfileKnown;
+	//
+	// Not consulted at all on a hull that does not answer sf.*: the profile cannot run on
+	// it (TickScriptedProfile refuses), so here it is neither running nor unknown, and the
+	// default sf.ShipProfile 1 must not stand down whoever holds this seat.
+	bool bScriptedProfile = false;
+	bScriptedProfileUnknown = false;
+	if (bConsoleControlled)
+	{
+		bool bProfileKnown = true;
+		bScriptedProfile = IsScriptedProfileRunning(bProfileKnown);
+		bScriptedProfileUnknown = !bProfileKnown;
+	}
 
 	if (!Thrusters || !Thrusters->IsReady() || !Thrusters->ShipData || !IsOccupied())
 	{

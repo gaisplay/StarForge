@@ -46,7 +46,7 @@ void USFInteriorVolumeComponent::BeginPlay()
 		// through it and stay bound to whatever they were bound to before, which is the
 		// exact symptom of a handover that never fires.
 		UE_LOG(LogStarForge, Error,
-			TEXT("Interior volume on %s found no frame component; nobody entering it will be bound."),
+			TEXT("Interior volume on [%s] found no frame component; nobody entering it will be bound."),
 			GetOwner() ? *GetOwner()->GetActorNameOrLabel() : TEXT("nothing"));
 		return;
 	}

@@ -91,6 +91,13 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "StarForge|Profile")
 	double InteriorHalfExtentCm = 400.0;
 
+	/**
+	 * Read at BeginPlay, where it is handed to the posts and the docking component, and read
+	 * again every frame by the scripted profile. A hull spawned into a running world must
+	 * have it set between SpawnActorDeferred and FinishSpawning: set after SpawnActor, the
+	 * components have already begun play on the old value while the profile follows the new
+	 * one, and the hull is half deaf.
+	 */
 	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
 	ESFShipCrewing Crewing = ESFShipCrewing::PlayerShip;
 

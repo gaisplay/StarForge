@@ -454,6 +454,7 @@ void ASFTestShip::BeginPlay()
 	// components, and each of them decides in its own BeginPlay whether to take a seat or
 	// to listen to a console variable. Told afterwards, they would have already acted.
 	const bool bAnswersConsole = (Crewing == ESFShipCrewing::PlayerShip);
+	if (PilotStation) { PilotStation->SetConsoleControlled(bAnswersConsole); }
 	if (ConsoleOperator) { ConsoleOperator->SetConsoleControlled(bAnswersConsole); }
 	if (AutomationOperator) { AutomationOperator->SetConsoleControlled(bAnswersConsole); }
 	if (Docking) { Docking->SetConsoleControlled(bAnswersConsole); }
@@ -514,7 +515,7 @@ void ASFTestShip::BeginPlay()
 		// Said out loud: a gunner post with no target looks exactly like a gunner post
 		// that is not working, and this is the line that tells the two apart.
 		UE_LOG(LogStarForge, Display,
-			TEXT("Ship '%s' spawns no target drone; its gunner's automation will track whatever it is given."),
+			TEXT("Ship [%s] spawns no target drone; its gunner's automation will track whatever it is given."),
 			*GetName());
 	}
 }
