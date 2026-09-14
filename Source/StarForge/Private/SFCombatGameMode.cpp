@@ -48,7 +48,8 @@ namespace
 		 * them. BeginPlay has not been dispatched yet either -- this runs before Super::StartPlay --
 		 * but the deferred spawn makes that ordering not matter.
 		 */
-		ASFTestShip* SpawnCombatShip(UWorld* World, FName Name, const FTransform& At, ESFShipCrewing Crewing)
+		ASFTestShip* SpawnCombatShip(UWorld* World, FName Name, const FTransform& At, ESFShipCrewing Crewing,
+			bool bWeaponsFree)
 		{
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -64,7 +65,7 @@ namespace
 
 			NewShip->Crewing = Crewing;
 			NewShip->bSpawnTargetDrone = false;
-			NewShip->bWeaponsFree = true;
+			NewShip->bWeaponsFree = bWeaponsFree;
 			NewShip->FinishSpawning(At);
 			return NewShip;
 		}
@@ -116,7 +117,13 @@ void ASFCombatGameMode::StartPlay()
 	// back. Both spawn with no target drone: the thing to aim at is the other ship.
 	// 1000 m is crossed by a shot in 1.0 s, so the run has something to watch from its first seconds.
 	// Before Super::StartPlay, for the spike rig's reason: the pawn's BeginPlay has to find a frame.
-	Ship = CombatRig::SpawnCombatShip(World, TEXT("Ship"), FTransform::Identity, ESFShipCrewing::PlayerShip);
+	//
+	// The player's ship holds fire; the person opens it with sf.Fire 1. Armed on both sides, two
+	// identical hulls aiming at each other's centres put identical shots into identical faces and
+	// power down in the same frame at 6.7 s, before the pursuit has come anywhere near its hold
+	// distance -- the fight was a mirror, not a fight. The pirate stays armed.
+	Ship = CombatRig::SpawnCombatShip(
+		World, TEXT("Ship"), FTransform::Identity, ESFShipCrewing::PlayerShip, /*bWeaponsFree*/ false);
 
 	if (bPirateWanted)
 	{
@@ -126,7 +133,8 @@ void ASFCombatGameMode::StartPlay()
 				StarForge::Units::MetresToCm(CombatRig::PirateXMetres),
 				0.0,
 				StarForge::Units::MetresToCm(CombatRig::PirateZMetres)));
-		Pirate = CombatRig::SpawnCombatShip(World, TEXT("Pirate"), PirateAt, ESFShipCrewing::Automated);
+		Pirate = CombatRig::SpawnCombatShip(
+			World, TEXT("Pirate"), PirateAt, ESFShipCrewing::Automated, /*bWeaponsFree*/ true);
 	}
 
 	Super::StartPlay();
@@ -188,7 +196,11 @@ void ASFCombatGameMode::StartPlay()
 
 		if (!Ship->bWeaponsFree)
 		{
-			ShipText += TEXT(" but NOT ARMED");
+			ShipText += TEXT(" and holds fire until sf.Fire 1");
+		}
+		else
+		{
+			ShipText += TEXT(" but does NOT HOLD FIRE -- its automation shoots on its own");
 			bFault = true;
 		}
 

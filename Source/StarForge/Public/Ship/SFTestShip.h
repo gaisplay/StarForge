@@ -127,7 +127,7 @@ public:
 	 * open fire on the drone five times a second, and no figure recorded on them was taken with
 	 * shots in the air. A hull that answers the console still fires on sf.Fire 1 whatever this
 	 * says, as long as an operator holds the gunner's post (USFWeaponComponent::ApplyTrigger).
-	 * The combat rig sets it on both ships.
+	 * The combat rig sets it on the pirate and leaves the player's ship holding fire until sf.Fire 1.
 	 *
 	 * Handed to the weapon before Super::BeginPlay, like Crewing, and for the same reason.
 	 */
