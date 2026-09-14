@@ -5,6 +5,7 @@
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFThrusterArrayComponent.h"
+#include "Ship/SFTurretComponent.h"
 #include "StarForgeLog.h"
 #include "Units.h"
 
@@ -36,6 +37,7 @@ void USFDamageableComponent::BeginPlay()
 	const AActor* Owner = GetOwner();
 	Frame = Owner ? Owner->FindComponentByClass<USFShipFrameComponent>() : nullptr;
 	Thrusters = Owner ? Owner->FindComponentByClass<USFThrusterArrayComponent>() : nullptr;
+	Turret = Owner ? Owner->FindComponentByClass<USFTurretComponent>() : nullptr;
 
 	if (!ShipData)
 	{
@@ -92,7 +94,7 @@ void USFDamageableComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// Not while powered down: charges and timers freeze where the last hit left them. Powered
+	// Not while powered down: PowerDown has put every face at zero, and there it stays. Powered
 	// down means nothing that draws power works, and the shields draw power. A Combat line
 	// reading "powered down" beside faces climbing back up would be false, and it is exactly the
 	// line recorded for a drifting pirate.
@@ -271,11 +273,27 @@ void USFDamageableComponent::PowerDown()
 
 	const FString ShipName = GetNameSafe(GetOwner());
 
+	// Before the array, so a hull with no array to lock still loses its shields and its gun.
+	for (int32 i = 0; i < StarForge::Damage::FaceCount; ++i)
+	{
+		Shields.Charge[i] = 0.0;
+	}
+
+	// Locked and cleared in the same frame, as the array is below, so the Turret line stops
+	// printing the last bearing now rather than at the gunner's next tick.
+	if (Turret)
+	{
+		Turret->SetLocked(true);
+		Turret->ClearCommand();
+	}
+	const TCHAR* TurretText = Turret ? TEXT("turret locked") : TEXT("no turret to lock");
+
 	if (!Thrusters)
 	{
 		UE_LOG(LogStarForge, Error,
-			TEXT("[%s] is powered down: hull strength exhausted, but it has no thruster array to lock -- nothing stops it flying."),
-			*ShipName);
+			TEXT("[%s] is powered down: hull strength exhausted, all six shield faces at zero, %s, but it has no thruster array ")
+			TEXT("to lock -- nothing stops it flying."),
+			*ShipName, TurretText);
 		return;
 	}
 
@@ -286,7 +304,7 @@ void USFDamageableComponent::PowerDown()
 	Thrusters->ClearDemand();
 
 	UE_LOG(LogStarForge, Display,
-		TEXT("[%s] is powered down: hull strength exhausted. Thrusters locked, posts will stand aside without being told why; ")
-		TEXT("the hull coasts and anyone aboard stays aboard."),
-		*ShipName);
+		TEXT("[%s] is powered down: hull strength exhausted. Thrusters locked, %s, all six shield faces at zero and not ")
+		TEXT("regenerating; posts will stand aside without being told why; the hull coasts and anyone aboard stays aboard."),
+		*ShipName, TurretText);
 }

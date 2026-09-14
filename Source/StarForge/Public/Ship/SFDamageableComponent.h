@@ -8,6 +8,7 @@
 class USFShipDataAsset;
 class USFShipFrameComponent;
 class USFThrusterArrayComponent;
+class USFTurretComponent;
 
 /**
  * What can be shot: six shield faces, a hull strength, and a place for every hit.
@@ -18,11 +19,12 @@ class USFThrusterArrayComponent;
  * already has one, and the two would differ the first time anything is attached to anything.
  *
  * On zero hull strength the ship is POWERED DOWN, not destroyed: the thruster array is locked
- * with the same SetLocked docking uses, the pilot's post stands aside without being told why,
- * the hull coasts on its momentum, and a person inside stays aboard and stays bound. Nothing
- * is destroyed, on either ship. The handoff for this stage is explicit that a damaged
- * thruster, a powered-down ship and a hull taken by a pirate are all the same lock, and that
- * stage 4 must use it rather than grow a second one.
+ * with the same SetLocked docking uses, the turret with a lock of the same shape, and both posts
+ * stand aside without being told why; every shield face drops to zero and stays there, because
+ * an unpowered shield is no shield; the hull coasts on its momentum, and a person inside stays
+ * aboard and stays bound. Nothing is destroyed, on either ship. The handoff for this stage is
+ * explicit that a damaged thruster, a powered-down ship and a hull taken by a pirate are all the
+ * same lock, and that stage 4 must use it rather than grow a second one.
  */
 UCLASS(ClassGroup = (StarForge), meta = (BlueprintSpawnableComponent))
 class STARFORGE_API USFDamageableComponent : public UActorComponent
@@ -101,8 +103,15 @@ private:
 	void DestroyThrusterNear(const FVector& ShipLocalCm);
 
 	/**
-	 * Locks the thruster array and says so, once. It also freezes the shields: from here on no
-	 * face regenerates and no timer runs (see TickComponent).
+	 * Locks the thruster array and the turret, drops every shield face to zero, and says so,
+	 * once. From here on no face regenerates and no timer runs (see TickComponent). Zero, not
+	 * frozen where the last hit left them: faces held at their last charge would go on absorbing
+	 * hits after the power that holds them up is gone, which is the very thing stopping their
+	 * regeneration was meant to rule out.
+	 *
+	 * The turret's lock is the gunner's post's reason to stand aside, as the array's is the
+	 * pilot's: a powered-down ship that went on aiming and firing would be powered down in its
+	 * log line only. Docking never touches that lock, so it holds through a dock and an undock.
 	 *
 	 * The lock is NOT exclusive, and nothing here pretends it is. SetLocked is a single bool
 	 * with no owner and no reason attached: USFDockingComponent::Undock calls SetLocked(false)
@@ -118,6 +127,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<USFThrusterArrayComponent> Thrusters;
+
+	UPROPERTY()
+	TObjectPtr<USFTurretComponent> Turret;
 
 	StarForge::Damage::FShieldLimits Limits;
 	StarForge::Damage::FShieldState Shields;

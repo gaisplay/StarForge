@@ -80,6 +80,19 @@ void USFGunnerStationComponent::TickComponent(
 		return;
 	}
 
+	// A locked turret, for whatever reason locked it. The post does not know that a ship can be
+	// powered down and must not: it knows the thing it commands is refusing commands, and the
+	// honest report of that is the one the pilot's post makes for a locked array -- nobody in
+	// this seat is gunning. The operator is not asked, so no trigger it holds reaches the muzzle.
+	if (Turret->IsLocked())
+	{
+		LastIntent = StarForge::FTurretIntent();
+		bOperatorGunning = false;
+		Turret->ClearCommand();
+		if (Weapon) { Weapon->ReleaseTrigger(DeltaTime); }
+		return;
+	}
+
 	// Not checked against sf.ShipProfile, unlike the pilot station. The scripted
 	// profile writes the hull's velocity and a wrench would fight it; this post writes
 	// a barrel's rotation, and the two never meet. A gunner works while the rig flies
