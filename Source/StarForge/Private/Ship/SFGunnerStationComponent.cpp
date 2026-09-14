@@ -33,7 +33,7 @@ void USFGunnerStationComponent::BeginPlay()
 		// Loudly: a gunner station with nothing to command looks exactly like a turret
 		// that will not move, and the readout cannot tell the two apart on its own.
 		UE_LOG(LogStarForge, Error,
-			TEXT("Gunner station found no turret on its owner; nothing will be aimed."));
+			TEXT("Gunner station on [%s] found no turret; nothing will be aimed."), *GetNameSafe(GetOwner()));
 	}
 }
 

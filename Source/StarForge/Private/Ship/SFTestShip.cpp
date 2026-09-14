@@ -505,7 +505,8 @@ void ASFTestShip::BeginPlay()
 		}
 		else
 		{
-			UE_LOG(LogStarForge, Error, TEXT("Target drone failed to spawn; the turret will have nothing to track."));
+			UE_LOG(LogStarForge, Error,
+				TEXT("Target drone for [%s] failed to spawn; the turret will have nothing to track."), *GetName());
 		}
 	}
 	else
@@ -648,7 +649,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 			break;
 		}
 
-		UE_LOG(LogStarForge, Log, TEXT("Dock: %s"), *DockText);
+		UE_LOG(LogStarForge, Log, TEXT("Dock: [%s] %s"), *GetName(), *DockText);
 	}
 
 	// The turret reports before the thruster check: a ship whose array never built can
@@ -681,14 +682,15 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		const StarForge::Turret::FTurretAim Aim = GunnerTurret->GetAim();
 
 		UE_LOG(LogStarForge, Log,
-			TEXT("Turret: gunned by %s | target %s firing %d | bearing %s | aim yaw %.1f pitch %.1f deg | %s"),
-			*GunnedBy, *Target, TurretIntent.bFiring ? 1 : 0, *BearingText,
+			TEXT("Turret: [%s] gunned by %s | target %s firing %d | bearing %s | aim yaw %.1f pitch %.1f deg | %s"),
+			*GetName(), *GunnedBy, *Target, TurretIntent.bFiring ? 1 : 0, *BearingText,
 			FMath::RadiansToDegrees(Aim.YawRad), FMath::RadiansToDegrees(Aim.PitchRad),
 			USFTurretComponent::StateName(GunnerTurret->GetState()));
 	}
 	else
 	{
-		UE_LOG(LogStarForge, Warning, TEXT("Turret: no gunner station or no turret -- nothing is aiming."));
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Turret: [%s] no gunner station or no turret -- nothing is aiming."), *GetName());
 	}
 
 	// The log is now written in both modes, so it can be reached before the array has

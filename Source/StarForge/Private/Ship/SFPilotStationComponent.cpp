@@ -75,7 +75,7 @@ void USFPilotStationComponent::BeginPlay()
 		// Loudly: a pilot station with nothing to command looks exactly like a ship
 		// that will not respond, and the difference matters at three in the morning.
 		UE_LOG(LogStarForge, Error,
-			TEXT("Pilot station found no thruster array on its owner; the ship cannot be flown."));
+			TEXT("Pilot station on [%s] found no thruster array; the ship cannot be flown."), *GetNameSafe(GetOwner()));
 	}
 }
 

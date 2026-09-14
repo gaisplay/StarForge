@@ -104,22 +104,23 @@ void USFDockingComponent::ResolvePorts()
 	if (StationCount > 1)
 	{
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Docking: %d stations in this level; '%s' was chosen by iteration order. ")
+			TEXT("Docking: [%s] %d stations in this level; '%s' was chosen by iteration order. ")
 			TEXT("Boarding will need the nearest free port instead, and that rule is unwritten."),
-			StationCount, *ChosenName);
+			*Owner->GetName(), StationCount, *ChosenName);
 	}
 	bHasStation = StationPort != nullptr;
 
 	if (!Port)
 	{
 		UE_LOG(LogStarForge, Error,
-			TEXT("Docking component found no port on its owner; this ship can never dock."));
+			TEXT("Docking component on [%s] found no port; this ship can never dock."), *Owner->GetName());
 	}
 
 	// Not an error. L_FrameSpike has no station on purpose, and a ship that cannot dock
 	// there is correct rather than broken -- it just has to say so when asked.
 	UE_LOG(LogStarForge, Display,
-		TEXT("Docking: %s, window %.1f m, %.1f m/s, fwd %.0f deg, up %.0f deg, capture %.1f s."),
+		TEXT("Docking: [%s] %s, window %.1f m, %.1f m/s, fwd %.0f deg, up %.0f deg, capture %.1f s."),
+		*Owner->GetName(),
 		bHasStation ? TEXT("station found") : TEXT("no station in this level"),
 		DistanceMetres, SpeedMetresPerSec, ForwardAngleDeg, UpAngleDeg, CaptureSeconds);
 }
@@ -261,7 +262,8 @@ bool USFDockingComponent::EnterCapture()
 		// was missing, because "the capture did not start" on its own sends the reader to check
 		// all four.
 		UE_LOG(LogStarForge, Error,
-			TEXT("Dock: capture did not start -- no %s."),
+			TEXT("Dock: [%s] capture did not start -- no %s."),
+			*GetNameSafe(Owner),
 			!Owner ? TEXT("owner")
 				: !Hull ? TEXT("hull")
 				: !Port ? TEXT("port on this ship")
@@ -375,7 +377,8 @@ bool USFDockingComponent::RequestDock()
 		// Said out loud for the reason Toggle gives: a command that does nothing is otherwise
 		// indistinguishable from one that never arrived. Edge-triggered, so this is one line
 		// per press and cannot become a torrent.
-		UE_LOG(LogStarForge, Display, TEXT("Dock: ignored -- the ship is already %s."),
+		UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] ignored -- the ship is already %s."),
+			*GetNameSafe(GetOwner()),
 			State == ESFDockingState::Docked ? TEXT("docked") : TEXT("capturing"));
 		return false;
 	}
@@ -418,7 +421,8 @@ bool USFDockingComponent::RequestUndock()
 	// Refused out loud, as in RequestDock: silence here reads exactly like an unbound key.
 	if (State != ESFDockingState::Docked)
 	{
-		UE_LOG(LogStarForge, Display, TEXT("Dock: undock ignored -- the ship is %s."),
+		UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] undock ignored -- the ship is %s."),
+			*GetNameSafe(GetOwner()),
 			State == ESFDockingState::Free ? TEXT("not docked") : TEXT("mid-capture"));
 		return false;
 	}
@@ -478,7 +482,8 @@ void USFDockingComponent::Toggle()
 		// with nothing owning it: not simulating, not attached, and not where either side
 		// expects. Said out loud, because a key that does nothing is otherwise
 		// indistinguishable from a key that is not bound.
-		UE_LOG(LogStarForge, Display, TEXT("Dock: capture in progress; the command is ignored."));
+		UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] capture in progress; the command is ignored."),
+			*GetNameSafe(GetOwner()));
 		break;
 	}
 }
@@ -490,7 +495,8 @@ void USFDockingComponent::DockImmediately()
 	if (!Port || !StationPort)
 	{
 		UE_LOG(LogStarForge, Error,
-			TEXT("Dock: cannot spawn docked -- %s. The ship will start adrift."),
+			TEXT("Dock: [%s] cannot spawn docked -- %s. The ship will start adrift."),
+			*GetNameSafe(GetOwner()),
 			Port ? TEXT("no station port") : TEXT("no port on this ship"));
 		return;
 	}

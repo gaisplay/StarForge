@@ -145,7 +145,7 @@ PowerShell префикс не нужен. Форму с подменой по U
 Station at world (0 0 0) cm: 12 x 8 x 8 m box, hatch in the -Y wall, 200 cm tunnel, frame present, no physics body.
 Docking port on Station at hull-local (0 -600 -265) cm, out along (0.00 -1.00 0.00), deck up (0.00 0.00 1.00).
 Docking port on Ship at hull-local (0 400 -265) cm, out along (0.00 1.00 0.00), deck up (0.00 0.00 1.00).
-Docking: station found, window 3.0 m, 1.0 m/s, fwd 10 deg, up 10 deg, capture 1.0 s.
+Docking: [Ship] station found, window 3.0 m, 1.0 m/s, fwd 10 deg, up 10 deg, capture 1.0 s.
 Dock: [Ship] docked.
 Loop rig: scripted profile off; the ship spawns docked; the man stands in the cabin.
 ```
@@ -167,7 +167,7 @@ Loop rig: scripted profile off; the ship spawns docked; the man stands in the ca
 сдвинется снова; **искать строки надо по имени, а не по месту в списке.**
 
 Ключевая из шести — та, что начинается с `Docking:`. На стенде петли она обязана читаться
-`station found`. `Docking: no station in this level` означает, что подмена режима игры не
+`station found`. `Docking: [Ship] no station in this level` означает, что подмена режима игры не
 сработала и грузится обычный стенд `L_FrameSpike`: либо не та карта, либо потерялись кавычки
 вокруг URL с `?game=`. Дальше читать нечего.
 
@@ -246,11 +246,11 @@ Loop rig: scripted profile off; the ship spawns docked; the man stands in the ca
 в окне, и не говорит, куда лететь. Тройка говорит. Без неё эта точка проверки невыполнима, и
 она затем и добавлена.
 
-**Две разные строки `Dock:` говорят `capturing`, и путать их нельзя.**
-`Dock: [Ship] capturing, 2.8 m, 0.4 m/s, fwd 3.1 deg, up 0.2 deg` — с именем корабля, запятой и
-четырьмя числами — пишется **один раз на команду** и говорит, с чего доводка началась.
-`Dock: capturing 0.6 of 1.0 s` — без имени и без запятой — это секундный отчёт `sf.FlightLog`.
-В бланк идут числа из первой.
+**Две разные строки начинаются с `Dock: [Ship] capturing`, и путать их нельзя.**
+`Dock: [Ship] capturing, 2.8 m, 0.4 m/s, fwd 3.1 deg, up 0.2 deg` — с запятой и четырьмя
+числами — пишется **один раз на команду** и говорит, с чего доводка началась.
+`Dock: [Ship] capturing 0.6 of 1.0 s` — без запятой — это секундный отчёт `sf.FlightLog`. В
+бланк идут числа из первой.
 
 **Пристыкованным никого не роняет вообще.** Ничего не вращается, ничего не ускоряется, порог
 гравиплит `sqrt(19.62/r)` при нулевой угловой скорости недостижим. Это первое, что стоит
@@ -521,7 +521,7 @@ Frame bound by console to Station (sf.BindFrame). This ignores where he is stand
 `Docking is commanded from the pilot's seat.`; если нет вообще ничего — клавиша не дошла,
 проверь фокус окна.
 
-**`F` отвечает `Dock: undock ignored -- the ship is mid-capture.`** Доводка идёт, и она не
+**`F` отвечает `Dock: [Ship] undock ignored -- the ship is mid-capture.`** Доводка идёт, и она не
 отменяема: посреди двух поз корпус не принадлежит никому. Подождать секунду.
 
 **Консоль не открывается.** Раскладка. Жать `F1`.

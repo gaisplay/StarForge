@@ -30,14 +30,16 @@ bool USFThrusterArrayComponent::Rebuild()
 
 	if (!ShipData)
 	{
-		UE_LOG(LogStarForge, Error, TEXT("Thruster array has no ship data asset; the ship will not fly."));
+		UE_LOG(LogStarForge, Error,
+			TEXT("Thruster array on [%s] has no ship data asset; the ship will not fly."), *GetNameSafe(GetOwner()));
 		return false;
 	}
 
 	UPrimitiveComponent* Body = ResolveBody();
 	if (!Body || !Body->GetBodyInstance())
 	{
-		UE_LOG(LogStarForge, Error, TEXT("Thruster array found no physics body on the root component."));
+		UE_LOG(LogStarForge, Error,
+			TEXT("Thruster array on [%s] found no physics body on the root component."), *GetNameSafe(GetOwner()));
 		return false;
 	}
 
@@ -67,9 +69,9 @@ bool USFThrusterArrayComponent::Rebuild()
 		// Six axes needs opposed pairs: with throttles confined to [0, 1] an array
 		// pushing only along the positive axes cannot torque without also shoving.
 		UE_LOG(LogStarForge, Error,
-			TEXT("Thruster layout of %d thrusters cannot span all six axes; the ship will not fly. ")
+			TEXT("Thruster layout of %d thrusters on [%s] cannot span all six axes; the ship will not fly. ")
 			TEXT("Check that every axis has an opposed pair."),
-			Thrusters.Num());
+			Thrusters.Num(), *GetNameSafe(GetOwner()));
 		return false;
 	}
 
