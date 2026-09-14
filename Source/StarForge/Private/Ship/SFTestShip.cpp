@@ -163,21 +163,20 @@ ASFTestShip::ASFTestShip()
 	// it did not meet before, docked or free.
 	Hull->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 
-	// Blocking is not enough on its own: the contact has to be found before the boxes overlap, and
-	// the margin is twenty centimetres. The box is +/-400, a panel's outer face is at +/-410 and the
-	// cabin's volume ends at +/-390. Two hulls face to face have centres 800 apart, which puts the
-	// other ship's outer wall at 800 - 410 = 390 from this centre -- exactly on this cabin's volume
-	// edge -- and its interior volume's edge at 800 - 390 = 410. A man against this wall has his
-	// capsule's edge at 390, so every centimetre of interpenetration past 410 - 390 = 20 brings the
-	// other ship's volume onto him, and it binds whoever it touches. The box's extent is not the
-	// place to buy margin: it is what Chaos derives the inertia from, and 533333 kg m^2 is a
-	// recorded figure.
+	// Continuous detection, with its thresholds set in Config/DefaultEngine.ini under
+	// [ConsoleVariables]: a step is swept only when the pair moves more than 8 cm in it, and a swept
+	// step is rolled back to at most 4 cm. That is not a bound on penetration -- ordinary contact
+	// can still build it over several unswept steps -- and the ini says what was measured: first
+	// touch at 854.9 cm between centres for the combat rig's pitched approach, and about 10 cm of
+	// overlap at 60 fps and 37 cm at 400, against about 122 cm at 60 fps with the engine's own
+	// thresholds. The box's extent is not the place to buy more: it is what Chaos derives the inertia
+	// from, and 533333 kg m^2 is a recorded figure.
 	//
-	// Continuous detection holds it, with the two thresholds set in Config/DefaultEngine.ini under
-	// [ConsoleVariables], where the bound is derived: a sweep for any step over 8 cm, a rollback to at
-	// most 4 cm, so at most 8 cm of interpenetration at any frame rate. The flag is what opts this body
-	// in; the engine's own thresholds would sweep only steps over 320 cm and leave up to 160 cm, and
-	// with them the combat rig's duel measured 67 cm of interpenetration at 60 fps.
+	// The margin that matters is 20 cm: a panel's outer face is at +/-410 and the cabin's volume at
+	// +/-390, so a hull pressed that far into this one brings its interior volume onto a man at the
+	// wall. What protects him is not this flag but the handover guard in
+	// USFInteriorVolumeComponent::TryHandover, which refuses to bind him to a carrier moving faster
+	// than 1.0 m/s relative to his own where he stands.
 	Hull->BodyInstance.bUseCCD = true;
 
 	Hull->SetSimulatePhysics(true);
