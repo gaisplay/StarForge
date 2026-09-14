@@ -480,6 +480,7 @@ void ASFTestShip::BeginPlay()
 	// to listen to a console variable. Told afterwards, they would have already acted.
 	const bool bAnswersConsole = (Crewing == ESFShipCrewing::PlayerShip);
 	if (PilotStation) { PilotStation->SetConsoleControlled(bAnswersConsole); }
+	if (Thrusters) { Thrusters->SetConsoleControlled(bAnswersConsole); }
 	if (ConsoleOperator) { ConsoleOperator->SetConsoleControlled(bAnswersConsole); }
 	if (AutomationOperator) { AutomationOperator->SetConsoleControlled(bAnswersConsole); }
 	if (Docking) { Docking->SetConsoleControlled(bAnswersConsole); }
@@ -744,10 +745,16 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 				StarForge::Damage::FaceName(Face), Damageable->GetFaceCharge(Face));
 		}
 
-		const FString ThrusterText = (Thrusters && Thrusters->IsReady() && Thrusters->ShipData)
-			? FString::Printf(TEXT("thrusters %d/%d"),
-				Thrusters->GetTargetThrottles().Num(), Thrusters->ShipData->Thrusters.Num())
-			: FString(TEXT("thrusters NOT built"));
+		// Surviving over built-with, and still counted once the survivors no longer build: a ship
+		// shot down to two corners reads "12/24 NOT built", which says what happened to it, where
+		// "NOT built" alone would read the same as a ship that never had an asset.
+		FString ThrusterText = TEXT("thrusters NOT built");
+		if (Thrusters && Thrusters->ShipData)
+		{
+			ThrusterText = FString::Printf(TEXT("thrusters %d/%d%s"),
+				Thrusters->GetLiveThrusterCount(), Thrusters->GetThrusterCount(),
+				Thrusters->IsReady() ? TEXT("") : TEXT(" NOT built"));
+		}
 
 		UE_LOG(LogStarForge, Log, TEXT("Combat: [%s] shields%s, hull %.1f/%.1f, %s, %s."),
 			*GetName(), *ShieldText, Damageable->GetHullStrength(), Damageable->GetHullCapacity(),

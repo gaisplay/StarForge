@@ -1,15 +1,21 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ThrusterDef.h"
 
 /**
  * Directional shields: six faces, each with its own charge, its own timer and its own
- * regeneration, and the classification that says which face a hit belongs to.
+ * regeneration, and the classification that says which face a hit belongs to. And the one
+ * question a hit on the hull answers beyond that: which thruster it broke.
  *
  * Units. Length in ClassifyFace is unit-agnostic: the point and the half-extents must be in
- * one unit, and the game passes centimetres. Time is seconds, and the names of the fields and
- * parameters that hold it say so. Charge and damage share one unit, which is not SI and has no
- * name beyond points.
+ * one unit, and the game passes centimetres. Length in FindThrusterHitBy is METRES, fixed
+ * rather than following the caller, because it measures against FThrusterDef::Location and
+ * that is declared in metres. Both are right where they stand: a face is decided by ratios, so
+ * its unit cancels, while a kill radius is a distance compared with a distance and has to be in
+ * the unit of the thing it is compared with. The parameter names carry the unit wherever it is
+ * fixed. Time is seconds, and the names of the fields and parameters that hold it say so.
+ * Charge and damage share one unit, which is not SI and has no name beyond points.
  */
 namespace StarForge::Damage
 {
@@ -117,4 +123,41 @@ namespace StarForge::Damage
 
 	/** "+X", "-X", "+Y", "-Y", "+Z" or "-Z". */
 	STARFORGECORE_API const TCHAR* FaceName(EShipFace Face);
+
+	/**
+	 * The nearest surviving thruster within RadiusMetres of a hit, or none.
+	 *
+	 * Metres, and the names say so: FThrusterDef::Location is declared in metres, and this
+	 * function is the one place in the file where the length unit is fixed rather than following
+	 * the caller. Its neighbour ClassifyFace is unit-agnostic; both are right, and the difference
+	 * is stated because the branch review of stage 3 caught precisely this drift on
+	 * FDockingApproach::Distance -- centimetres on one side of an assignment and metres on the
+	 * other.
+	 *
+	 * On the rig's layout the nearest point of the OUTER SKIN to any thruster is 2.1 m: the
+	 * thrusters sit at (+-2, +-2, 0) and the +X and +Y faces at 4.1. A radius below that makes
+	 * this function dead code that looks alive. Above 4.1 it would let a shot into the deck or
+	 * the ceiling kill one, and that would destroy a negative control the geometry gives for
+	 * free: all twenty-four sit on z = 0, so nothing fired at the roof can ever reach one.
+	 *
+	 * Ties go to the LOWEST SURVIVING INDEX, and ties are the normal case rather than the corner
+	 * one: six thrusters share each corner's position exactly, so every hit near a corner is a
+	 * six-way tie. The rule is the index, not the order AliveIndices lists them in.
+	 *
+	 * Thrusters holds every thruster the ship was built with, and AliveIndices the indices into
+	 * it that still exist -- the asset's indices, which are what a log line names.
+	 *
+	 * Returns false and leaves OutIndex untouched when nothing surviving is in reach, and also
+	 * when the call is refused: a point that is not finite, a radius that is not finite and
+	 * positive, or a survivor index that is not an index into Thrusters. A bad survivor index
+	 * refuses the whole call rather than being skipped, because it means the caller's bookkeeping
+	 * of what is destroyed has come apart from the layout, and an answer over the rest would
+	 * name a thruster from a list nobody can trust.
+	 */
+	STARFORGECORE_API bool FindThrusterHitBy(
+		const TArray<FThrusterDef>& Thrusters,
+		const TArray<int32>& AliveIndices,
+		const FVector& HitShipLocalMetres,
+		double RadiusMetres,
+		int32& OutIndex);
 }

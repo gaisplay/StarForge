@@ -1,11 +1,92 @@
 #include "Ship/SFThrusterArrayComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "HAL/IConsoleManager.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Ship/SFShipDataAsset.h"
 #include "StarForgeLog.h"
+#include "UObject/UObjectIterator.h"
 #include "Units.h"
+
+namespace
+{
+	void KillThrusterFromConsole(const TArray<FString>& Args, UWorld* World)
+	{
+		const bool bParsed = Args.Num() == 1 && Args[0].IsNumeric() && !Args[0].Contains(TEXT("."));
+		if (!bParsed)
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("sf.KillThruster needs exactly one thruster index, a whole number; nothing destroyed."));
+			return;
+		}
+		const int32 AssetIndex = FCString::Atoi(*Args[0]);
+
+		int32 Answered = 0;
+		for (TObjectIterator<USFThrusterArrayComponent> It; It; ++It)
+		{
+			USFThrusterArrayComponent* Array = *It;
+			if (!World || Array->GetWorld() != World || !Array->HasBegunPlay() || !Array->IsConsoleControlled())
+			{
+				continue;
+			}
+			++Answered;
+
+			const FString ShipName = GetNameSafe(Array->GetOwner());
+
+			// Both refusals are said, because a debug command that did nothing looks exactly like one
+			// that did something nobody checked -- and twelve identical commands must read as one
+			// destruction and eleven refusals, not as twelve quiet lines of nothing.
+			if (!Array->ShipData || !Array->ShipData->Thrusters.IsValidIndex(AssetIndex))
+			{
+				UE_LOG(LogStarForge, Warning,
+					TEXT("sf.KillThruster %d: [%s] has no thruster with that index (it has %d); nothing destroyed."),
+					AssetIndex, *ShipName, Array->GetThrusterCount());
+				continue;
+			}
+
+			if (!Array->GetLiveAssetIndices().Contains(AssetIndex))
+			{
+				UE_LOG(LogStarForge, Warning,
+					TEXT("sf.KillThruster %d: thruster %d on [%s] is already destroyed; nothing changed."),
+					AssetIndex, AssetIndex, *ShipName);
+				continue;
+			}
+
+			const double ForwardBefore = Array->GetArrayCapability().Force.X;
+			const FVector At = Array->ShipData->Thrusters[AssetIndex].LocationMetres;
+			Array->DestroyThruster(AssetIndex);
+
+			UE_LOG(LogStarForge, Display,
+				TEXT("Thruster %d on [%s] destroyed at (%.1f %.1f %.1f) m by sf.KillThruster. %s"),
+				AssetIndex, *ShipName, At.X, At.Y, At.Z, *Array->DescribeLossSince(ForwardBefore));
+		}
+
+		if (Answered == 0)
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("sf.KillThruster %d: no thruster array in this world answers the console; nothing destroyed."), AssetIndex);
+		}
+	}
+
+	/**
+	 * Destroys a thruster by its index in the ship data asset, on the hulls that answer the
+	 * console -- a person's ship, never an automated one. It exists so spec 5's consequence can be
+	 * measured on the spike rig without a battle: aiming, firing and shields are three mechanisms
+	 * that could each be wrong and put the blame on a solver that is innocent.
+	 *
+	 * A COMMAND, not a variable, and that is what makes it usable headless. -ExecCmds applies its
+	 * whole list at startup, and a variable polled afterwards hears only the last value in it --
+	 * the reason sf.Dock 2 exists -- so twelve kills in one list would have been one. A command
+	 * runs once per entry.
+	 */
+	FAutoConsoleCommandWithWorldAndArgs CmdKillThruster(
+		TEXT("sf.KillThruster"),
+		TEXT("sf.KillThruster N: destroy thruster N, by its index in the ship data asset, on the player's ship, and rebuild\n")
+		TEXT("the array over the survivors. Acts once per command. An index that is not a surviving thruster is refused out loud."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&KillThrusterFromConsole));
+}
 
 USFThrusterArrayComponent::USFThrusterArrayComponent()
 {
@@ -35,6 +116,22 @@ bool USFThrusterArrayComponent::Rebuild()
 		return false;
 	}
 
+	// The whole asset with the destroyed set taken away, every time, rather than the last build
+	// with one more column removed. Undocking rebuilds too, for its own reason, and a rebuild that
+	// started from the asset without the set would put every destroyed thruster back on the ship.
+	const TArray<StarForge::FThrusterDef> AssetThrusters = ShipData->BuildThrusters();
+
+	TArray<StarForge::FThrusterDef> Thrusters;
+	LiveAssetIndices.Reset();
+	for (int32 AssetIndex = 0; AssetIndex < AssetThrusters.Num(); ++AssetIndex)
+	{
+		if (!DestroyedAssetIndices.Contains(AssetIndex))
+		{
+			LiveAssetIndices.Add(AssetIndex);
+			Thrusters.Add(AssetThrusters[AssetIndex]);
+		}
+	}
+
 	UPrimitiveComponent* Body = ResolveBody();
 	if (!Body || !Body->GetBodyInstance())
 	{
@@ -62,16 +159,22 @@ bool USFThrusterArrayComponent::Rebuild()
 	MassProperties.InertiaDiagonal = StarForge::Units::InertiaUuToSi(Instance->GetBodyInertiaTensor());
 	MassProperties.InertiaRotation = MassSpace.GetRotation();
 
-	const TArray<StarForge::FThrusterDef> Thrusters = ShipData->BuildThrusters();
-
 	if (!Allocator.Build(Thrusters, MassProperties.CentreOfMass))
 	{
 		// Six axes needs opposed pairs: with throttles confined to [0, 1] an array
 		// pushing only along the positive axes cannot torque without also shoving.
+		//
+		// Once thrusters have been destroyed the asset is not what is wrong, and the hint
+		// would send a reader to it. Two full corners of the standard layout carry every
+		// opposed pair and still cannot span.
+		const FString Why = DestroyedAssetIndices.Num() == 0
+			? FString(TEXT("Check that every axis has an opposed pair."))
+			: FString::Printf(TEXT("%d of the asset's %d are destroyed, and the survivors no longer span."),
+				DestroyedAssetIndices.Num(), AssetThrusters.Num());
+
 		UE_LOG(LogStarForge, Error,
-			TEXT("Thruster layout of %d thrusters on [%s] cannot span all six axes; the ship will not fly. ")
-			TEXT("Check that every axis has an opposed pair."),
-			Thrusters.Num(), *GetNameSafe(GetOwner()));
+			TEXT("Thruster layout of %d thrusters on [%s] cannot span all six axes; the ship will not fly. %s"),
+			Thrusters.Num(), *GetNameSafe(GetOwner()), *Why);
 		return false;
 	}
 
@@ -113,6 +216,42 @@ bool USFThrusterArrayComponent::Rebuild()
 		MassProperties.InertiaDiagonal.Z);
 
 	return true;
+}
+
+bool USFThrusterArrayComponent::DestroyThruster(int32 AssetIndex)
+{
+	if (!LiveAssetIndices.Contains(AssetIndex))
+	{
+		return bReady;
+	}
+
+	DestroyedAssetIndices.Add(AssetIndex);
+	return Rebuild();
+}
+
+int32 USFThrusterArrayComponent::GetThrusterCount() const
+{
+	return ShipData ? ShipData->Thrusters.Num() : 0;
+}
+
+FString USFThrusterArrayComponent::DescribeLossSince(double ForwardNewtonsBefore) const
+{
+	if (!bReady)
+	{
+		return FString::Printf(TEXT("%d of %d left, and the array is NOT built over them -- the ship will not fly."),
+			GetLiveThrusterCount(), GetThrusterCount());
+	}
+
+	// Fore-and-aft rather than forward: this is the X ceiling the stick's full travel is scaled by,
+	// the weaker of forward and astern (FThrustAllocator::GetAxisAchievable). On the standard layout
+	// a hit takes a corner's +X thruster before its -X, because +X holds the lower index, so under
+	// fire the weaker way is always forward and the two words would agree. sf.KillThruster 1 is not
+	// bound by that, and a line saying "forward" would then be printing astern.
+	const double ForwardNewtonsAfter = Capability.Force.X;
+	return FString::Printf(TEXT("%d of %d left; fore-and-aft thrust %.1f -> %.1f kN, %.1f -> %.1f m/s^2."),
+		GetLiveThrusterCount(), GetThrusterCount(),
+		ForwardNewtonsBefore / 1000.0, ForwardNewtonsAfter / 1000.0,
+		ForwardNewtonsBefore / MassProperties.Mass, ForwardNewtonsAfter / MassProperties.Mass);
 }
 
 StarForge::FRigidBodyState USFThrusterArrayComponent::ReadState() const

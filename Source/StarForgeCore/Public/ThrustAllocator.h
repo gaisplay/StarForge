@@ -30,8 +30,9 @@ namespace StarForge
 		/**
 		 * Builds the effectiveness matrix and caches its damped pseudo-inverse.
 		 *
-		 * Returns false when the array cannot span all six axes -- one thruster, or
-		 * a set that is collectively unable to yaw, lands here. Callers must check.
+		 * Returns false when the array cannot span all six axes -- one thruster, a set
+		 * that is collectively unable to yaw, or the survivors of a damaged array whose
+		 * missing direction mixes force and torque all land here. Callers must check.
 		 */
 		bool Build(
 			const TArray<FThrusterDef>& Thrusters,

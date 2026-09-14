@@ -6,6 +6,7 @@
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFThrusterArrayComponent.h"
 #include "StarForgeLog.h"
+#include "Units.h"
 
 namespace
 {
@@ -71,6 +72,19 @@ void USFDamageableComponent::BeginPlay()
 	}
 	HullStrength = HullCapacity;
 	bReady = true;
+
+	// Not part of being ready: a ship whose radius is unusable can still be shot, and only the
+	// thrusters are out of reach. Said here, once, because the search refuses such a radius on
+	// every hit without saying anything.
+	const double Radius = ShipData->ThrusterKillRadiusMetres;
+	if (!(Radius > 0.0) || !FMath::IsFinite(Radius))
+	{
+		UE_LOG(LogStarForge, Error,
+			TEXT("Damage: [%s] ship data has thruster kill radius %.2f m -- not finite and positive; no hit will destroy a thruster."),
+			*GetNameSafe(Owner), Radius);
+		return;
+	}
+	KillRadiusMetres = Radius;
 }
 
 void USFDamageableComponent::TickComponent(
@@ -156,7 +170,7 @@ void USFDamageableComponent::ReceiveHit(const FVector& HitWorldCm, double Damage
 			TEXT("Hit on [%s] %s face: shields OFF (sf.Shields 0), %.1f straight to hull."),
 			*ShipName, FaceName(Face), Damage);
 
-		if (ApplyToHull(Damage, ShipLocal, Instigator))
+		if (ApplyToHull(Damage, ShipLocal))
 		{
 			PowerDown();
 		}
@@ -174,11 +188,11 @@ void USFDamageableComponent::ReceiveHit(const FVector& HitWorldCm, double Damage
 	}
 
 	// Only what got past the face reaches the hull path. A hit the face absorbed whole did
-	// nothing to the hull, and the hull path is where a hit's place is going to matter.
+	// nothing to the hull, and the hull path is where a hit's place destroys a thruster.
 	bool bHullExhaustedNow = false;
 	if (Outcome.PassedToHull > 0.0)
 	{
-		bHullExhaustedNow = ApplyToHull(Outcome.PassedToHull, ShipLocal, Instigator);
+		bHullExhaustedNow = ApplyToHull(Outcome.PassedToHull, ShipLocal);
 	}
 
 	// One line, written after the hull has taken its share so both figures in it are the ones
@@ -202,11 +216,53 @@ void USFDamageableComponent::ReceiveHit(const FVector& HitWorldCm, double Damage
 	}
 }
 
-bool USFDamageableComponent::ApplyToHull(double Damage, const FVector& ShipLocalCm, AActor* Instigator)
+bool USFDamageableComponent::ApplyToHull(double Damage, const FVector& ShipLocalCm)
 {
 	const bool bWasUp = HullStrength > 0.0;
 	HullStrength = FMath::Max(0.0, HullStrength - Damage);
+
+	DestroyThrusterNear(ShipLocalCm);
+
 	return bWasUp && HullStrength <= 0.0;
+}
+
+void USFDamageableComponent::DestroyThrusterNear(const FVector& ShipLocalCm)
+{
+	// Nothing to lose. An array without an asset has already said so in red at startup, and a hull
+	// without an array has no thrusters.
+	if (!Thrusters || !Thrusters->ShipData)
+	{
+		return;
+	}
+
+	// The layout from the array's own asset, so an index found here is an index the array knows.
+	// Metres, because FThrusterDef::Location is; crossed through StarForge::Units like every other
+	// crossing of that boundary.
+	const TArray<StarForge::FThrusterDef> Layout = Thrusters->ShipData->BuildThrusters();
+	const FVector HitMetres(
+		StarForge::Units::CmToMetres(ShipLocalCm.X),
+		StarForge::Units::CmToMetres(ShipLocalCm.Y),
+		StarForge::Units::CmToMetres(ShipLocalCm.Z));
+
+	int32 AssetIndex = INDEX_NONE;
+	if (!StarForge::Damage::FindThrusterHitBy(
+			Layout, Thrusters->GetLiveAssetIndices(), HitMetres, KillRadiusMetres, AssetIndex))
+	{
+		return;
+	}
+
+	const FString ShipName = GetNameSafe(GetOwner());
+	const FVector At = Layout[AssetIndex].Location;
+	const double Distance = FVector::Dist(At, HitMetres);
+	const double ForwardBefore = Thrusters->GetArrayCapability().Force.X;
+
+	// The array rebuilds over the survivors, and if they no longer span six axes it refuses in red
+	// on its own. That refusal is the ship not flying, loudly, and it is what spec 5 is paid in.
+	Thrusters->DestroyThruster(AssetIndex);
+
+	UE_LOG(LogStarForge, Display,
+		TEXT("Thruster %d on [%s] destroyed at (%.1f %.1f %.1f) m by a hit %.2f m away. %s"),
+		AssetIndex, *ShipName, At.X, At.Y, At.Z, Distance, *Thrusters->DescribeLossSince(ForwardBefore));
 }
 
 void USFDamageableComponent::PowerDown()

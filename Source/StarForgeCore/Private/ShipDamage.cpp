@@ -129,4 +129,55 @@ namespace StarForge::Damage
 		}
 		return TEXT("?");
 	}
+
+	bool FindThrusterHitBy(
+		const TArray<FThrusterDef>& Thrusters,
+		const TArray<int32>& AliveIndices,
+		const FVector& HitShipLocalMetres,
+		double RadiusMetres,
+		int32& OutIndex)
+	{
+		// Refused by name. The reach comparison below would turn a non-finite point away as well --
+		// every distance from it is NaN or infinite -- but only for as long as that comparison is
+		// written the way round that fails on NaN, and this does not depend on it.
+		if (!IsFinite(HitShipLocalMetres)) { return false; }
+
+		// Negated, so a NaN radius is refused by the comparison. A zero radius would still reach a
+		// thruster standing exactly on the point, and an infinite one would reach every thruster
+		// on the ship.
+		if (!(RadiusMetres > 0.0) || !FMath::IsFinite(RadiusMetres)) { return false; }
+
+		// Before any thruster is read: an index past the end is a read past the array.
+		for (int32 Index : AliveIndices)
+		{
+			if (!(Index >= 0 && Index < Thrusters.Num())) { return false; }
+		}
+
+		int32 Best = INDEX_NONE;
+		double BestDistance = 0.0;
+		for (int32 Index : AliveIndices)
+		{
+			const double Distance = FVector::Dist(Thrusters[Index].Location, HitShipLocalMetres);
+			if (!(Distance <= RadiusMetres))
+			{
+				continue;
+			}
+
+			// Nearer wins; at an equal distance the lower index does, whatever order the survivors
+			// arrived in. See the header for why equal distances are the ordinary case.
+			if (Best == INDEX_NONE || Distance < BestDistance || (Distance == BestDistance && Index < Best))
+			{
+				Best = Index;
+				BestDistance = Distance;
+			}
+		}
+
+		if (Best == INDEX_NONE)
+		{
+			return false;
+		}
+
+		OutIndex = Best;
+		return true;
+	}
 }

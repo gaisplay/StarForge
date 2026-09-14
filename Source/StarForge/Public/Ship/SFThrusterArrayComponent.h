@@ -38,8 +38,8 @@ public:
 
 	/**
 	 * Rebuilds the allocator from the data asset and the body current mass
-	 * properties. Call again when a thruster is lost -- the handling degrades on its
-	 * own, because the geometry really did change.
+	 * properties, over the thrusters that have not been destroyed. The handling
+	 * degrades on its own, because the geometry really did change.
 	 *
 	 * Returns false when the layout cannot span all six axes. The ship then does not
 	 * fly, loudly, instead of refusing to turn quietly.
@@ -47,6 +47,55 @@ public:
 	bool Rebuild();
 
 	bool IsReady() const { return bReady; }
+
+	/**
+	 * Takes one thruster out of the array and rebuilds over what is left.
+	 *
+	 * Returns what Rebuild returned, and the caller must look: an array that can no longer
+	 * span six axes is a ship that does not fly, and spec 5 wants that said out loud rather
+	 * than discovered as a refusal to turn.
+	 *
+	 * There is no repair. Nothing in the slice puts a thruster back, and a mechanism with no
+	 * caller is a mechanism nobody has tested.
+	 *
+	 * AssetIndex is the thruster's index in the ship data asset, not a column of the solver.
+	 * The destroyed set is kept by those indices and outlives every Rebuild, including the one
+	 * undocking makes: each rebuild starts from the whole asset and takes the set away again.
+	 * An index that is not a surviving thruster changes nothing, rebuilds nothing, and returns
+	 * IsReady() -- the array is exactly as able to fly as it was. This array does not know why a
+	 * thruster is gone and does not say; the caller writes the line, and DescribeLossSince gives
+	 * it the figures.
+	 */
+	bool DestroyThruster(int32 AssetIndex);
+
+	/** How many thrusters the ship was built with: the asset's count, destroyed ones included. */
+	int32 GetThrusterCount() const;
+
+	/** How many are not destroyed, whether or not they still build. */
+	int32 GetLiveThrusterCount() const { return LiveAssetIndices.Num(); }
+
+	/**
+	 * The asset indices of the surviving thrusters, ascending. While the array is ready, entry i
+	 * is the thruster behind the solver's column i -- and so behind entry i of both throttle arrays
+	 * below, which are indexed by column. A log line and a hit speak asset indices; without this
+	 * map one silently stands in for the other the moment the first thruster is lost.
+	 */
+	const TArray<int32>& GetLiveAssetIndices() const { return LiveAssetIndices; }
+
+	/**
+	 * The consequence of a loss, for the caller's line: "23 of 24 left; fore-and-aft thrust
+	 * 800.0 -> 600.0 kN, 16.0 -> 12.0 m/s^2." ForwardNewtonsBefore is GetArrayCapability().Force.X
+	 * read before DestroyThruster. On an array that no longer builds it says that instead.
+	 */
+	FString DescribeLossSince(double ForwardNewtonsBefore) const;
+
+	/**
+	 * Whether this instance answers the unnamed sf.* family -- here sf.KillThruster. See
+	 * ESFShipCrewing.
+	 */
+	void SetConsoleControlled(bool bIn) { bConsoleControlled = bIn; }
+
+	bool IsConsoleControlled() const { return bConsoleControlled; }
 
 	/**
 	 * Solves the demand across the thrusters, spools them toward that solution, and
@@ -122,8 +171,17 @@ private:
 	/** Where each throttle actually is, having spooled toward the target. */
 	TArray<double> LastThrottles;
 
-	/** Seconds to spool from zero to full, per thruster, copied from the asset. */
+	/** Seconds to spool from zero to full, per surviving thruster by column, copied from the asset. */
 	TArray<double> ResponseTimes;
+
+	/** Asset indices of the thrusters destroyed so far. Never cleared: see DestroyThruster. */
+	TSet<int32> DestroyedAssetIndices;
+
+	/** See GetLiveAssetIndices. Rewritten by every Rebuild that finds the asset. */
+	TArray<int32> LiveAssetIndices;
+
+	/** See SetConsoleControlled. */
+	bool bConsoleControlled = true;
 
 	StarForge::FWrench LastDemand;
 	StarForge::FWrench LastAchieved;

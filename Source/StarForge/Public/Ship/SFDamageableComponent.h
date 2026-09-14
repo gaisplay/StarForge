@@ -78,15 +78,27 @@ public:
 
 private:
 	/**
-	 * Damage that got past the shield, applied to the hull strength, which stops at zero.
-	 * Returns true only on the hit that takes it from above zero to zero: the event, not the
-	 * state, for the same reason ApplyHit reports a face broken only once.
+	 * Damage that got past the shield, applied to the hull strength, which stops at zero, and
+	 * to whatever thruster is near where it landed (DestroyThrusterNear). Returns true only on
+	 * the hit that takes the strength from above zero to zero: the event, not the state, for the
+	 * same reason ApplyHit reports a face broken only once.
 	 *
-	 * The place and the shooter reach this path and nothing here reads them yet. The hull path
-	 * is where a hit's place decides something (spec 5: a hit near a thruster destroys it), and
-	 * the task that adds that reads them here.
+	 * Only damage that reached the hull comes here, so a hit the shield absorbed whole breaks
+	 * nothing, whatever it landed next to. A powered-down hull still has thrusters to lose.
 	 */
-	bool ApplyToHull(double Damage, const FVector& ShipLocalCm, AActor* Instigator);
+	bool ApplyToHull(double Damage, const FVector& ShipLocalCm);
+
+	/**
+	 * Spec 5: a hit near a thruster destroys it. The nearest surviving thruster within the ship
+	 * data's kill radius is taken out of the array, which rebuilds over the rest, and the line
+	 * says which, where, how far the hit was from it and what the ship lost by it.
+	 *
+	 * The line is written here and not by the array, which does not know why a thruster is gone.
+	 * It comes just before the hit line when the shields are on, because that line reports the
+	 * hull as the hit left it and so is written after the hull path; with sf.Shields 0 the
+	 * "shields OFF" line comes first.
+	 */
+	void DestroyThrusterNear(const FVector& ShipLocalCm);
 
 	/**
 	 * Locks the thruster array and says so, once. It also freezes the shields: from here on no
@@ -112,6 +124,9 @@ private:
 
 	double HullStrength = 0.0;
 	double HullCapacity = 0.0;
+
+	/** From the ship data at BeginPlay; left at zero, which refuses every search, if it is not usable. */
+	double KillRadiusMetres = 0.0;
 
 	/** False until BeginPlay has read figures it can use; a hit before then is refused out loud. */
 	bool bReady = false;

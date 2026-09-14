@@ -159,6 +159,23 @@ public:
 	double HullStrength = 2000.0;
 
 	/**
+	 * How far from a hull hit, in METRES, a thruster is destroyed by it (spec 5: a hit near a
+	 * thruster destroys it). Not set in the spec; this figure is the stage-4 plan's.
+	 *
+	 * Metres because it is compared with FThrusterDef::Location, which is. On the standard layout
+	 * the nearest point of the outer skin to any thruster is 2.1 m: a thruster at (2, 2, 0) and
+	 * the +X face at 4.1, so 4.1 - 2.0. Below 2.1 no hit on the skin could ever reach one, and the
+	 * mechanism would be dead code that looks alive. 2.5 clears that by 0.4 m and stays under
+	 * 4.1 -- the distance from every thruster to the deck and the ceiling, since all twenty-four
+	 * lie on z = 0 -- so a shot into the roof can never destroy one. That is a negative control
+	 * the geometry gives for free, and a radius above 4.1 would throw it away. On the +X face the
+	 * window around each corner is |y -+ 2| <= sqrt(2.5^2 - 2.1^2) = 1.356 m; the centre of the
+	 * face, 2.90 m from both corners, destroys nothing.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Damage")
+	double ThrusterKillRadiusMetres = 2.5;
+
+	/**
 	 * Replaces Thrusters with the standard symmetric test layout: four corners, six
 	 * thrusters each, one along every signed axis. Twenty-four records of four fields.
 	 *
