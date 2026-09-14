@@ -36,7 +36,8 @@ public:
 	TObjectPtr<USFShipDataAsset> ShipData;
 
 	/**
-	 * One tick of the trigger. Fires while bTriggerHeld, no faster than one shot per
+	 * One tick of the OPERATOR's trigger, called only on a tick where somebody at the post
+	 * provided an intent. Fires while bTriggerHeld, no faster than one shot per
 	 * SecondsBetweenShots -- seconds, so the shot count over a second is the same at 60 and
 	 * at 400 fps. A cadence counted in frames would be a weapon whose rate of fire is the
 	 * machine's.
@@ -45,8 +46,17 @@ public:
 	 * would hide aiming defects: a mount that never finishes slewing would simply stop
 	 * shooting, and that reads as "the weapon is broken" rather than "the turret does not
 	 * aim". Whether to hold the trigger is the operator's judgement and stays where it is.
+	 *
+	 * sf.Fire replaces the operator's trigger, never the operator. The override is applied
+	 * here and nowhere else, so it can only act on a tick an operator is gunning; a tick nobody
+	 * commands goes through ReleaseTrigger, which nothing overrides. Otherwise a latched
+	 * sf.Fire 1 would fire from an empty seat or a declining operator, and
+	 * sf.AutomationOperator 0 could not silence the weapon.
 	 */
 	void ApplyTrigger(bool bTriggerHeld, double DeltaSeconds);
+
+	/** One tick on which nobody commands the post: the trigger is up, whatever sf.Fire says. */
+	void ReleaseTrigger(double DeltaSeconds);
 
 	FVector GetMuzzleWorldLocation() const { return GetComponentLocation(); }
 
@@ -57,11 +67,15 @@ public:
 
 	/**
 	 * Whether the operator's trigger reaches the muzzle at all. See ASFTestShip::bWeaponsFree:
-	 * off, only sf.Fire 1 on a hull that answers the console makes this weapon fire.
+	 * off, only sf.Fire 1 on a hull that answers the console makes this weapon fire, and only
+	 * while an operator is gunning.
 	 */
 	void SetWeaponsFree(bool bIn) { bWeaponsFree = bIn; }
 
 private:
+	/** The time accounting both trigger calls share: accumulator, press edge, shots. */
+	void TickCadence(bool bTriggerDown, double DeltaSeconds);
+
 	void FireOne();
 
 	UPROPERTY()

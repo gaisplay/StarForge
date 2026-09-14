@@ -55,16 +55,19 @@ void USFGunnerStationComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// The weapon is told the trigger on every path out of this tick, and told it is released
-	// exactly where the turret is told nobody commanded it. Without that, a post that empties
-	// leaves the trigger held from its last tick and the weapon keeps firing on a stale
-	// reading -- the same failure that cost the thruster array a whole function (ClearDemand)
-	// to remove.
+	// The weapon hears from this tick on every path out of it: ApplyTrigger where an operator
+	// provided an intent, ReleaseTrigger exactly where the turret is told nobody commanded it.
+	// The release is not optional, and not because of a stale trigger -- the weapon has no
+	// tick and cannot fire between calls. It is because the weapon keeps its clock and its
+	// press edge only through these calls. Skip the release on the ticks nobody gunned, and
+	// that time never reaches the accumulator, while a trigger that was down when the post
+	// emptied still reads as held: when the post is manned again the press is not seen as a
+	// press, and the first shot comes up to a whole interval late instead of at once.
 	if (!Turret)
 	{
 		LastIntent = StarForge::FTurretIntent();
 		bOperatorGunning = false;
-		if (Weapon) { Weapon->ApplyTrigger(false, DeltaTime); }
+		if (Weapon) { Weapon->ReleaseTrigger(DeltaTime); }
 		return;
 	}
 
@@ -73,7 +76,7 @@ void USFGunnerStationComponent::TickComponent(
 		LastIntent = StarForge::FTurretIntent();
 		bOperatorGunning = false;
 		Turret->ClearCommand();
-		if (Weapon) { Weapon->ApplyTrigger(false, DeltaTime); }
+		if (Weapon) { Weapon->ReleaseTrigger(DeltaTime); }
 		return;
 	}
 
@@ -90,7 +93,7 @@ void USFGunnerStationComponent::TickComponent(
 		LastIntent = StarForge::FTurretIntent();
 		bOperatorGunning = false;
 		Turret->ClearCommand();
-		if (Weapon) { Weapon->ApplyTrigger(false, DeltaTime); }
+		if (Weapon) { Weapon->ReleaseTrigger(DeltaTime); }
 		return;
 	}
 

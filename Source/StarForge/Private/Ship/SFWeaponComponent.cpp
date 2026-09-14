@@ -15,7 +15,7 @@ namespace
 {
 	/**
 	 * -1: no override, the trigger is whatever the post's operator asks for. 0: hold fire.
-	 * 1: hold the trigger down.
+	 * 1: hold the trigger down -- the operator's trigger, never the operator; see ApplyTrigger.
 	 *
 	 * A latched variable rather than a held key, and that is what makes the manual controls
 	 * possible at all: checkpoint 6 found a step that asked an operator to hold thrust and
@@ -27,7 +27,7 @@ namespace
 	 */
 	TAutoConsoleVariable<int32> CVarFire(TEXT("sf.Fire"), -1,
 		TEXT("-1: the trigger is whatever the gunner post's operator asks for, on a weapons-free hull.\n")
-		TEXT("0: hold fire. 1: hold the trigger down. Ignored by an automated hull."),
+		TEXT("0: hold fire. 1: hold the trigger down while an operator holds the post. Ignored by an automated hull."),
 		ECVF_Default);
 
 	/**
@@ -38,6 +38,22 @@ namespace
 	TAutoConsoleVariable<int32> CVarWeaponDebug(TEXT("sf.WeaponDebug"), 0,
 		TEXT("1: log every shot -- time, muzzle, velocity and the turret's state when it left."),
 		ECVF_Default);
+
+namespace WeaponCadence
+{
+	/**
+	 * How far short of a full interval a shot still counts as due, in seconds.
+	 *
+	 * The engine hands a tick its dt as a float, and a float frame is not the frame the
+	 * command line asked for: 0.0025f is 0.00249999994, and eighty of them sum to
+	 * 0.1999999955, short of 0.2. Compared exactly, the shot after a press waited 81 frames at
+	 * 400 fps instead of 80 -- 2.5 ms late -- while at 60 fps 1/60f lies above 1/60 and twelve
+	 * frames landed on time. A microsecond is some two hundred times that shortfall and 2500
+	 * times shorter than a frame at 400 fps, so it absorbs the rounding without ever letting a
+	 * shot out a frame early.
+	 */
+	constexpr double ShotDueToleranceSeconds = 1.0e-6;
+}
 }
 
 USFWeaponComponent::USFWeaponComponent()
@@ -102,12 +118,24 @@ void USFWeaponComponent::BeginPlay()
 
 void USFWeaponComponent::ApplyTrigger(bool bTriggerHeld, double DeltaSeconds)
 {
+	// The one place sf.Fire is applied. See the declaration for why it is here and not in
+	// ReleaseTrigger.
 	const int32 Override = bConsoleControlled ? CVarFire.GetValueOnGameThread() : -1;
-	const bool bEffectiveTrigger =
+	const bool bTriggerDown =
 		Override == 1 ? true
 		: Override == 0 ? false
 		: (bWeaponsFree && bTriggerHeld);
 
+	TickCadence(bTriggerDown, DeltaSeconds);
+}
+
+void USFWeaponComponent::ReleaseTrigger(double DeltaSeconds)
+{
+	TickCadence(false, DeltaSeconds);
+}
+
+void USFWeaponComponent::TickCadence(bool bTriggerDown, double DeltaSeconds)
+{
 	if (!ShipData || !(ShipData->SecondsBetweenShots > 0.0))
 	{
 		return;
@@ -117,7 +145,7 @@ void USFWeaponComponent::ApplyTrigger(bool bTriggerHeld, double DeltaSeconds)
 	// By time, with the interval subtracted rather than the accumulator zeroed: zeroing would
 	// throw away each frame's remainder and make the rate depend on dt.
 	SecondsSinceShot += DeltaSeconds;
-	if (!bEffectiveTrigger)
+	if (!bTriggerDown)
 	{
 		bTriggerWasHeld = false;
 		return;
@@ -132,7 +160,7 @@ void USFWeaponComponent::ApplyTrigger(bool bTriggerHeld, double DeltaSeconds)
 		SecondsSinceShot = FMath::Min(SecondsSinceShot, SecondsBetweenShots);
 		bTriggerWasHeld = true;
 	}
-	while (SecondsSinceShot >= SecondsBetweenShots)
+	while (SecondsSinceShot >= SecondsBetweenShots - WeaponCadence::ShotDueToleranceSeconds)
 	{
 		SecondsSinceShot -= SecondsBetweenShots;
 		FireOne();

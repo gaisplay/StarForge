@@ -120,7 +120,8 @@ public:
 	 * the trigger whenever it has a target, so with a muzzle on the barrel they would otherwise
 	 * open fire on the drone five times a second, and no figure recorded on them was taken with
 	 * shots in the air. A hull that answers the console still fires on sf.Fire 1 whatever this
-	 * says. The combat rig sets it on both ships.
+	 * says, as long as an operator holds the gunner's post (USFWeaponComponent::ApplyTrigger).
+	 * The combat rig sets it on both ships.
 	 *
 	 * Handed to the weapon before Super::BeginPlay, like Crewing, and for the same reason.
 	 */
