@@ -41,8 +41,12 @@ public:
 	 * properties, over the thrusters that have not been destroyed. The handling
 	 * degrades on its own, because the geometry really did change.
 	 *
+	 * The survivors keep their throttles, spooled and commanded, carried across by
+	 * asset index: a rebuild in flight must not snap the ship's thrust to zero.
+	 *
 	 * Returns false when the layout cannot span all six axes. The ship then does not
-	 * fly, loudly, instead of refusing to turn quietly.
+	 * fly, loudly, instead of refusing to turn quietly, and every readout below is
+	 * left empty rather than describing the array that was there before.
 	 */
 	bool Rebuild();
 
@@ -61,6 +65,8 @@ public:
 	 * AssetIndex is the thruster's index in the ship data asset, not a column of the solver.
 	 * The destroyed set is kept by those indices and outlives every Rebuild, including the one
 	 * undocking makes: each rebuild starts from the whole asset and takes the set away again.
+	 * The loss takes that thruster's thrust and nobody else's: the survivors go on from where
+	 * their throttles stood (see Rebuild).
 	 * An index that is not a surviving thruster changes nothing, rebuilds nothing, and returns
 	 * IsReady() -- the array is exactly as able to fly as it was. This array does not know why a
 	 * thruster is gone and does not say; the caller writes the line, and DescribeLossSince gives

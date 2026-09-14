@@ -173,6 +173,14 @@ bool FThrusterLossNearestWithinRadiusTest::RunTest(const FString& Parameters)
 		FindThrusterHitBy(Layout, AllAlive, FVector(2.0, -0.3, 0.0), LossRigKillRadiusMetres, Index));
 	TestEqual(TEXT("and it is the nearer corner's lowest, index 6, not index 0"), Index, 6);
 
+	// Within the radius means at it as well. (2, 4.5, 0) is 2.5 m along +Y from the corner (2, 2) --
+	// not a point on the skin, but one whose distance is exactly representable, 2.5 = sqrt(6.25) --
+	// and 4.72 m from the next corner, so only the one corner is in question.
+	Index = Untouched;
+	TestTrue(TEXT("a hit exactly the radius away from a corner finds a thruster"),
+		FindThrusterHitBy(Layout, AllAlive, FVector(2.0, 4.5, 0.0), LossRigKillRadiusMetres, Index));
+	TestEqual(TEXT("and it is that corner's lowest, index 0"), Index, 0);
+
 	// The centre of the +X face is sqrt(2.1^2 + 2^2) = 2.90 m from the nearest corner: nothing.
 	Index = Untouched;
 	TestFalse(TEXT("a hit on the centre of the +X face finds nothing"),
@@ -382,6 +390,8 @@ bool FThrusterLossSingleLossYawsOnlyAboveTheCeilingTest::RunTest(const FString& 
 	TestTrue(TEXT("800 kN asked of the damaged array delivers the 600 kN ceiling, within 1 N on every axis"),
 		Band.Force.Equals(FVector(600000.0, 0.0, 0.0), 1.0));
 	TestEqual(TEXT("and yaws at +400 kNm, twice the 200 kN it cannot deliver"), Band.Torque.Z, 400000.0, 1.0);
+	TestTrue(TEXT("with no roll and no pitch, under 1 Nm: every thruster sits on z = 0"),
+		FMath::Abs(Band.Torque.X) < 1.0 && FMath::Abs(Band.Torque.Y) < 1.0);
 	AddInfo(FString::Printf(TEXT("800 kN: damaged force (%.3f %.3f %.3f) N, torque (%.3f %.3f %.3f) Nm, throttle sum %.4f"),
 		Band.Force.X, Band.Force.Y, Band.Force.Z, Band.Torque.X, Band.Torque.Y, Band.Torque.Z, BandSum));
 

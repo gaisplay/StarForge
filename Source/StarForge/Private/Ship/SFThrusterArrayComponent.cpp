@@ -7,22 +7,14 @@
 #include "PhysicsEngine/BodyInstance.h"
 #include "Ship/SFShipDataAsset.h"
 #include "StarForgeLog.h"
+#include "TimerManager.h"
 #include "UObject/UObjectIterator.h"
 #include "Units.h"
 
 namespace
 {
-	void KillThrusterFromConsole(const TArray<FString>& Args, UWorld* World)
+	void KillThrusterNow(UWorld* World, int32 AssetIndex)
 	{
-		const bool bParsed = Args.Num() == 1 && Args[0].IsNumeric() && !Args[0].Contains(TEXT("."));
-		if (!bParsed)
-		{
-			UE_LOG(LogStarForge, Warning,
-				TEXT("sf.KillThruster needs exactly one thruster index, a whole number; nothing destroyed."));
-			return;
-		}
-		const int32 AssetIndex = FCString::Atoi(*Args[0]);
-
 		int32 Answered = 0;
 		for (TObjectIterator<USFThrusterArrayComponent> It; It; ++It)
 		{
@@ -38,7 +30,15 @@ namespace
 			// Both refusals are said, because a debug command that did nothing looks exactly like one
 			// that did something nobody checked -- and twelve identical commands must read as one
 			// destruction and eleven refusals, not as twelve quiet lines of nothing.
-			if (!Array->ShipData || !Array->ShipData->Thrusters.IsValidIndex(AssetIndex))
+			if (!Array->ShipData)
+			{
+				UE_LOG(LogStarForge, Warning,
+					TEXT("sf.KillThruster %d: the thruster array on [%s] has no ship data asset, so it has no thrusters to destroy."),
+					AssetIndex, *ShipName);
+				continue;
+			}
+
+			if (!Array->ShipData->Thrusters.IsValidIndex(AssetIndex))
 			{
 				UE_LOG(LogStarForge, Warning,
 					TEXT("sf.KillThruster %d: [%s] has no thruster with that index (it has %d); nothing destroyed."),
@@ -70,6 +70,53 @@ namespace
 		}
 	}
 
+	void KillThrusterFromConsole(const TArray<FString>& Args, UWorld* World)
+	{
+		const auto IsWholeNumber = [](const FString& Arg) { return Arg.IsNumeric() && !Arg.Contains(TEXT(".")); };
+
+		const bool bParsed = (Args.Num() == 1 || Args.Num() == 2) && IsWholeNumber(Args[0])
+			&& (Args.Num() == 1 || Args[1].IsNumeric());
+		if (!bParsed)
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("sf.KillThruster needs a thruster index, a whole number, and optionally a delay in seconds; nothing destroyed."));
+			return;
+		}
+		const int32 AssetIndex = FCString::Atoi(*Args[0]);
+		const double AfterSeconds = (Args.Num() == 2) ? FCString::Atod(*Args[1]) : 0.0;
+
+		if (!(AfterSeconds >= 0.0) || !FMath::IsFinite(AfterSeconds))
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("sf.KillThruster %d: a delay of %s is not a finite non-negative number of seconds; nothing destroyed."),
+				AssetIndex, *Args[1]);
+			return;
+		}
+
+		if (AfterSeconds == 0.0 || !World)
+		{
+			KillThrusterNow(World, AssetIndex);
+			return;
+		}
+
+		// A delay in seconds of game time, not in frames, and it exists for one measurement: -ExecCmds
+		// runs its whole list on the first frame, before any thruster has spooled, so a loss that has
+		// to land on a ship already under thrust cannot be asked for from the command line otherwise.
+		FTimerHandle Handle;
+		World->GetTimerManager().SetTimer(Handle,
+			FTimerDelegate::CreateLambda([WeakWorld = TWeakObjectPtr<UWorld>(World), AssetIndex]()
+			{
+				if (UWorld* LiveWorld = WeakWorld.Get())
+				{
+					KillThrusterNow(LiveWorld, AssetIndex);
+				}
+			}),
+			static_cast<float>(AfterSeconds), false);
+
+		UE_LOG(LogStarForge, Display,
+			TEXT("sf.KillThruster %d: scheduled %.2f s of game time from now."), AssetIndex, AfterSeconds);
+	}
+
 	/**
 	 * Destroys a thruster by its index in the ship data asset, on the hulls that answer the
 	 * console -- a person's ship, never an automated one. It exists so spec 5's consequence can be
@@ -80,11 +127,15 @@ namespace
 	 * whole list at startup, and a variable polled afterwards hears only the last value in it --
 	 * the reason sf.Dock 2 exists -- so twelve kills in one list would have been one. A command
 	 * runs once per entry.
+	 *
+	 * The optional second argument delays the kill by that many seconds of game time, because
+	 * every entry of that list runs on the first frame, before the ship has thrust to lose.
 	 */
 	FAutoConsoleCommandWithWorldAndArgs CmdKillThruster(
 		TEXT("sf.KillThruster"),
-		TEXT("sf.KillThruster N: destroy thruster N, by its index in the ship data asset, on the player's ship, and rebuild\n")
-		TEXT("the array over the survivors. Acts once per command. An index that is not a surviving thruster is refused out loud."),
+		TEXT("sf.KillThruster N [Seconds]: destroy thruster N, by its index in the ship data asset, on the player's ship, and\n")
+		TEXT("rebuild the array over the survivors -- now, or after that many seconds of game time. Acts once per command.\n")
+		TEXT("An index that is not a surviving thruster is refused out loud when the kill is due."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&KillThrusterFromConsole));
 }
 
@@ -109,11 +160,47 @@ bool USFThrusterArrayComponent::Rebuild()
 {
 	bReady = false;
 
+	// Where every surviving thruster's throttle stands, kept by ASSET index before the columns are
+	// replaced, and written back into the new columns by asset index below. A thruster lost in flight
+	// takes its own thrust with it and nobody else's: spec 5 says a thruster spools rather than
+	// snaps, and zeroing the survivors here snapped every one of them to nothing and made the whole
+	// ship's thrust dip for about three response times on every loss.
+	//
+	// Nothing resets the throttles in this function any more, and no path needs it to. On the first
+	// build there is nothing to carry. On undock there is nothing spooled to carry: docking locks the
+	// array and clears its demand, and a locked array clears it again on every ApplyDemand, so the
+	// arrays are already zero and stay zero. Carried only while they are parallel to the live set,
+	// which is to say only from an array that was built; a failed build below leaves them empty.
+	TMap<int32, double> SpooledByAsset;
+	TMap<int32, double> TargetByAsset;
+	if (LastThrottles.Num() == LiveAssetIndices.Num() && TargetThrottles.Num() == LiveAssetIndices.Num())
+	{
+		for (int32 Column = 0; Column < LiveAssetIndices.Num(); ++Column)
+		{
+			SpooledByAsset.Add(LiveAssetIndices[Column], LastThrottles[Column]);
+			TargetByAsset.Add(LiveAssetIndices[Column], TargetThrottles[Column]);
+		}
+	}
+
+	// Every failure below leaves the readouts empty. Every reader asks IsReady first today, but the
+	// throttles, the capability and the last wrench would otherwise go on describing the columns of
+	// an array that no longer exists, and a stale reading looks exactly like a real one.
+	const auto Refuse = [this]()
+	{
+		TargetThrottles.Reset();
+		LastThrottles.Reset();
+		ResponseTimes.Reset();
+		Capability = StarForge::FWrench();
+		LastDemand = StarForge::FWrench();
+		LastAchieved = StarForge::FWrench();
+		return false;
+	};
+
 	if (!ShipData)
 	{
 		UE_LOG(LogStarForge, Error,
 			TEXT("Thruster array on [%s] has no ship data asset; the ship will not fly."), *GetNameSafe(GetOwner()));
-		return false;
+		return Refuse();
 	}
 
 	// The whole asset with the destroyed set taken away, every time, rather than the last build
@@ -137,7 +224,7 @@ bool USFThrusterArrayComponent::Rebuild()
 	{
 		UE_LOG(LogStarForge, Error,
 			TEXT("Thruster array on [%s] found no physics body on the root component."), *GetNameSafe(GetOwner()));
-		return false;
+		return Refuse();
 	}
 
 	FBodyInstance* Instance = Body->GetBodyInstance();
@@ -175,7 +262,7 @@ bool USFThrusterArrayComponent::Rebuild()
 		UE_LOG(LogStarForge, Error,
 			TEXT("Thruster layout of %d thrusters on [%s] cannot span all six axes; the ship will not fly. %s"),
 			Thrusters.Num(), *GetNameSafe(GetOwner()), *Why);
-		return false;
+		return Refuse();
 	}
 
 	// Achievable, not the capability sum. The stick is scaled by this figure, and
@@ -199,6 +286,21 @@ bool USFThrusterArrayComponent::Rebuild()
 	LastThrottles.SetNumZeroed(Thrusters.Num());
 	TargetThrottles.Reset();
 	TargetThrottles.SetNumZeroed(Thrusters.Num());
+	for (int32 Column = 0; Column < LiveAssetIndices.Num(); ++Column)
+	{
+		if (const double* Spooled = SpooledByAsset.Find(LiveAssetIndices[Column]))
+		{
+			LastThrottles[Column] = *Spooled;
+		}
+		if (const double* Target = TargetByAsset.Find(LiveAssetIndices[Column]))
+		{
+			TargetThrottles[Column] = *Target;
+		}
+	}
+
+	// What the carried throttles push with now, over the survivors. The last value was computed over
+	// the old columns and still counts the thruster that has just gone.
+	LastAchieved = Allocator.ComputeAchieved(LastThrottles);
 
 	ResponseTimes.Reset();
 	ResponseTimes.Reserve(Thrusters.Num());

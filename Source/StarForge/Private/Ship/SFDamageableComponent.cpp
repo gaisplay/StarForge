@@ -172,7 +172,10 @@ void USFDamageableComponent::ReceiveHit(const FVector& HitWorldCm, double Damage
 			TEXT("Hit on [%s] %s face: shields OFF (sf.Shields 0), %.1f straight to hull."),
 			*ShipName, FaceName(Face), Damage);
 
-		if (ApplyToHull(Damage, ShipLocal))
+		// Gated as the shielded path below is gated on what passed to the hull: only damage the hull
+		// actually takes reaches the hull path, so a hit carrying nothing destroys no thruster,
+		// whatever it landed next to.
+		if (Damage > 0.0 && ApplyToHull(Damage, ShipLocal))
 		{
 			PowerDown();
 		}
