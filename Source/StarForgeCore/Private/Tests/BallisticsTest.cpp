@@ -49,9 +49,11 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FBallisticsOneStepEqualsManyStepsTest::RunTest(const FString& Parameters)
 {
 	// Straight-line motion in a vacuum, so frame-rate independence is PROVABLE rather than
-	// measurable, and the assertion is equality rather than closeness. The hull has gravity
-	// and linear damping explicitly off; a projectile that fell or slowed would contradict
-	// the ship that fired it.
+	// measurable: a thousand steps land where one does up to floating-point accumulation and
+	// nothing else. 0.001 is not representable in a double, and the thousand steps come out
+	// about 1e-11 from the one in position and 1e-15 in age; the tolerances below leave some
+	// five and six orders of magnitude over that. The hull has gravity and linear damping
+	// explicitly off; a projectile that fell or slowed would contradict the ship that fired it.
 	StarForge::Ballistics::FProjectileState Start;
 	Start.Position = FVector(10.0, -20.0, 30.0);
 	Start.Velocity = FVector(600.0, 800.0, 0.0);
@@ -121,7 +123,13 @@ bool FBallisticsExpiryIsInSecondsTest::RunTest(const FString& Parameters)
 	// would be speed times (life plus up to one frame) -- 16.7 m longer at 60 fps than at
 	// 400. A range that grows when the frame rate drops is a frame count wearing a different
 	// name, and this project has now found that shape three times.
-	const auto TotalPath = [this](double Dt)
+	//
+	// Not the stage's five seconds: 1/60 and 1/400 both divide 5 exactly, so neither frame rate
+	// would end on a partial step and a last step clipped to the whole life instead of to what
+	// is left of it would pass. Neither divides 5.001, so both halves below end on a partial step.
+	const double OddLifeSeconds = 5.001;
+
+	const auto TotalPath = [OddLifeSeconds](double Dt)
 	{
 		StarForge::Ballistics::FProjectileState State;
 		State.Velocity = FVector(MuzzleSpeed, 0.0, 0.0);
@@ -130,7 +138,7 @@ bool FBallisticsExpiryIsInSecondsTest::RunTest(const FString& Parameters)
 		for (int32 i = 0; i < 100000; ++i)
 		{
 			StarForge::Ballistics::FProjectileStep Step;
-			if (!StarForge::Ballistics::StepProjectile(State, Dt, LifeSeconds, Step)) { break; }
+			if (!StarForge::Ballistics::StepProjectile(State, Dt, OddLifeSeconds, Step)) { break; }
 			Path += (Step.SegmentEnd - Step.SegmentStart).Size();
 			State = Step.NextState;
 			if (Step.bExpired) { break; }
@@ -142,9 +150,9 @@ bool FBallisticsExpiryIsInSecondsTest::RunTest(const FString& Parameters)
 	const double Fine = TotalPath(1.0 / 400.0);
 
 	TestTrue(TEXT("range is speed times life at 60 fps"),
-		FMath::IsNearlyEqual(Coarse, MuzzleSpeed * LifeSeconds, 1e-6));
-	TestTrue(TEXT("and exactly the same at 400"),
-		FMath::IsNearlyEqual(Fine, MuzzleSpeed * LifeSeconds, 1e-6));
+		FMath::IsNearlyEqual(Coarse, MuzzleSpeed * OddLifeSeconds, 1e-6));
+	TestTrue(TEXT("and the same at 400"),
+		FMath::IsNearlyEqual(Fine, MuzzleSpeed * OddLifeSeconds, 1e-6));
 
 	// And a single step longer than the whole life still stops at the life, rather than
 	// flying a hundred kilometres because the machine hitched.
@@ -152,9 +160,9 @@ bool FBallisticsExpiryIsInSecondsTest::RunTest(const FString& Parameters)
 	Fresh.Velocity = FVector(MuzzleSpeed, 0.0, 0.0);
 	StarForge::Ballistics::FProjectileStep Hitch;
 	TestTrue(TEXT("a hitch still steps"),
-		StarForge::Ballistics::StepProjectile(Fresh, 30.0, LifeSeconds, Hitch));
+		StarForge::Ballistics::StepProjectile(Fresh, 30.0, OddLifeSeconds, Hitch));
 	TestTrue(TEXT("a hitch is clipped to the life"),
-		Hitch.SegmentEnd.Equals(FVector(MuzzleSpeed * LifeSeconds, 0.0, 0.0), 1e-6));
+		Hitch.SegmentEnd.Equals(FVector(MuzzleSpeed * OddLifeSeconds, 0.0, 0.0), 1e-6));
 	TestTrue(TEXT("and is reported expired"), Hitch.bExpired);
 
 	return true;
@@ -211,6 +219,40 @@ bool FBallisticsNonFiniteIsRefusedTest::RunTest(const FString& Parameters)
 		StarForge::Ballistics::StepProjectile(BadAge, 0.016, LifeSeconds, Out));
 
 	TestTrue(TEXT("and nothing written on any refusal"), Out.SegmentEnd.Equals(Sentinel, 0.0));
+
+	// A fixture that two guards both refuse cannot fail when either one is deleted. The NaN age
+	// above is such a fixture: it is not finite, and it also leaves a NaN remaining life. The
+	// checks below say which guard is the only one in their way.
+
+	// Only the remaining-life guard refuses a state already at its life. Without it the step
+	// is Min(dt, 0), a zero-length success, and past the life Min(dt, negative) flies the
+	// segment backwards and still reports success.
+	StarForge::Ballistics::FProjectileState AtLife = Good;
+	AtLife.AgeSeconds = LifeSeconds;
+	TestFalse(TEXT("a state already at its life is refused"),
+		StarForge::Ballistics::StepProjectile(AtLife, 0.016, LifeSeconds, Out));
+	TestTrue(TEXT("and the at-life refusal wrote nothing"), Out.SegmentEnd.Equals(Sentinel, 0.0));
+
+	// Only the finite-age guard refuses an age of minus infinity. The remaining life is then
+	// plus infinity, which passes its own guard, and the projectile would never expire.
+	StarForge::Ballistics::FProjectileState MinusInfiniteAge = Good;
+	MinusInfiniteAge.AgeSeconds = -Inf;
+	TestFalse(TEXT("an age of minus infinity is refused"),
+		StarForge::Ballistics::StepProjectile(MinusInfiniteAge, 0.016, LifeSeconds, Out));
+	TestTrue(TEXT("and the minus-infinite age refusal wrote nothing"), Out.SegmentEnd.Equals(Sentinel, 0.0));
+
+	TestFalse(TEXT("a zero life is refused"),
+		StarForge::Ballistics::StepProjectile(Good, 0.016, 0.0, Out));
+	TestTrue(TEXT("and the zero-life refusal wrote nothing"), Out.SegmentEnd.Equals(Sentinel, 0.0));
+
+	// The zero life above is also refused by the remaining-life guard, because an age of zero
+	// leaves nothing remaining of a life of zero. For any age at or above zero the two guards
+	// agree, so the life guard can only be pinned on its own with an age below zero.
+	StarForge::Ballistics::FProjectileState NegativeAge = Good;
+	NegativeAge.AgeSeconds = -1.0;
+	TestFalse(TEXT("a zero life is refused even with life remaining"),
+		StarForge::Ballistics::StepProjectile(NegativeAge, 0.016, 0.0, Out));
+	TestTrue(TEXT("and that refusal wrote nothing"), Out.SegmentEnd.Equals(Sentinel, 0.0));
 
 	return true;
 }

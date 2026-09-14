@@ -18,8 +18,9 @@
  * No gravity and no drag. Not a simplification: the hull it was fired from has both turned
  * off explicitly (SetEnableGravity(false), SetLinearDamping(0.0)), and a shot that fell or
  * slowed would contradict the ship that fired it. Straight-line motion is also what makes
- * frame-rate independence provable rather than measurable, which is why the tests assert
- * equality.
+ * frame-rate independence provable rather than measurable: N steps of T/N land where one
+ * step of T does up to floating-point accumulation and nothing else, and the tests' tolerance
+ * sits about five orders of magnitude above that accumulation.
  */
 namespace StarForge::Ballistics
 {
