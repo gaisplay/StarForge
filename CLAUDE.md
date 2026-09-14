@@ -111,6 +111,52 @@ the world begins play, so there is no frame in which it is adrift. **Run every f
 this rig at `-fps=400` as well as `-fps=60`**: undocking recreates the hull's physics state,
 and whether `SleepFamily` survives that is a question for a run, not for a header.
 
+**The combat rig is a third map, and neither of the other two moved.** `ASFCombatGameMode` on
+`Content/Maps/L_Combat` — an empty level whose one setting is a `GameMode Override` of
+`SFCombatGameMode`, created by hand in the editor (step 0 of checkpoint 7's runbook). The mode
+spawns the player's ship at the origin and the pirate 1000 m along +X and 150 m up, yawed 180°.
+The pirate is the same `ASFTestShip` with `Crewing = Automated`: the pursuit operator holds its
+pilot's post and the automation its gunner's. Neither ship gets a target drone; each is the
+other's target. The pawn goes into the player's cabin. Then the mode writes one line, every state
+in it read back:
+`Combat rig: scripted profile off; the player's ship is crewed and holds fire until sf.Fire 1; the pirate is automated and armed; the man stands in the cabin; separation 1011.2 m.`
+An upper-case word in it is a state that did not hold, and the line goes out as an `Error`. Two
+cases make it a `Warning` by design: `sf.Pirate 0`, and a pilot's seat left free by
+`sf.ConsoleOperator 0` set before `StartPlay`.
+
+By map, once `L_Combat.umap` exists:
+
+```bash
+MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Combat -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=40 -ExecCmds="sf.FlightLog 1" -log < /dev/null
+```
+
+By the URL, which needs no map. The first argument is quoted, for the same reason as the loop's.
+Every headless figure stage 4 recorded on this rig was taken this way, because the map did not
+exist yet.
+
+```bash
+"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFCombatGameMode" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=40 -ExecCmds="sf.FlightLog 1" -log < /dev/null
+```
+
+`MSYS_NO_PATHCONV=1` applies to `/Game/Maps/L_Combat` exactly as it does to `L_Loop`.
+
+**Headless launches from Git Bash end in `< /dev/null`.** Without it, two launches at 400 fps
+exited on startup with code 130 and
+`LogCore: Engine exit requested (reason: ConsoleCtrl RequestExit)`, with not one `LogStarForge`
+line. With it, none of the next 23 did.
+
+**`sf.Pirate` has to be on the command line, as `"-ini:Engine:[ConsoleVariables]:sf.Pirate=0"`.**
+The mode reads it in `StartPlay`, before `-ExecCmds` applies. Use one `-ini` switch per variable:
+two variables joined by a comma in one switch were not taken.
+
+**Three lines that are red on the other rigs are correct here.** Checkpoint 7's runbook lists
+them with the condition under which each becomes a finding again:
+
+- `dock free -- NO STATION in this level` — there is no station;
+- `Frame handover REFUSED` when the hulls touch;
+- `thruster array NOT built` with its `Error`, once hits have left the survivors on two corners.
+  The `Error` repeats on every later destruction.
+
 Console variables the rig understands:
 
 | Variable | Default | What it does |
@@ -128,6 +174,14 @@ Console variables the rig understands:
 | `sf.AutomationOperator` | 1 | 1 the ship's automation holds the gunner's seat; 0 leaves it free. The gunner's post is what tests spec §4's claim that the ship cannot tell who holds a post, so it is held by something that is not a person by default |
 | `sf.Dock` | -1 | Docking from the console, the headless twin of the `F` key. `1` docks if the approach is inside the window, `0` undocks, `-1` is no command. Acted on when the value **changes**, not on its level. `2` is the headless cycle — undock now and dock again one capture later — and it exists because `-ExecCmds` applies its whole list at startup, so `sf.Dock 0, sf.Dock 1` leaves only the last value and "docked → free → docked" cannot be asked for in one run at all |
 | `sf.BindFrame` | *(empty)* | `ship` or `station`: binds the occupant to that carrier's frame **wherever he is standing**. The negative control for the handover, and the same trick as `sf.ShipGravity 0` for the carry. Docked, it is a legitimate handover and everything stays quiet; undocked and under thrust it is knowingly wrong, and the cross-check must warn within ten frames and the carry must stop about a second later; bound the other way round — to the moving ship from the station's floor — the `Frame handover` line must show one frame of the ship's travel, never zero |
+| `sf.Fire` | -1 | The player's trigger, as a latch rather than a held key. `-1`: the trigger is whatever the gunner post's operator asks for, on a weapons-free hull. `0`: hold fire. `1`: hold the trigger down. It replaces the operator's trigger, never the operator, so an empty or locked gunner's post does not fire under it (0 shots measured with `sf.AutomationOperator 0`). Every ship on the spike and loop rigs, and the player's ship on the combat rig, is weapons-hold (`bWeaponsFree = false`), so nothing fires until `sf.Fire 1`. Ignored by an automated hull |
+| `sf.WeaponDebug` | 0 | 1 logs one line per shot: `Weapon: [Ship] shot N at t … s from muzzle …, turret <state> …`. Hits are logged whatever it says, because a hit is an event, not a stream. Counting shots needs it. Acts on every hull, and each line names the ship that fired |
+| `sf.ProjectileSweep` | 1 | 0 replaces each projectile's swept segment with a zero-length test at the end of its step. This is the tunnelling control, and it must miss: 0 hits at 60 and 400 fps where the sweep hits every on-target shot. Acts on every projectile in the world |
+| `sf.AimAt` | *(empty)* | `station` or `ship`: what the gunner's automation tracks instead of what the rig gave it. `ship` means another ship, never its own. Empty is the rig's target: the drone on both measurement rigs, the pirate on the combat rig. Acted on when the value changes. A miss is a `Warning` and leaves the gunner with no target. Ignored by an automated hull |
+| `sf.Shields` | 1 | 0 sends every hit straight to the hull, and each hit says so: `Hit on [X] +X face: shields OFF (sf.Shields 0), 100.0 straight to hull.` Face charges are left untouched, so only `hull` falls in the `Combat:` line. **A named exception** to the rule that an automated hull answers no `sf.*` variable: it acts on every hull, so on the combat rig both ships lose their shields. Checkpoint 7's control C1 turns off the pirate's |
+| `sf.Pirate` | 1 | 0: the combat rig spawns no pirate. The player's automation has no target, and the rig line goes out as a `Warning`. **Read once in `StartPlay`, before `-ExecCmds` applies**, so it has to be set before the level starts: `"-ini:Engine:[ConsoleVariables]:sf.Pirate=0"` on the command line, or in the editor's console before Play. Typed mid-run, it does nothing until the level restarts |
+| `sf.PirateAI` | 1 | 0: the pursuit operator declines the pirate's pilot post. It returns `false`, not a zeroed intent, which with assist on would brake the ship. The pirate coasts, the distance does not change (1011.2 m for 40 s at 60 and 400 fps), and it keeps firing. Read live. **A named exception**: only automated hulls read it, because only they seat this operator |
+| `sf.KillThruster N [DelaySeconds]` | *(a command)* | Not a variable. Destroys thruster `N`, by its index in the ship data asset, on the player's ship (never an automated one), and rebuilds the array over the survivors. Runs once per entry, so twelve entries in one `-ExecCmds` list are twelve kills. The optional second argument delays the kill by that many seconds of game time, because every `-ExecCmds` entry runs on the first frame, before anything has spooled. Refuses with a `Warning` a thruster already destroyed, an index out of range, a malformed argument or a negative delay |
 
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
 
@@ -379,6 +433,126 @@ Things in the code that look like mistakes and are not:
   "1" the console never opens — silently, with nothing in the log. It cost a whole run of
   checkpoint 4 before it was understood, and every manual check that needs a command mid-run
   is impossible without it. `Tilde` is kept, so a Latin layout behaves exactly as before.
+- **Shield regeneration integrated over the part of the step past the delay, not switched on
+  once the timer passes it.** `RegenSeconds = max(0, (t + dt) - max(t, Delay))` in
+  `TickShields` looks like an over-careful way of writing
+  `if (timer > delay) regen += rate * dt`. The simple form gives two answers:
+  - 500 for one 10-second step with a 3-second delay;
+  - 350 for a thousand steps of 0.01 s.
+
+  That is 43% apart between two frame rates, in a figure nobody would suspect. The integrated
+  form gives 350 both ways. Measured in C++, the two agree to 4.4e-12, and the test holds them
+  to 1e-9. The simple form was run as a mutant and fails three tests:
+  `RegenIsFrameRateIndependent`, `RegenWaitsForTheDelay` and `AHitResetsOnlyItsOwnFaceTimer`.
+- **The hull box blocks `ECC_WorldDynamic`.** It is one `SetCollisionResponseToChannel` in
+  `ASFTestShip`'s constructor, and it looks unrelated to people. Without it two hulls overlap
+  and pass through each other. On the first combat run a powered-down pirate coasting at
+  106 m/s flew through the player's cabin, and its interior volume bound the man
+  (`Frame handover: Ship -> Pirate`). The loss depended on the frame rate: at 60 fps he fell
+  out of every carry, and at 400 he rode away on the pirate's floor with 284 skipped carries.
+  Blocking, the hulls collide the way §5 says a real physical body should. Contact comes at
+  14.93 s (60) and 14.88 s (400); the pirate goes 80.9 → 28.9 m/s and the player's ship
+  0 → 52.0 m/s, so momentum is conserved. No handover, 0 skipped carries. Nothing else
+  physical in the project answers that channel, and both old rigs are line-for-line identical.
+- **An interior volume hands a person over only between carriers moving within 1.0 m/s of each
+  other where he stands.** `USFInteriorVolumeComponent::TryHandover` looks like it second-guesses
+  stage 3's rule that entering a volume binds. It is what keeps a man in his own frame when hulls
+  touch, not the CCD thresholds below. The figure is not new: it is the docking window's speed
+  limit, the one number the design has for two carriers at rest relative to each other. It is
+  measured at his position, because a spinning deck moves at ω × r.
+  - A docked pair reads `0.000000 m/s` at 60 and 400 fps, so the hatch crossing is unchanged by
+    construction.
+  - A man against the struck wall was refused at 53.28 m/s at 60 fps.
+  - At 400 fps the pirate's volume never reached into the cabin; outside the hull the refusal
+    came at 81.19 m/s.
+
+  `Frame handover REFUSED` is a `Warning`, said once per episode, and it is legitimate during a
+  docking capture and whenever hulls collide. A refused man is retried every tick while he stays
+  inside, so one refused during a capture binds to the station once it settles. The 1.0 is a
+  literal: editing the docking window does not move it.
+- **CCD thresholds in `Config/DefaultEngine.ini` that do not bound penetration.** The two lines
+  `p.Chaos.CCD.EnableThresholdBoundsScale=0.01` and `p.Chaos.CCD.AllowedDepthBoundsScale=0.005`
+  come with a comment full of arithmetic, and they read like a promise that hulls never overlap
+  by more than 8 cm. They are not one. The scales multiply the hull's full 800 cm extent, so a
+  step is swept only when the pair moves more than 8 cm relative to each other. Ordinary contact
+  builds penetration over several shorter, unswept steps.
+
+  Measured on the duel, where the pirate arrives pitched 8.53° and first touches at 854.9 cm
+  between centres:
+  - the engine defaults, 0.4 and 0.2, sweep only steps over 320 cm and let the hulls overlap by
+    about 122 cm at 60 fps;
+  - these values cut the overlap to about 10 cm at 60 fps;
+  - at 400 fps about 37 cm is left, because the hulls close at about 30 m/s, 7.45 cm a step,
+    under the threshold.
+
+  The values stay for the overlap they remove; the handover guard above is what protects the
+  person. They are global to Chaos and reach only bodies with `bUseCCD`, which today is the hull
+  alone.
+- **`FThrustAllocator::Build` refuses unless each probe axis returns itself within 1e-3.** It
+  looks stricter than a layout that is obviously fine needs. The old check refused only when an
+  achieved component was under 1e-6, that is, only when a coordinate axis was wholly unreachable.
+  It returned ready at rank 5 (two full corners) and at rank 3 (one corner): a ship that "built"
+  and could not do what it was asked. The new criterion is provably enough, since some component
+  of any null vector, squared, is at least 1/6.
+  - `TwoCornersCannotSpanSixAxes` failed against the old check.
+  - Twelve `sf.KillThruster` commands on the spike rig now refuse on exactly the twelfth, with
+    one `Error` and `thrusters 12/24 NOT built`, at 60 and 400 fps.
+
+  The tolerance is absolute, so an array of thrusters of a few newtons would be refused; the
+  project's 200 kN is nowhere near that. It checks linear span, not reachability with throttles
+  confined to [0, 1]: a `+X/+Y/+Z`-only layout still builds, whatever older comments say.
+- **`Rebuild` carries each surviving thruster's spooled and commanded throttle across by asset
+  index.** Mapping the columns through `LiveAssetIndices` looks like bookkeeping a rebuild could
+  skip by zeroing. It used to zero them, and a thruster lost in flight snapped every survivor to
+  nothing. Three frames after the kill at 60 fps the ship read `accel 8.9`, `got 444444 N`,
+  `0 spooled`, and lost 0.5 m/s. Carried, it reads `accel 16.0`, `got 800000 N`, `4 spooled`, and
+  the speed goes 79.2 → 95.2 → 111.2 → 127.2 m/s, the same figures as a kill before launch. At
+  400 fps it is 16.0 before and after. No path needs a reset: undocking carries zeros, because
+  docking locks the array and clears its demand. A kill in flight can only be asked for because
+  `sf.KillThruster` takes a delay.
+- **The pursuit asks for `sign(e) * sqrt(2 * a * |e|)` with `a = 8 m/s²`, scaled by
+  `max(0, cos(pitch) * cos(yaw))`.** It looks like an elaborate replacement for "full stick
+  until 350 m, linear down to 250". That simpler law was measured. The pirate built up 143 m/s,
+  which needs 640 m to stop at 16 m/s². It flew through the player's ship at 12 s, 12.1 m apart,
+  and then swung between 509, 125 and 444 m for the rest of the run.
+
+  The new law asks for the speed from which a constant deceleration stops the ship at the hold
+  distance. The pirate enters 300 ± 50 m at about 12.3 s at 60 and 400 fps, never goes below
+  300.0 m, and holds 300.0 from 19 s.
+  - `a` is half the intact 16 m/s², so a ship that has lost a thruster (12 m/s²) still stops
+    inside the curve.
+  - Inside the 50 m band the demand falls linearly from 28.3 m/s, because the root's slope is
+    infinite at zero.
+  - The cosine gate stops it thrusting forward, and so away, while its target is behind it
+    during a turn.
+
+  Its limit: it asks for an absolute speed, not a closing speed, so it trails a target that runs
+  by `Hold + v²/(2a)`. At 200 m/s that is 2.8 km, and 200 m/s is the pirate's own top speed.
+- **The player's ship on the combat rig does not fire without `sf.Fire 1`, and neither does any
+  ship on the spike and loop rigs.** `bWeaponsFree = false` on `ASFTestShip` looks like a
+  disarmed default nobody went back to. There are two reasons for it.
+  - The automation holds its trigger whenever it has a target, so a muzzle on a weapons-free hull
+    would have both measurement rigs shooting at their drone.
+  - Armed on both sides, two identical hulls aiming at each other's centres put identical shots
+    into identical faces. They powered down in the same frame at 6.683 s, before the pursuit got
+    anywhere near its hold distance, with 33 shots in ten seconds instead of 50. That was a
+    mirror, not a fight.
+
+  The pirate stays armed.
+- **A powered-down ship's shields go to zero and its turret locks with its own lock; docking
+  locks neither.** The plan's power-down was only the thruster array's `SetLocked`, so zeroing
+  six faces and calling `USFTurretComponent::SetLocked` in `PowerDown` looks like two
+  consequences nobody asked for. Without them:
+  - faces frozen with charge left would go on absorbing hits on a ship that reads
+    "powered down";
+  - a pirate that has lost would go on aiming and firing.
+
+  Measured in the duel at 60 and 400 fps: `Combat: … shields +X 0 … powered down`,
+  `Turret: … (standing down) … UNCOMMANDED`, and 0 shots after the event. The turret's lock is
+  its own, and only `PowerDown` sets it, so the docked loop rig still reads `ON TARGET` and is
+  line-for-line identical. The thruster lock is still one bool shared by every reason: undocking
+  clears it unconditionally, so a ship powered down while docked would fly again after undocking.
+  No rig can do that to a ship this stage.
 
 When reading the checkpoint HUD: **check the measured-time line before the drift
 figure.** A drift of zero is what both a perfect minute and a dead instrument look
