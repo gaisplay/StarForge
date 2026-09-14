@@ -145,7 +145,7 @@ Source/StarForgeCore/
   Public/
     Ballistics.h                     создаётся: FProjectileState, FProjectileStep,
                                      ComputeMuzzleVelocity, StepProjectile
-    ShipDamage.h                     создаётся: ESFShipFace, FShieldLimits, FShieldState,
+    ShipDamage.h                     создаётся: EShipFace, FShieldLimits, FShieldState,
                                      FHitOutcome, ClassifyFace, ApplyHit, TickShields,
                                      FaceName; задача 6 добавляет FindThrusterHitBy
   Private/
