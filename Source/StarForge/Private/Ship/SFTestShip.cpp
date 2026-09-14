@@ -149,6 +149,20 @@ ASFTestShip::ASFTestShip()
 	// solid cube instead of the hollow room the panels make.
 	Hull->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
 	Hull->SetCollisionObjectType(ECC_WorldDynamic);
+
+	// Blocks another hull, and nothing else changes. Spec 5 makes the ship a real physical body
+	// "so that collisions and hits work normally", and the shape component's default profile,
+	// OverlapAllDynamic, left two hulls passing through each other: the first combat run flew a
+	// coasting pirate straight through the player's cabin, where its interior volume claimed the
+	// man and the carry lost him. A hull that cannot enter a cabin cannot bring a volume into one.
+	//
+	// Only ECC_WorldDynamic, which is what a hull is. Every other physics-colliding thing in these
+	// rigs answers something else or has no body: the station's panels are query-only and it has
+	// no physics body, the drone has no collision, a projectile is a query, and the character's
+	// capsule is ECC_Pawn, which this box still only overlaps. A lone ship therefore meets nothing
+	// it did not meet before, docked or free.
+	Hull->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+
 	Hull->SetSimulatePhysics(true);
 
 	// A ship in space does not fall, and the rig has no other use for gravity.
