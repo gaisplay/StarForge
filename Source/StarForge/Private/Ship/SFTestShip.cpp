@@ -173,14 +173,11 @@ ASFTestShip::ASFTestShip()
 	// place to buy margin: it is what Chaos derives the inertia from, and 533333 kg m^2 is a
 	// recorded figure.
 	//
-	// Continuous detection is on, and on its own it does not hold that margin -- measured, not
-	// assumed. Chaos sweeps a step only when the body moves more than p.Chaos.CCD.
-	// EnableThresholdBoundsScale (0.4) of its shape's extent in that step, 320 cm for this 800 cm box,
-	// and a sweep that runs rewinds only to AllowedDepthBoundsScale (0.2) of it, 160 cm
-	// (Chaos CCDUtilities.cpp 36-41, FPBDCollisionConstraint::InitCCDThreshold). At the combat rig's
-	// 81 m/s a 60 fps step is 135 cm, so no sweep runs: the duel's contact measured 732.6 cm centre to
-	// centre, 67 cm of interpenetration. Those thresholds are global physics settings, and the flag
-	// below is what any fix through them needs.
+	// Continuous detection holds it, with the two thresholds set in Config/DefaultEngine.ini under
+	// [ConsoleVariables], where the bound is derived: a sweep for any step over 8 cm, a rollback to at
+	// most 4 cm, so at most 8 cm of interpenetration at any frame rate. The flag is what opts this body
+	// in; the engine's own thresholds would sweep only steps over 320 cm and leave up to 160 cm, and
+	// with them the combat rig's duel measured 67 cm of interpenetration at 60 fps.
 	Hull->BodyInstance.bUseCCD = true;
 
 	Hull->SetSimulatePhysics(true);
