@@ -74,7 +74,7 @@ private:
 	/** Zero until Launch, which StepProjectile refuses: a shot nobody launched is destroyed loudly. */
 	double LifeSeconds = 0.0;
 
-	/** Carried and not yet spent: nothing in this build can receive damage. */
+	/** What a hit hands to the target's damageable component, if it has one. */
 	double Damage = 0.0;
 
 	int32 ShotNumber = 0;

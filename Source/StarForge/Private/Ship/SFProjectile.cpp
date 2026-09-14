@@ -5,6 +5,7 @@
 #include "Engine/HitResult.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
+#include "Ship/SFDamageableComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "StarForgeLog.h"
 #include "Units.h"
@@ -118,11 +119,7 @@ void ASFProjectile::ReportAndConsume(const FHitResult& Hit)
 	// it literally.
 	// A hit on something with no damageable component is still logged and still consumes the
 	// projectile: a hit that did nothing and said nothing is an instrument that is silent.
-	//
-	// Nothing receives the Damage this shot carries yet: no actor in the game module has
-	// anything to spend it on until ships have shields and a hull strength. The line is written
-	// now, before anything depends on it, so that where a hit lands is measured first.
-	const AActor* Target = Hit.GetActor();
+	AActor* Target = Hit.GetActor();
 	const UPrimitiveComponent* Component = Hit.GetComponent();
 	const USFShipFrameComponent* TargetFrame =
 		Target ? Target->FindComponentByClass<USFShipFrameComponent>() : nullptr;
@@ -151,6 +148,21 @@ void ASFProjectile::ReportAndConsume(const FHitResult& Hit)
 		*Place,
 		StarForge::Units::CmToMetres((Hit.ImpactPoint - LaunchPosition).Size()),
 		*TurretStateAtShot);
+
+	// The world point, not the hull-local one above: turning it into ship axes is the damageable
+	// component's job, through the same facade, and handing it a point already converted here
+	// would make this line and that one two answers that merely happen to agree.
+	if (USFDamageableComponent* Damageable =
+		Target ? Target->FindComponentByClass<USFDamageableComponent>() : nullptr)
+	{
+		Damageable->ReceiveHit(Hit.ImpactPoint, Damage, FiredBy.Get());
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Display,
+			TEXT("Projectile: [%s] shot %d: %s has no damageable component, so nothing takes its %.1f damage."),
+			*GetNameSafe(FiredBy.Get()), ShotNumber, *GetNameSafe(Target), Damage);
+	}
 
 	Destroy();
 }

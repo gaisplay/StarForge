@@ -17,6 +17,7 @@ class USFConsoleOperatorComponent;
 class USFAutomationOperatorComponent;
 class USFTurretComponent;
 class USFWeaponComponent;
+class USFDamageableComponent;
 class USFDockingPortComponent;
 class USFDockingComponent;
 class USFInteriorVolumeComponent;
@@ -148,6 +149,9 @@ public:
 	/** The muzzle, at the tip of the barrel the turret turns. */
 	USFWeaponComponent* GetWeapon() const { return Weapon; }
 
+	/** Shield faces and hull strength: what a hit on this hull spends. */
+	USFDamageableComponent* GetDamageable() const { return Damageable; }
+
 	/** The ship's half of the airlock. Its +X points out through the hatch. */
 	USFDockingPortComponent* GetDockingPort() const { return DockingPort; }
 
@@ -238,6 +242,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFWeaponComponent> Weapon;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFDamageableComponent> Damageable;
 
 	/**
 	 * Lights the interior from the room's centre so the walk test is visible at all.

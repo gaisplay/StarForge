@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "FlightController.h"
+#include "ShipDamage.h"
 #include "ThrusterDef.h"
 #include "SFShipDataAsset.generated.h"
 
@@ -123,6 +124,41 @@ public:
 	double ProjectileDamage = 100.0;
 
 	/**
+	 * What one shield face holds. Not set in the spec; this figure is the stage-4 plan's. Spec 9
+	 * names hull and shield strength among what this asset describes, so it lives here and not
+	 * in the ship's constructor.
+	 *
+	 * Exactly ten hits of ProjectileDamage take a face down, which is 2.0 s of a held trigger at
+	 * SecondsBetweenShots: a face that falls in nine or eleven is a wrong count, not a plausible
+	 * number.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Damage")
+	double ShieldFaceCapacity = 1000.0;
+
+	/**
+	 * Charge a face regains per second once its delay has run. Not set in the spec; this figure
+	 * is the stage-4 plan's. A face taken all the way down is full again 1000 / 50 = 20 s later.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Damage")
+	double ShieldRegenPerSecond = 50.0;
+
+	/**
+	 * Seconds since the last hit on THAT face before it starts to regenerate. Not set in the spec;
+	 * this figure is the stage-4 plan's. In seconds, and that is load-bearing rather than style:
+	 * a delay counted in frames would be a shield that comes back sooner on a faster machine.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Damage")
+	double ShieldRegenDelaySeconds = 3.0;
+
+	/**
+	 * The hull's strength. Not set in the spec; this figure is the stage-4 plan's. Twenty more hits
+	 * after a face is down, 4.0 s at the weapon's cadence; a whole face and the hull together are
+	 * 6.0 s of unbroken hits on one place. At zero the ship powers down rather than being destroyed.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Damage")
+	double HullStrength = 2000.0;
+
+	/**
 	 * Replaces Thrusters with the standard symmetric test layout: four corners, six
 	 * thrusters each, one along every signed axis. Twenty-four records of four fields.
 	 *
@@ -151,4 +187,7 @@ public:
 
 	/** The flight envelope in the form the control loop wants: SI, radians. */
 	StarForge::FFlightLimits BuildLimits() const;
+
+	/** The three shield figures in the form the shield maths wants: the same for every face. */
+	StarForge::Damage::FShieldLimits BuildShieldLimits() const;
 };

@@ -105,3 +105,12 @@ StarForge::FFlightLimits USFShipDataAsset::BuildLimits() const
 	Limits.AngularGain = AngularGain;
 	return Limits;
 }
+
+StarForge::Damage::FShieldLimits USFShipDataAsset::BuildShieldLimits() const
+{
+	StarForge::Damage::FShieldLimits Limits;
+	Limits.FaceCapacity = ShieldFaceCapacity;
+	Limits.RegenPerSecond = ShieldRegenPerSecond;
+	Limits.RegenDelaySeconds = ShieldRegenDelaySeconds;
+	return Limits;
+}

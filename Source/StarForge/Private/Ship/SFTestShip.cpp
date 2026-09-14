@@ -9,6 +9,7 @@
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "Ship/SFAutomationOperatorComponent.h"
 #include "Ship/SFConsoleOperatorComponent.h"
+#include "Ship/SFDamageableComponent.h"
 #include "Ship/SFDockingComponent.h"
 #include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
@@ -403,6 +404,17 @@ ASFTestShip::ASFTestShip()
 	{
 		Weapon->ShipData = ShipDataAsset.Object;
 	}
+
+	// The half-extents the panels are placed from, not a second figure. Hits land on the panels'
+	// outer faces at 410, not 400; the face is decided by the ratios of the three coordinates to
+	// these, so on a hull with the same half-extent on every axis the ten centimetres change
+	// nothing.
+	Damageable = CreateDefaultSubobject<USFDamageableComponent>(TEXT("Damageable"));
+	Damageable->HalfExtentsCm = FVector(InteriorHalfExtentCm);
+	if (ShipDataAsset.Succeeded())
+	{
+		Damageable->ShipData = ShipDataAsset.Object;
+	}
 }
 
 UStaticMeshComponent* ASFTestShip::AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale)
@@ -710,6 +722,34 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	{
 		UE_LOG(LogStarForge, Warning,
 			TEXT("Turret: [%s] no gunner station or no turret -- nothing is aiming."), *GetName());
+	}
+
+	// A line of its own rather than more fields on Flight:, which already takes reading in pieces.
+	// Before the thruster check for the turret's reason: a hull whose array never built can still
+	// be shot, and a Combat line that vanished with the array would read as a hull nobody can hurt.
+	if (Damageable)
+	{
+		FString ShieldText;
+		for (int32 i = 0; i < StarForge::Damage::FaceCount; ++i)
+		{
+			const StarForge::Damage::EShipFace Face = static_cast<StarForge::Damage::EShipFace>(i);
+			ShieldText += FString::Printf(TEXT(" %s %.0f"),
+				StarForge::Damage::FaceName(Face), Damageable->GetFaceCharge(Face));
+		}
+
+		const FString ThrusterText = (Thrusters && Thrusters->IsReady() && Thrusters->ShipData)
+			? FString::Printf(TEXT("thrusters %d/%d"),
+				Thrusters->GetTargetThrottles().Num(), Thrusters->ShipData->Thrusters.Num())
+			: FString(TEXT("thrusters NOT built"));
+
+		UE_LOG(LogStarForge, Log, TEXT("Combat: [%s] shields%s, hull %.1f/%.1f, %s, %s."),
+			*GetName(), *ShieldText, Damageable->GetHullStrength(), Damageable->GetHullCapacity(),
+			*ThrusterText, Damageable->IsPoweredDown() ? TEXT("powered down") : TEXT("powered up"));
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Combat: [%s] no damageable component -- nothing on this hull can be hurt."), *GetName());
 	}
 
 	// The log is now written in both modes, so it can be reached before the array has
