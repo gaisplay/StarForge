@@ -15,6 +15,7 @@
 #include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFInteriorVolumeComponent.h"
 #include "Ship/SFPilotStationComponent.h"
+#include "Ship/SFPursuitOperatorComponent.h"
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTargetDrone.h"
@@ -238,6 +239,11 @@ ASFTestShip::ASFTestShip()
 		StarForge::Units::CmToMetres(-InteriorHalfExtentCm + SpawnClearanceCm));
 
 	AutomationOperator = CreateDefaultSubobject<USFAutomationOperatorComponent>(TEXT("AutomationOperator"));
+
+	// On every hull, not only on a pirate, because there is no pirate class: Crewing is set after
+	// construction, so the one hull type carries both operators and Crewing decides which of them
+	// sits down (see BeginPlay). On the player's ship this one never takes the seat.
+	PursuitOperator = CreateDefaultSubobject<USFPursuitOperatorComponent>(TEXT("PursuitOperator"));
 
 	// The ship data asset is wired here rather than assigned on a placed actor
 	// because there is no placed actor to assign it on: L_FrameSpike is deliberately
@@ -483,6 +489,7 @@ void ASFTestShip::BeginPlay()
 	if (Thrusters) { Thrusters->SetConsoleControlled(bAnswersConsole); }
 	if (ConsoleOperator) { ConsoleOperator->SetConsoleControlled(bAnswersConsole); }
 	if (AutomationOperator) { AutomationOperator->SetConsoleControlled(bAnswersConsole); }
+	if (PursuitOperator) { PursuitOperator->SetConsoleControlled(bAnswersConsole); }
 	if (Docking) { Docking->SetConsoleControlled(bAnswersConsole); }
 	if (Weapon)
 	{
@@ -764,6 +771,32 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	{
 		UE_LOG(LogStarForge, Warning,
 			TEXT("Combat: [%s] no damageable component -- nothing on this hull can be hurt."), *GetName());
+	}
+
+	// Only where the pursuit operator can hold a seat, so neither existing rig gains a line. Before
+	// the thruster check for the turret's reason, and read from the two transforms rather than
+	// from the last intent: a powered-down or declining pirate is asked for nothing, and its
+	// distance is exactly what those two cases are judged on. The game time is in the line because
+	// the frame counter in the log prefix wraps at a thousand, and 400 fps passes that in 2.5 s.
+	if (Crewing == ESFShipCrewing::Automated && PursuitOperator)
+	{
+		double DistanceMetres = 0.0;
+		StarForge::Turret::FTurretAim Bearing;
+		if (PursuitOperator->MeasureTarget(DistanceMetres, Bearing))
+		{
+			UE_LOG(LogStarForge, Log,
+				TEXT("Pursuit: [%s] t %.2f s | target %s at %.1f m, bearing yaw %.1f pitch %.1f deg | hold %.0f m%s"),
+				*GetName(), GetWorld()->GetTimeSeconds(), *GetNameSafe(PursuitOperator->GetTargetActor()),
+				DistanceMetres, FMath::RadiansToDegrees(Bearing.YawRad), FMath::RadiansToDegrees(Bearing.PitchRad),
+				PursuitOperator->HoldDistanceMetres,
+				PursuitOperator->IsDeclining() ? TEXT(" | declining (sf.PirateAI 0)") : TEXT(""));
+		}
+		else
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Pursuit: [%s] t %.2f s | no target or no frame -- nothing to chase, and the post is declined."),
+				*GetName(), GetWorld()->GetTimeSeconds());
+		}
 	}
 
 	// The log is now written in both modes, so it can be reached before the array has

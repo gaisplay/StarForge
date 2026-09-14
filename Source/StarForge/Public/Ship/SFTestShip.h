@@ -15,6 +15,7 @@ class USFPilotStationComponent;
 class USFGunnerStationComponent;
 class USFConsoleOperatorComponent;
 class USFAutomationOperatorComponent;
+class USFPursuitOperatorComponent;
 class USFTurretComponent;
 class USFWeaponComponent;
 class USFDamageableComponent;
@@ -37,7 +38,9 @@ class ASFTargetDrone;
  * deaf by accident -- its posts are held by automation by definition, and those variables are
  * the player's ship's debug switches.
  *
- * Named exceptions, which every hull answers: sf.Shields (see SFDamageableComponent.cpp).
+ * Named exceptions: sf.Shields, which every hull answers (see SFDamageableComponent.cpp), and
+ * sf.PirateAI, which only an Automated hull answers, because only there does the pursuit
+ * operator that reads it hold a seat (see SFPursuitOperatorComponent.cpp).
  */
 UENUM()
 enum class ESFShipCrewing : uint8
@@ -135,6 +138,9 @@ public:
 
 	USFAutomationOperatorComponent* GetAutomationOperator() const { return AutomationOperator; }
 
+	/** Holds the pilot's post on an Automated hull; inert on the player's. */
+	USFPursuitOperatorComponent* GetPursuitOperator() const { return PursuitOperator; }
+
 	USFShipFrameComponent* GetFrameComponent() const { return Frame; }
 
 	/** The simulated body: the thruster array applies its wrench to this. */
@@ -222,6 +228,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFAutomationOperatorComponent> AutomationOperator;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFPursuitOperatorComponent> PursuitOperator;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFTurretComponent> Turret;

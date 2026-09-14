@@ -52,6 +52,9 @@ public:
 	 */
 	void SetTargetActor(AActor* InTarget);
 
+	/** What SetTargetActor was last given, so a rig can read back what it set. */
+	AActor* GetTargetActor() const { return TargetActor.Get(); }
+
 	/**
 	 * Whether this instance answers the unnamed sf.* family. See ESFShipCrewing.
 	 *

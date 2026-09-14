@@ -2,6 +2,7 @@
 
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/SFCharacter.h"
@@ -16,6 +17,7 @@
 #include "Ship/SFTurretComponent.h"
 #include "ShipFrameMath.h"
 #include "TurretMath.h"
+#include "Units.h"
 
 namespace
 {
@@ -437,6 +439,63 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	DrawLine(TEXT(""), Y);
 	DrawFlightBlock(Y);
 	DrawGunnerBlock(Y);
+
+	// The other ship -- on the combat rig, the pirate. It is the ship that is not the man's own:
+	// the one whose frame carries him, or failing that the one the dock line reports.
+	const ASFTestShip* OwnShip = Ship ? Ship : DockShip;
+	const ASFTestShip* Enemy = nullptr;
+	for (TActorIterator<ASFTestShip> It(GetWorld()); It; ++It)
+	{
+		if (*It != OwnShip)
+		{
+			Enemy = *It;
+			break;
+		}
+	}
+
+	if (!Enemy)
+	{
+		DrawLine(TEXT("combat  no other ship in this level"), Y);
+		return;
+	}
+
+	const double EnemyDistanceMetres = OwnShip
+		? StarForge::Units::CmToMetres(FVector::Dist(OwnShip->GetActorLocation(), Enemy->GetActorLocation()))
+		: 0.0;
+
+	// Who flies it, with "standing down" when the post is held and declining: sf.PirateAI 0 and a
+	// powered-down pirate both read that way, and a pirate that simply sits still does not.
+	const USFPilotStationComponent* EnemyPilot = Enemy->GetPilotStation();
+	const FString EnemyFlownBy = EnemyPilot
+		? EnemyPilot->GetOperatorDisplayName()
+			+ ((EnemyPilot->IsOccupied() && !EnemyPilot->IsOperatorFlying()) ? TEXT(" (standing down)") : TEXT(""))
+		: FString(TEXT("no pilot station"));
+
+	const USFDamageableComponent* EnemyDamage = Enemy->GetDamageable();
+	if (!EnemyDamage || !EnemyDamage->IsReady())
+	{
+		DrawLine(FString::Printf(TEXT("combat  [%s] %.1f m   flown by %s   damageable component NOT ready"),
+			*Enemy->GetName(), EnemyDistanceMetres, *EnemyFlownBy), Y, FLinearColor::Red);
+		return;
+	}
+
+	int32 FacesDown = 0;
+	for (int32 i = 0; i < StarForge::Damage::FaceCount; ++i)
+	{
+		if (EnemyDamage->GetFaceCharge(static_cast<StarForge::Damage::EShipFace>(i)) <= 0.0)
+		{
+			++FacesDown;
+		}
+	}
+
+	const bool bEnemyDown = EnemyDamage->IsPoweredDown();
+	DrawLine(FString::Printf(TEXT("combat  [%s] %.1f m   flown by %s   hull %.1f / %.1f   faces down %d of %d   %s"),
+		*Enemy->GetName(), EnemyDistanceMetres, *EnemyFlownBy,
+		EnemyDamage->GetHullStrength(), EnemyDamage->GetHullCapacity(),
+		FacesDown, StarForge::Damage::FaceCount,
+		bEnemyDown ? TEXT("powered down") : TEXT("powered up")),
+		Y,
+		bEnemyDown ? FLinearColor(1.0f, 0.45f, 0.0f) : FLinearColor::White);
 }
 
 void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
