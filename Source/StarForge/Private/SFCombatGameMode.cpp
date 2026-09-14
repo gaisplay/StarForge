@@ -5,10 +5,13 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Player/SFCharacter.h"
+#include "Player/SFShipboardMovementComponent.h"
 #include "Ship/SFAutomationOperatorComponent.h"
+#include "Ship/SFConsoleOperatorComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFPursuitOperatorComponent.h"
+#include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTestShip.h"
 #include "StarForgeLog.h"
 #include "Units.h"
@@ -153,6 +156,8 @@ void ASFCombatGameMode::StartPlay()
 	}
 
 	bool bPawnInCabin = false;
+	FString BoundToName = TEXT("nothing");
+	bool bPawnBound = false;
 	if (Ship)
 	{
 		APlayerController* PC = World->GetFirstPlayerController();
@@ -169,6 +174,15 @@ void ASFCombatGameMode::StartPlay()
 					Cabin.X, Cabin.Y, Cabin.Z,
 					Pawn->GetActorLocation().X, Pawn->GetActorLocation().Y, Pawn->GetActorLocation().Z);
 			}
+
+			// Standing in the cabin is not the whole claim on the first rig with two frames a man could
+			// be bound to. The carry follows the frame he is bound to, not the room he is in, so the
+			// binding is read back as well.
+			const ASFCharacter* Occupant = Cast<ASFCharacter>(Pawn);
+			const USFShipboardMovementComponent* Movement = Occupant ? Occupant->GetShipboardMovement() : nullptr;
+			const USFShipFrameComponent* BoundTo = Movement ? Movement->GetShipFrame() : nullptr;
+			bPawnBound = BoundTo && BoundTo == Ship->GetFrameComponent();
+			BoundToName = BoundTo ? GetNameSafe(BoundTo->GetOwner()) : FString(TEXT("nothing"));
 		}
 		else
 		{
@@ -190,10 +204,22 @@ void ASFCombatGameMode::StartPlay()
 	}
 	else
 	{
-		ShipText = Ship->GetCrewing() == ESFShipCrewing::PlayerShip
-			? TEXT("the player's ship is crewed") : TEXT("the player's ship is NOT CREWED BY THE PLAYER");
-		bFault = bFault || Ship->GetCrewing() != ESFShipCrewing::PlayerShip;
+		// Crewed means answering the console with the console operator in the pilot's seat -- the
+		// operator every headless flight check on this project is flown by -- read from the seat.
+		const USFPilotStationComponent* ShipPilot = Ship->GetPilotStation();
+		const USFConsoleOperatorComponent* Console =
+			Cast<const USFConsoleOperatorComponent>(ShipPilot ? ShipPilot->GetOperator().GetObject() : nullptr);
+		const bool bCrewed = Ship->GetCrewing() == ESFShipCrewing::PlayerShip && Console && Console->GetOwner() == Ship;
+		ShipText = bCrewed
+			? FString(TEXT("the player's ship is crewed"))
+			: FString::Printf(TEXT("the player's ship is NOT CREWED (%s, pilot's post held by %s)"),
+				Ship->GetCrewing() == ESFShipCrewing::PlayerShip ? TEXT("player crewing") : TEXT("AUTOMATED crewing"),
+				*CombatRig::DescribeHolder(ShipPilot));
+		bFault = bFault || !bCrewed;
 
+		// The hull field the rig set, read back, not the weapon's own flag: the weapon exposes no getter.
+		// The hull hands the field to the weapon before Super::BeginPlay, and the weapon's own BeginPlay
+		// line ("weapons hold" / "weapons free") is its read-back in the log. The same holds for "armed".
 		if (!Ship->bWeaponsFree)
 		{
 			ShipText += TEXT(" and holds fire until sf.Fire 1");
@@ -261,14 +287,20 @@ void ASFCombatGameMode::StartPlay()
 			StarForge::Units::CmToMetres(FVector::Dist(Ship->GetActorLocation(), Pirate->GetActorLocation())))
 		: FString(TEXT("separation none"));
 
-	bFault = bFault || !bProfileOff || !bPawnInCabin;
+	bFault = bFault || !bProfileOff || !bPawnInCabin || !bPawnBound;
+
+	const FString ManText = !bPawnInCabin
+		? FString(TEXT("is NOT in the cabin"))
+		: (bPawnBound
+			? FString(TEXT("stands in the cabin"))
+			: FString::Printf(TEXT("stands in the cabin but is NOT BOUND to its frame (bound to %s)"), *BoundToName));
 
 	const FString Report = FString::Printf(
 		TEXT("Combat rig: scripted profile %s; %s; %s; the man %s; %s."),
 		bProfileOff ? TEXT("off") : TEXT("STILL ON"),
 		*ShipText,
 		*PirateText,
-		bPawnInCabin ? TEXT("stands in the cabin") : TEXT("is NOT in the cabin"),
+		*ManText,
 		*SeparationText);
 
 	if (bFault)
