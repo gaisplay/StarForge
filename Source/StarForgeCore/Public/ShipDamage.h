@@ -82,21 +82,25 @@ namespace StarForge::Damage
 	 * deliberate: there is no face under a point inside the hull, and refusing would force every
 	 * caller to invent one.
 	 *
-	 * Returns false and leaves OutFace untouched on a non-finite point or a half-extent that is
-	 * not positive (NaN is not) -- the latter because dividing by it produces an infinity that
-	 * compares larger than everything and would answer confidently.
+	 * Returns false and leaves OutFace untouched on a non-finite point, or on a half-extent that
+	 * is not both finite and positive. Dividing by a zero half-extent produces an infinity that
+	 * compares larger than everything and would answer confidently; dividing by an infinite one
+	 * produces zero, and with all three infinite every point would read as the centre.
 	 */
 	STARFORGECORE_API bool ClassifyFace(const FVector& HitShipLocal, const FVector& HalfExtents, EShipFace& OutFace);
 
 	/**
 	 * One hit of Damage on Face. The face absorbs the smaller of its charge and the damage, the
-	 * rest passes to the hull, and that face's timer, and no other, restarts from zero.
+	 * rest passes to the hull, and that face's timer, and no other, restarts from zero -- also
+	 * when the face had nothing left to absorb.
 	 *
 	 * bFaceBrokenNow is an event rather than a state: true on the hit that takes the face from
 	 * above zero to zero, false on a hit that finds it already at zero.
 	 *
-	 * Returns false, and touches neither State nor Out, when Damage is negative or NaN. A
-	 * negative hit would recharge the face it landed on.
+	 * Returns false, and touches neither State nor Out, when Face is not one of the six or Damage
+	 * is not a finite non-negative number. A face outside the six would write past both arrays,
+	 * a negative hit would recharge the face it landed on, and an infinite one would pass an
+	 * infinity to the hull.
 	 */
 	STARFORGECORE_API bool ApplyHit(
 		FShieldState& State, const FShieldLimits& Limits, EShipFace Face, double Damage, FHitOutcome& Out);
@@ -107,7 +111,7 @@ namespace StarForge::Damage
 	 * FaceCapacity. The part of the step, not the whole step once the timer is past the delay:
 	 * the .cpp says why that difference is a frame rate.
 	 *
-	 * Writes nothing when DeltaSeconds is not positive (NaN is not) or any limit is not finite.
+	 * Writes nothing when DeltaSeconds is not a finite positive number or any limit is not finite.
 	 */
 	STARFORGECORE_API void TickShields(FShieldState& State, const FShieldLimits& Limits, double DeltaSeconds);
 

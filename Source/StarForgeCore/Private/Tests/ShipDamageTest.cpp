@@ -93,6 +93,13 @@ bool FShipDamageEachFaceIsItsOwnTest::RunTest(const FString& Parameters)
 		TestTrue(Where + TEXT(" is applied"), ApplyHit(State, MakeLimits(), Face, 100.0, Outcome));
 		TestTrue(Where + TEXT(" reports its face"), Outcome.Face == Case.Face);
 
+		// The ordinary hit, smaller than what the face holds. A caller takes the hit's effect from
+		// these three fields as they are, so a negative overflow that heals the hull, or a break
+		// reported on every hit, would go straight into its numbers.
+		TestEqual(Where + TEXT(" is absorbed whole"), Outcome.AbsorbedByShield, 100.0, 0.0);
+		TestEqual(Where + TEXT(" passes nothing to the hull"), Outcome.PassedToHull, 0.0, 0.0);
+		TestFalse(Where + TEXT(" does not break a face with 900 left"), Outcome.bFaceBrokenNow);
+
 		for (int32 i = 0; i < FaceCount; ++i)
 		{
 			const double Expected = (i == IndexOf(Case.Face)) ? 900.0 : 1000.0;
@@ -169,6 +176,11 @@ bool FShipDamageOverflowGoesToHullExactlyTest::RunTest(const FString& Parameters
 	TestEqual(TEXT("and the face is left at zero"), State.Charge[IndexOf(EShipFace::XPos)], 0.0, 0.0);
 	TestTrue(TEXT("and that hit broke it"), First.bFaceBrokenNow);
 
+	// A second inside the delay: the face is still at zero, and its timer has something to lose.
+	TickShields(State, Limits, 1.0);
+	TestEqual(TEXT("a second later the broken face is still at zero"), State.Charge[IndexOf(EShipFace::XPos)], 0.0, 0.0);
+	TestEqual(TEXT("and its timer has run for that second"), State.SecondsSinceHit[IndexOf(EShipFace::XPos)], 1.0, 0.0);
+
 	// "Broken now" is an event. The game writes a line for it, and a second hit on a face that
 	// is already down must not write that line again.
 	FHitOutcome Second;
@@ -176,6 +188,11 @@ bool FShipDamageOverflowGoesToHullExactlyTest::RunTest(const FString& Parameters
 	TestEqual(TEXT("a broken face absorbs nothing"), Second.AbsorbedByShield, 0.0, 0.0);
 	TestEqual(TEXT("and all of it goes to the hull"), Second.PassedToHull, 100.0, 0.0);
 	TestFalse(TEXT("and that hit did not break it again"), Second.bFaceBrokenNow);
+
+	// With nothing absorbed, the hit still restarts the face's timer. A downed face that only
+	// restarted it on absorption would count its delay down under steady fire and recharge.
+	TestEqual(TEXT("and it restarted the broken face's timer all the same"),
+		State.SecondsSinceHit[IndexOf(EShipFace::XPos)], 0.0, 0.0);
 
 	return true;
 }
@@ -330,9 +347,11 @@ bool FShipDamageNonFiniteIsRefusedTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("the NaN really is not finite"), !FMath::IsFinite(NaN));
 	TestTrue(TEXT("and the infinity really is not finite"), !FMath::IsFinite(Inf));
 
-	// Each fixture below is wrong in one respect only, so one guard stands in its way, and each
-	// has its own sentinel, so a missing guard fails at its own fixture and not at every check
-	// after it.
+	// Every fixture below is wrong in one respect only, and each has its own sentinel, so a
+	// missing guard fails at its own fixtures and not at every check after them. A NaN fails a
+	// negated comparison and a finiteness check alike, so where a guard has both, a finite value
+	// out of range is what only the comparison refuses, and an infinity is what only the
+	// finiteness check refuses.
 
 	// ClassifyFace. The sentinel is -Y, a face none of these fixtures would be classified as with
 	// its guard gone.
@@ -350,6 +369,10 @@ bool FShipDamageNonFiniteIsRefusedTest::RunTest(const FString& Parameters)
 	ExpectClassifyRefused(TEXT("a negative half-extent"), FVector(0.0, 410.0, 0.0), FVector(400.0, -400.0, 400.0));
 	ExpectClassifyRefused(TEXT("a NaN half-extent"), FVector(0.0, 0.0, 410.0), FVector(400.0, 400.0, NaN));
 
+	// A point 10 cm outside +Y, which an infinite Y half-extent would divide down to zero and send
+	// to +X by the tie rule.
+	ExpectClassifyRefused(TEXT("an infinite half-extent"), FVector(0.0, 410.0, 0.0), FVector(400.0, Inf, 400.0));
+
 	// ApplyHit, on a face that is part-drained and past its delay, so a write to its charge or
 	// its timer would show.
 	const FShieldLimits Limits = MakeLimits();
@@ -360,23 +383,35 @@ bool FShipDamageNonFiniteIsRefusedTest::RunTest(const FString& Parameters)
 		Drained.SecondsSinceHit[i] = 5.0;
 	}
 
-	const auto ExpectHitRefused = [this, &Drained, &Limits](const TCHAR* What, double Damage)
+	// The shields are held with spare doubles behind them. Were the face range guard missing, a
+	// face one past the end would write one past each array; the write past the timers lands in
+	// the spare doubles rather than on the stack, so the checks below fail instead of the process.
+	struct FShieldsWithTail
 	{
-		FShieldState State = Drained;
+		FShieldState State;
+		double Tail[FaceCount] = {};
+	};
+
+	const auto ExpectHitRefused = [this, &Drained, &Limits](const TCHAR* What, EShipFace Face, double Damage)
+	{
+		FShieldsWithTail Held;
+		Held.State = Drained;
 		FHitOutcome Out;
 		Out.Face = EShipFace::YNeg;
 		Out.AbsorbedByShield = 7.0;
 		Out.PassedToHull = 7.0;
 		Out.bFaceBrokenNow = true;
 
-		TestFalse(FString(What) + TEXT(" is refused"), ApplyHit(State, Limits, EShipFace::XPos, Damage, Out));
-		TestTrue(FString(What) + TEXT(" leaves the shields untouched"), IsSameShieldState(State, Drained));
+		TestFalse(FString(What) + TEXT(" is refused"), ApplyHit(Held.State, Limits, Face, Damage, Out));
+		TestTrue(FString(What) + TEXT(" leaves the shields untouched"), IsSameShieldState(Held.State, Drained));
 		TestTrue(FString(What) + TEXT(" leaves the outcome untouched"),
 			Out.Face == EShipFace::YNeg && Out.AbsorbedByShield == 7.0 && Out.PassedToHull == 7.0 && Out.bFaceBrokenNow);
 	};
 
-	ExpectHitRefused(TEXT("NaN damage"), NaN);
-	ExpectHitRefused(TEXT("negative damage"), -100.0);
+	ExpectHitRefused(TEXT("NaN damage"), EShipFace::XPos, NaN);
+	ExpectHitRefused(TEXT("negative damage"), EShipFace::XPos, -100.0);
+	ExpectHitRefused(TEXT("infinite damage"), EShipFace::XPos, Inf);
+	ExpectHitRefused(TEXT("a face outside the six"), static_cast<EShipFace>(FaceCount), 100.0);
 
 	// TickShields, on the same part-drained faces: a step that got through would at least move
 	// every timer, whatever it did to the charges.
@@ -389,6 +424,7 @@ bool FShipDamageNonFiniteIsRefusedTest::RunTest(const FString& Parameters)
 
 	ExpectTickRefused(TEXT("a NaN step"), Limits, NaN);
 	ExpectTickRefused(TEXT("a negative step"), Limits, -0.5);
+	ExpectTickRefused(TEXT("an infinite step"), Limits, Inf);
 
 	// Refused as well, but this one cannot tell whether the guard is there: a zero step with no
 	// guard writes back exactly what was there.

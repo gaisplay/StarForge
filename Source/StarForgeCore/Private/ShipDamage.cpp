@@ -4,7 +4,10 @@ namespace StarForge::Damage
 {
 	namespace
 	{
-		/** Every component finite: an infinity is not a NaN, and it would win every comparison. */
+		/**
+		 * Every component finite. An infinity is not a NaN: in a point it wins every comparison,
+		 * and in a half-extent it divides every coordinate on its axis down to zero.
+		 */
 		bool IsFinite(const FVector& V)
 		{
 			return FMath::IsFinite(V.X) && FMath::IsFinite(V.Y) && FMath::IsFinite(V.Z);
@@ -15,7 +18,10 @@ namespace StarForge::Damage
 	{
 		if (!IsFinite(HitShipLocal)) { return false; }
 
-		// Negated, so a NaN half-extent fails the guard instead of falling through it.
+		// Finite and positive on every axis. With every half-extent infinite, every point would
+		// tie at zero and the sign of X alone would decide. The positive check is negated, so it
+		// refuses a NaN on its own as well.
+		if (!IsFinite(HalfExtents)) { return false; }
 		if (!(HalfExtents.X > 0.0) || !(HalfExtents.Y > 0.0) || !(HalfExtents.Z > 0.0)) { return false; }
 
 		const double NX = FMath::Abs(HitShipLocal.X) / HalfExtents.X;
@@ -41,10 +47,16 @@ namespace StarForge::Damage
 
 	bool ApplyHit(FShieldState& State, const FShieldLimits& Limits, EShipFace Face, double Damage, FHitOutcome& Out)
 	{
-		// Negated, so NaN is refused by the same line as a negative hit.
-		if (!(Damage >= 0.0)) { return false; }
-
+		// An EShipFace can be cast from any uint8, and an index outside the six would write past
+		// both arrays.
 		const int32 Index = static_cast<int32>(Face);
+		if (!(Index >= 0 && Index < FaceCount)) { return false; }
+
+		// Negated, so the comparison refuses a NaN as well as a negative hit, which would recharge
+		// the face. An infinite hit passes the comparison and is refused by name: it would pass
+		// an infinity to the hull.
+		if (!(Damage >= 0.0) || !FMath::IsFinite(Damage)) { return false; }
+
 		Out.Face = Face;
 
 		const double Absorbed = FMath::Min(State.Charge[Index], Damage);
@@ -62,6 +74,9 @@ namespace StarForge::Damage
 
 		// This face's timer only. Six timers, not one: a ship under continuous fire on one side
 		// would otherwise have every shield frozen, and that reads as "shields do not regenerate".
+		// And on every hit, including one that finds nothing left to absorb: restarted only on
+		// absorption, a downed face under steady fire would count its delay down between shots
+		// and recharge while it is still being hit.
 		State.SecondsSinceHit[Index] = 0.0;
 
 		return true;
@@ -69,10 +84,13 @@ namespace StarForge::Damage
 
 	void TickShields(FShieldState& State, const FShieldLimits& Limits, double DeltaSeconds)
 	{
-		// Negated, so a NaN step fails the guard. Let through, a NaN step turns every face's
-		// charge and timer into NaN, and a non-finite limit corrupts the charges in a way that
-		// depends on which limit it is and on its sign -- NaN is only one of the ways.
-		if (!(DeltaSeconds > 0.0)) { return; }
+		// Negated, so a NaN step fails the comparison; let through, it turns every face's charge
+		// and timer into NaN. An infinite step passes the comparison and is refused by name: it
+		// sets every timer to infinity, the next step's Inf - Inf carries NaN into every charge,
+		// and a face at NaN absorbs every hit whole and never reports breaking. A non-finite
+		// limit corrupts the charges in a way that depends on which limit it is and on its sign
+		// -- NaN is only one of the ways.
+		if (!(DeltaSeconds > 0.0) || !FMath::IsFinite(DeltaSeconds)) { return; }
 		if (!FMath::IsFinite(Limits.FaceCapacity) || !FMath::IsFinite(Limits.RegenPerSecond)
 			|| !FMath::IsFinite(Limits.RegenDelaySeconds))
 		{
