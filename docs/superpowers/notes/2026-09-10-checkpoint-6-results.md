@@ -11,8 +11,8 @@
 
 | Запуск | Журнал |
 |---|---|
-| A — петля целиком | `evidence/2026-09-10-checkpoint-6-A-loop.log` |
-| B1–B3 — отрицательный контроль руками | `evidence/2026-09-10-checkpoint-6-B-bindframe.log` |
+| A — петля целиком | `evidence/2026-09-13-checkpoint-6-A-loop.log` |
+| B1–B3 — отрицательный контроль руками | `evidence/2026-09-13-checkpoint-6-B-bindframe.log` |
 | B4–B6 — обратный контроль, прибор передачи | `evidence/2026-09-13-checkpoint-6-B2-bindship.log` — **выполнен 2026-09-13, 23:15–23:17** |
 
 ---
