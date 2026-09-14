@@ -154,7 +154,9 @@ ASFTestShip::ASFTestShip()
 	// "so that collisions and hits work normally", and the shape component's default profile,
 	// OverlapAllDynamic, left two hulls passing through each other: the first combat run flew a
 	// coasting pirate straight through the player's cabin, where its interior volume claimed the
-	// man and the carry lost him. A hull that cannot enter a cabin cannot bring a volume into one.
+	// man and the carry lost him. Blocking keeps a hull out of the cabin's middle, not off its walls:
+	// contact still presses one hull some centimetres into the other (see the CCD note below), and
+	// the man is protected by the handover guard, not by this line.
 	//
 	// Only ECC_WorldDynamic, which is what a hull is. Every other physics-colliding thing in these
 	// rigs answers something else or has no body: the station's panels are query-only and it has
