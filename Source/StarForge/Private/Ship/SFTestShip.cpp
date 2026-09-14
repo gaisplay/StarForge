@@ -163,6 +163,26 @@ ASFTestShip::ASFTestShip()
 	// it did not meet before, docked or free.
 	Hull->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 
+	// Blocking is not enough on its own: the contact has to be found before the boxes overlap, and
+	// the margin is twenty centimetres. The box is +/-400, a panel's outer face is at +/-410 and the
+	// cabin's volume ends at +/-390. Two hulls face to face have centres 800 apart, which puts the
+	// other ship's outer wall at 800 - 410 = 390 from this centre -- exactly on this cabin's volume
+	// edge -- and its interior volume's edge at 800 - 390 = 410. A man against this wall has his
+	// capsule's edge at 390, so every centimetre of interpenetration past 410 - 390 = 20 brings the
+	// other ship's volume onto him, and it binds whoever it touches. The box's extent is not the
+	// place to buy margin: it is what Chaos derives the inertia from, and 533333 kg m^2 is a
+	// recorded figure.
+	//
+	// Continuous detection is on, and on its own it does not hold that margin -- measured, not
+	// assumed. Chaos sweeps a step only when the body moves more than p.Chaos.CCD.
+	// EnableThresholdBoundsScale (0.4) of its shape's extent in that step, 320 cm for this 800 cm box,
+	// and a sweep that runs rewinds only to AllowedDepthBoundsScale (0.2) of it, 160 cm
+	// (Chaos CCDUtilities.cpp 36-41, FPBDCollisionConstraint::InitCCDThreshold). At the combat rig's
+	// 81 m/s a 60 fps step is 135 cm, so no sweep runs: the duel's contact measured 732.6 cm centre to
+	// centre, 67 cm of interpenetration. Those thresholds are global physics settings, and the flag
+	// below is what any fix through them needs.
+	Hull->BodyInstance.bUseCCD = true;
+
 	Hull->SetSimulatePhysics(true);
 
 	// A ship in space does not fall, and the rig has no other use for gravity.
