@@ -4,7 +4,6 @@
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
-#include "Kismet/GameplayStatics.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
 #include "Ship/SFDamageableComponent.h"
@@ -62,6 +61,34 @@ namespace
 		 */
 		constexpr float ShieldFirstColumnX = 120.0f;
 		constexpr float ShieldColumnWidth = 100.0f;
+	}
+
+	/**
+	 * The player's ship: the hull the man is bound to, or failing that the hull crewed by the player
+	 * -- he may be standing on the station, and his ship is still the one the readout is about.
+	 *
+	 * Never "the first ASFTestShip in the level". With a pirate in it, iteration order would decide
+	 * whose flight numbers, shields and turret this readout prints under the player's name, and the
+	 * order happened to be right on the combat rig only because the player's ship spawns first.
+	 */
+	const ASFTestShip* FindPlayersShip(const UWorld* World, const APawn* Pawn)
+	{
+		const ASFCharacter* Occupant = Cast<ASFCharacter>(Pawn);
+		const USFShipboardMovementComponent* Movement = Occupant ? Occupant->GetShipboardMovement() : nullptr;
+		const USFShipFrameComponent* BoundFrame = Movement ? Movement->GetShipFrame() : nullptr;
+		if (const ASFTestShip* Bound = BoundFrame ? Cast<ASFTestShip>(BoundFrame->GetOwner()) : nullptr)
+		{
+			return Bound;
+		}
+
+		for (TActorIterator<ASFTestShip> It(World); It; ++It)
+		{
+			if (It->GetCrewing() == ESFShipCrewing::PlayerShip)
+			{
+				return *It;
+			}
+		}
+		return nullptr;
 	}
 }
 
@@ -293,13 +320,12 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	// The dock line is about the ship, not about whichever carrier he happens to be
 	// standing in: a man on the station still needs to see whether his ship is attached
 	// to it. Found the same way the flight block finds it, for the same reason.
-	const ASFTestShip* DockShip = Cast<ASFTestShip>(
-		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+	const ASFTestShip* DockShip = FindPlayersShip(GetWorld(), GetOwningPawn());
 	const USFDockingComponent* Docking = DockShip ? DockShip->GetDocking() : nullptr;
 
 	if (!Docking)
 	{
-		DrawLine(TEXT("dock    -- no ship with a docking component in the level"), Y, FLinearColor::Red);
+		DrawLine(TEXT("dock    -- no player's ship with a docking component in the level"), Y, FLinearColor::Red);
 	}
 	else if (!Docking->HasStation())
 	{
@@ -355,7 +381,7 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	const USFDamageableComponent* Damageable = DockShip ? DockShip->GetDamageable() : nullptr;
 	if (!Damageable)
 	{
-		DrawLine(TEXT("shields -- no ship with a damageable component in the level"), Y, FLinearColor::Red);
+		DrawLine(TEXT("shields -- no player's ship with a damageable component in the level"), Y, FLinearColor::Red);
 	}
 	else if (!Damageable->IsReady())
 	{
@@ -440,9 +466,8 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	DrawFlightBlock(Y);
 	DrawGunnerBlock(Y);
 
-	// The other ship -- on the combat rig, the pirate. It is the ship that is not the man's own:
-	// the one whose frame carries him, or failing that the one the dock line reports.
-	const ASFTestShip* OwnShip = Ship ? Ship : DockShip;
+	// The other ship -- on the combat rig, the pirate. It is the ship that is not the player's.
+	const ASFTestShip* OwnShip = DockShip;
 	const ASFTestShip* Enemy = nullptr;
 	for (TActorIterator<ASFTestShip> It(GetWorld()); It; ++It)
 	{
@@ -500,12 +525,11 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 
 void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 {
-	const ASFTestShip* Ship = Cast<ASFTestShip>(
-		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+	const ASFTestShip* Ship = FindPlayersShip(GetWorld(), GetOwningPawn());
 
 	if (!Ship || !Ship->GetThrusters())
 	{
-		DrawLine(TEXT("flight: no ship with a thruster array in the level"), Y, FLinearColor::Red);
+		DrawLine(TEXT("flight: no player's ship with a thruster array in the level"), Y, FLinearColor::Red);
 		return;
 	}
 
@@ -648,8 +672,7 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 
 void ASFFrameDriftHUD::DrawGunnerBlock(double& Y)
 {
-	const ASFTestShip* Ship = Cast<ASFTestShip>(
-		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+	const ASFTestShip* Ship = FindPlayersShip(GetWorld(), GetOwningPawn());
 	const USFGunnerStationComponent* Gunner = Ship ? Ship->GetGunnerStation() : nullptr;
 	const USFTurretComponent* Turret = Gunner ? Gunner->GetTurret() : nullptr;
 
