@@ -28,6 +28,14 @@ class USFThrusterArrayComponent;
  * at which it asks for full stick on a turn -- which with spec 7's 120 deg/s is a time constant
  * of 30/120 = 0.25 s. Not one of them is a frame count.
  *
+ * A limitation, recorded rather than fixed: the approach asks for an ABSOLUTE speed along the hull,
+ * sqrt(2 a e) for e metres past the hold, not for a closing speed. Against a target moving away at
+ * v it settles where the speed it asks for equals v, which is e = v^2 / (2 a): it trails at
+ * Hold + v^2 / (2 a). At spec 7's 200 m/s and a = 8 m/s^2 that is 40000 / 16 = 2500 m past the
+ * hold, a trail of 2800 m -- and 200 m/s is also this ship's own ceiling, reached only at that same
+ * 2500 m, so it never closes. Against a target holding still, as on the combat rig, it holds the
+ * hold distance.
+ *
  * It holds a seat only on a hull that does not answer sf.* (see ESFShipCrewing). On the player's
  * ship it is inert: the console operator or a person flies that one.
  */
@@ -57,11 +65,17 @@ public:
 	 * intact array's 16, so a ship that has lost a fore-and-aft thruster (12) still stops inside
 	 * the distance the law assumes. The derivation is where the law is (ProvideFlightIntent).
 	 */
-	UPROPERTY(EditAnywhere, Category = "StarForge|Pursuit")
+	UPROPERTY(EditAnywhere, Category = "StarForge|Pursuit", meta = (ClampMin = "0.01"))
 	double BrakingDecelMetresPerSecSq = 8.0;
 
-	/** Bearing at which a turn asks for full stick, in RADIANS. */
-	UPROPERTY(EditAnywhere, Category = "StarForge|Pursuit")
+	/**
+	 * Bearing at which a turn asks for full stick, in RADIANS.
+	 *
+	 * Both minimums are small positive figures rather than zero because ClampMin is inclusive, and
+	 * both quantities are divisors or under a root. ProvideFlightIntent refuses a value that gets
+	 * past the editor anyway.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Pursuit", meta = (ClampMin = "0.001"))
 	double AlignAngleRad = UE_DOUBLE_PI / 6.0;
 
 	/** What to chase. Its actor location is the point: on ASFTestShip, the centre of the hull. */
@@ -77,8 +91,8 @@ public:
 	 */
 	bool MeasureTarget(double& OutDistanceMetres, StarForge::Turret::FTurretAim& OutBearing) const;
 
-	/** True from the ask on which sf.PirateAI read 0 until the ask on which it reads anything else. */
-	bool IsDeclining() const { return bDeclining; }
+	/** Whether sf.PirateAI reads 0 now, read live -- true even while the post is not asking. */
+	bool IsDeclining() const;
 
 	/**
 	 * Whether this instance answers the unnamed sf.* family. See ESFShipCrewing.
@@ -89,7 +103,23 @@ public:
 	void SetConsoleControlled(bool bIn) { bConsoleControlled = bIn; }
 
 private:
+	/** Why the operator declined the post other than by sf.PirateAI; each is said once. */
+	enum class ERefusal : uint8
+	{
+		NoThrusterArray,
+		NoShipData,
+		BadMaxSpeed,
+		BadAlignAngle,
+		BadBrakingDecel
+	};
+
+	/** Logs Why, naming the ship, the first time Cause stops the operator and never again. */
+	void RefuseOnce(ERefusal Cause, const TCHAR* Why);
+
 	bool bConsoleControlled = true;
+
+	/** One bit per ERefusal already reported. */
+	uint8 ReportedRefusals = 0;
 
 	UPROPERTY()
 	TObjectPtr<USFShipFrameComponent> Frame;
@@ -101,5 +131,5 @@ private:
 	TWeakObjectPtr<AActor> TargetActor;
 
 	/** Last reading of sf.PirateAI as seen by an ask, so a turn of the switch is said once. */
-	bool bDeclining = false;
+	bool bDeclinedLastAsk = false;
 };

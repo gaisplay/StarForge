@@ -88,19 +88,41 @@ bool USFPursuitOperatorComponent::MeasureTarget(double& OutDistanceMetres, StarF
 	return true;
 }
 
+bool USFPursuitOperatorComponent::IsDeclining() const
+{
+	// Read live, not remembered from the last ask. The post stops asking whenever it stands aside --
+	// a powered-down or locked hull -- and a remembered answer would then go on describing a switch
+	// that has since been turned.
+	return CVarPirateAI.GetValueOnGameThread() == 0;
+}
+
+void USFPursuitOperatorComponent::RefuseOnce(ERefusal Cause, const TCHAR* Why)
+{
+	const uint8 Bit = static_cast<uint8>(1 << static_cast<uint8>(Cause));
+	if (ReportedRefusals & Bit)
+	{
+		return;
+	}
+	ReportedRefusals |= Bit;
+
+	// Loud, because a pursuit operator that quietly declines looks exactly like a pirate that is
+	// powered down or locked, and those are states of the ship where this is a fault of its setup.
+	UE_LOG(LogStarForge, Error, TEXT("Pursuit: [%s] declines the pilot's post: %s"), *GetNameSafe(GetOwner()), Why);
+}
+
 bool USFPursuitOperatorComponent::ProvideFlightIntent(StarForge::FFlightIntent& Out)
 {
-	const bool bDeclineNow = CVarPirateAI.GetValueOnGameThread() == 0;
-	if (bDeclineNow != bDeclining)
+	const bool bDeclineNow = IsDeclining();
+	if (bDeclineNow != bDeclinedLastAsk)
 	{
-		bDeclining = bDeclineNow;
+		bDeclinedLastAsk = bDeclineNow;
 		UE_LOG(LogStarForge, Display, TEXT("Pursuit: [%s] %s"), *GetNameSafe(GetOwner()),
-			bDeclining
+			bDeclinedLastAsk
 				? TEXT("sf.PirateAI 0 -- the pursuit operator declines the pilot's post; nobody flies this ship and it coasts.")
 				: TEXT("sf.PirateAI 1 -- the pursuit operator flies the pilot's post again."));
 	}
 
-	if (bDeclining)
+	if (bDeclinedLastAsk)
 	{
 		// Declines rather than returning a zeroed intent. A zeroed FFlightIntent is hands
 		// resting on the stick, and with assist on the ship would brake to a stop believing
@@ -120,13 +142,33 @@ bool USFPursuitOperatorComponent::ProvideFlightIntent(StarForge::FFlightIntent& 
 	}
 
 	// The stick is a speed with assist on, and it is scaled by the ship's own limit, not a literal.
-	if (!Thrusters || !Thrusters->ShipData)
+	if (!Thrusters)
 	{
+		RefuseOnce(ERefusal::NoThrusterArray, TEXT("it found no thruster array, so it has no speed limit to fly to."));
+		return false;
+	}
+	if (!Thrusters->ShipData)
+	{
+		RefuseOnce(ERefusal::NoShipData, TEXT("the thruster array has no ship data asset, so there is no speed limit to fly to."));
 		return false;
 	}
 	const double MaxSpeedMetresPerSec = Thrusters->ShipData->BuildLimits().MaxSpeed;
-	if (!(MaxSpeedMetresPerSec > 0.0))
+	if (!(MaxSpeedMetresPerSec > 0.0) || !FMath::IsFinite(MaxSpeedMetresPerSec))
 	{
+		RefuseOnce(ERefusal::BadMaxSpeed, TEXT("the ship data's MaxSpeed is not a finite positive number, and the stick is a fraction of it."));
+		return false;
+	}
+
+	// Both are divisors or under a root below. ClampMin keeps an editor from typing zero; this keeps
+	// anything else from getting one through.
+	if (!(AlignAngleRad > 0.0) || !FMath::IsFinite(AlignAngleRad))
+	{
+		RefuseOnce(ERefusal::BadAlignAngle, TEXT("AlignAngleRad is not a finite positive angle, and the turn is divided by it."));
+		return false;
+	}
+	if (!(BrakingDecelMetresPerSecSq > 0.0) || !FMath::IsFinite(BrakingDecelMetresPerSecSq))
+	{
+		RefuseOnce(ERefusal::BadBrakingDecel, TEXT("BrakingDecelMetresPerSecSq is not a finite positive deceleration, and the approach is shaped by it."));
 		return false;
 	}
 
@@ -148,13 +190,25 @@ bool USFPursuitOperatorComponent::ProvideFlightIntent(StarForge::FFlightIntent& 
 	// continuous at the edge, and finite at the hold.
 	//
 	// Every threshold is metres or seconds: 300 m, 50 m and 8 m/s^2.
+	//
+	// Scaled by how much of the hull's +X points at the target: max(0, cos of the off-axis angle),
+	// which from the bearing is cos(pitch) cos(yaw). The stick moves the hull along its own X, and
+	// only that share of the motion changes the distance. With the target behind, cos is negative
+	// and forward thrust opens the gap it was asked to close -- the pirate used to accelerate away
+	// for the whole of a turn -- so it gets nothing, and with assist on the ship holds still along
+	// X while the angular stick brings the nose round. Backing off (e < 0) keeps the same rule for
+	// the same reason with the sign turned over: reverse moves the hull along -X, which opens the
+	// gap only while the target is ahead; with it behind, reversing would close the gap it is meant
+	// to open, and zero is again the only demand whose sign cannot be wrong.
+	//
 	// Every other axis is zero: no roll and no strafe, which with assist on holds both still.
 	Out = StarForge::FFlightIntent();
 	const double PastHoldMetres = DistanceMetres - HoldDistanceMetres;
 	const double WantMetresPerSec = FMath::Abs(PastHoldMetres) >= DeadBandMetres
 		? FMath::Sign(PastHoldMetres) * FMath::Sqrt(2.0 * BrakingDecelMetresPerSecSq * FMath::Abs(PastHoldMetres))
 		: (PastHoldMetres / DeadBandMetres) * FMath::Sqrt(2.0 * BrakingDecelMetresPerSecSq * DeadBandMetres);
-	Out.LinearAxis.X = FMath::Clamp(WantMetresPerSec / MaxSpeedMetresPerSec, -1.0, 1.0);
+	const double OnAxis = FMath::Max(0.0, FMath::Cos(Bearing.PitchRad) * FMath::Cos(Bearing.YawRad));
+	Out.LinearAxis.X = FMath::Clamp(WantMetresPerSec / MaxSpeedMetresPerSec, -1.0, 1.0) * OnAxis;
 
 	// Angular: proportional on the bearing, saturating at AlignAngleRad. With assist on, the
 	// stick asks for a RATE, so this is a first-order approach with a time constant of
