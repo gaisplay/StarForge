@@ -62,10 +62,15 @@
 ничего. Попасть в днище или в борт у угла можно, только если пират не поворачивается. Для этого
 и нужен `sf.PirateAI 0` в запуске B4.
 
-**Кого слышат переменные.** Пират не слышит семейство `sf.*`, кроме двух названных исключений.
-`sf.Shields` действует на **оба** корпуса. `sf.PirateAI` действует **только** на пирата.
-`sf.Fire`, `sf.AimAt`, `sf.AutomationOperator`, `sf.ConsoleOperator`, `sf.Dock` и команда
-`sf.KillThruster` адресованы только кораблю игрока.
+**Кого слышат переменные.** Переменные делятся на три группы.
+
+- **Только корабль игрока.** Пират не отвечает на команды кораблю игрока: `sf.Fire`, `sf.AimAt`,
+  `sf.AutomationOperator`, `sf.ConsoleOperator`, `sf.Dock`, `sf.ShipProfile` и команду
+  `sf.KillThruster`.
+- **Названные исключения.** `sf.Shields` действует на **оба** корпуса. `sf.PirateAI` действует
+  **только** на пирата.
+- **Общие приборы.** `sf.FlightLog`, `sf.WeaponDebug` и `sf.ProjectileSweep` пишут журнал или
+  меняют свип у обоих кораблей сразу.
 
 ---
 
@@ -162,10 +167,24 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 & "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "F:\UEProject\StarForge\StarForge.uproject" /Game/Maps/L_Combat -game -windowed -ResX=1600 -ResY=900
 ```
 
-Эта форма без `-ExecCmds` и `-ini`: из PowerShell ключи с кавычками и скобками в этом проекте не
-проверялись. Запускам A1 и B3 ключи нужны **в командной строке**, консоль их не заменит. A1
-воспроизводит дуэль, которая начинается с нулевого кадра. B3 читает `sf.Pirate` раньше, чем
-исполнится хоть одна команда. Эти два запуска делаются из Git Bash.
+С ключами в PowerShell после пути к программе ставится `--%`. Он передаёт остаток строки движку
+как есть, с кавычками и квадратными скобками, в том виде, в каком его написали бы в cmd. Из
+PowerShell такие строки в этом проекте не запускались. Дошли ли ключи, проверяет первая строка
+ворот каждого запуска.
+
+**Четырём запускам ключи нужны в командной строке, консоль их не заменит.** Пока открываешь
+консоль и печатаешь, проходят секунды, а стенд живёт с нулевого кадра.
+
+- **A1** воспроизводит дуэль. С `sf.Fire 1`, набранным на пару секунд позже, корабль игрока
+  обесточится раньше пирата, пират затормозит на 300 м, и удара не будет. `sf.WeaponDebug 1`
+  нужен, чтобы стало видно, есть ли выстрелы после обесточивания.
+- **B2 и B4** требуют `sf.PirateAI 0` с первого кадра. Преследование разгоняет пирата сразу:
+  1011.2 м на спавне и 980.6 м уже к 2.02 с (`evidence/task7-r2-combat-60.log`). Отказавшийся
+  оператор отпускает корабль по инерции. В B2 расстояние продолжит меняться, и стоп-ворота дадут
+  ложную находку. В B4 уплывут позиции C4 и C5.
+- **B3** читает `sf.Pirate` в `StartPlay`, раньше, чем исполнится хоть одна команда.
+
+У каждого из четырёх в своём разделе дана команда для Git Bash и для PowerShell.
 
 **Headless-запуски из Git Bash идут с `< /dev/null` в конце.** Без него два запуска на 400 fps
 вышли на старте с кодом 130: `LogCore: Engine exit requested (reason: ConsoleCtrl RequestExit)`, и
@@ -353,12 +372,29 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/<дата прого
 Как выглядит удар корпусов? Как выглядит сбивание с ног и отскок?
 
 ```bash
-MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Combat -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1, sf.Fire 1"
+MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Combat -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1, sf.WeaponDebug 1, sf.Fire 1"
+```
+
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" --% "F:\UEProject\StarForge\StarForge.uproject" /Game/Maps/L_Combat -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1, sf.WeaponDebug 1, sf.Fire 1"
 ```
 
 `sf.Fire 1` стоит в командной строке, а не набирается руками. С опозданием на пару секунд корабль
 игрока обесточится раньше пирата, пират не пойдёт по инерции, а затормозит на 300 м, и удара не
-будет.
+будет. `sf.WeaponDebug 1` там же: строки `Weapon: … shot` пишутся только при нём
+(`SFWeaponComponent.cpp`), и без них «ни одного выстрела после обесточивания» нечем проверить.
+
+**В строках событий игрового времени нет.** Его нет в `Shield face … is down`,
+`… is powered down` и `Hit on …`. Headless-времена в таблице ниже выведены из номера кадра при
+фиксированной частоте. В окне частота плавает, и номер кадра во время не переводится. Время
+события записывается так:
+
+- `t` ближайшей **предшествующей** строки `Weapon: [...] shot N at t N s`. При
+  `sf.WeaponDebug 1` они идут каждые 0.2 с от каждого стреляющего корабля, отсюда и точность;
+- где выстрелов уже нет, `t` ближайшей строки `Pursuit: [Pirate] t N s`, раз в секунду;
+- номер кадра из префикса `[NNN]` записать рядом.
+
+Кто был первым, говорит порядок строк в журнале.
 
 **A1.1 Старт.** Проверить стартовые строки. На панели записать дословно строки `frame` и `combat`.
 В headless-журналах боевого стенда строки `Frame handover` нет ни одной: привязка при появлении
@@ -371,7 +407,7 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 |---|---|---|
 | `Shield face +X is down on [Ship].` и `on [Pirate].` | оба 2.967 с | корабль 2.950, пират 2.942 с |
 | `[Ship] is powered down …` и `[Pirate] is powered down …` | оба 6.700 с, один кадр | оба 6.6725 с, один кадр |
-| выстрелов после обесточивания | 0 / 0 | 0 / 0 |
+| строк `Weapon: [Ship] shot` и `Weapon: [Pirate] shot` **после** своей строки `… is powered down` (засчитывается, только если **до** неё у того же корабля есть хотя бы одна) | 0 / 0 | 0 / 0 |
 | `Footing LOST at t=…`: пират по инерции бьёт корпус игрока | 14.93 с | 14.88 с |
 | скорость пирата до → после | 80.9 → 28.9 м/с | 81.2 → 29.5 м/с |
 | скорость корабля игрока до → после | 0.0 → 52.0 м/с | 0.0 → 51.7 м/с |
@@ -452,7 +488,9 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 одинаковых корпуса с одинаковыми пушками — зеркало: при стоящих кораблях обесточивание приходит
 в одном кадре (A1).
 
-**A2.3 Записать по журналу**, кто обесточился первым и на каком `t`. Записать грани во всех
+**A2.3 Записать по журналу**, кто обесточился первым: это порядок строк `… is powered down`. Время
+взять по ближайшей строке `Pursuit: [Pirate] t N s`: в самой строке события его нет, а
+`sf.WeaponDebug` в этом запуске не включён. Записать грани во всех
 строках `Hit on [Pirate]` и `Hit on [Ship]`. Уничтоженные двигатели, если были, записать строками
 `Thruster N on [...] destroyed …`.
 
@@ -464,7 +502,11 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 
 **A2.5 Если пират обесточен.** Он идёт по инерции со своей скоростью, строка `combat` оранжевая,
 `flown by pursuit (standing down)`. Идёт он на тебя, если ты перед его носом: до обесточивания он
-держал нос на тебе. Сидя ты пристёгнут, и удар корпусов тебя не уронит.
+держал нос на тебе.
+
+**Ожидание, которое прогон должен подтвердить:** сидя ты пристёгнут, и удар корпусов тебя не
+уронит. Так следует из того, что сбивание с ног действует только на стоящего. Удар по сидящему
+не снимался ни headless, ни руками. Если удар был, записать в бланк, пришла ли `Footing LOST`.
 
 **A2.6 Если обесточен ты.** `hull  0.0 / 2000.0   powered down` оранжевым, `flown by player
 (standing down)`, `gunned by automation (standing down)`, `turret … UNCOMMANDED`. Пират продолжает
@@ -484,8 +526,9 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 стоп-ворота. Точка 6 нашла два контроля, которые выглядели как «ничего не нашли». Один нельзя было
 выполнить двумя руками. Другой можно было «выполнить», не выходя из каюты.
 
-Контроли C1–C3 — стартовые настройки, их ставят ключами в командной строке, и рук они не требуют.
-C4 и C5 требуют полёта и делаются в одном запуске B4. C6 гоняется headless.
+Контроли C1–C3 — стартовые настройки. Их ставят ключами в командной строке, рук они не требуют.
+C4 и C5 требуют полёта и делаются в одном запуске B4, но `sf.PirateAI 0` тоже ставится ключом, с
+первого кадра. C6 гоняется headless.
 
 ### B1: C1, щиты выключены (~1 минута)
 
@@ -516,6 +559,15 @@ Hit on [Pirate] +X face: shields OFF (sf.Shields 0), 100.0 straight to hull.
 ```bash
 MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Combat -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1, sf.PirateAI 0"
 ```
+
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" --% "F:\UEProject\StarForge\StarForge.uproject" /Game/Maps/L_Combat -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1, sf.PirateAI 0"
+```
+
+**`sf.PirateAI 0` — только в командной строке, не в консоли.** Набранный через пару секунд, он
+застанет пирата уже в движении: 980.6 м к 2.02 с. Отказавшийся оператор отпустит корабль по
+инерции, и расстояние будет меняться без всякого дефекта. Первая строка ворот пишется в кадре 1,
+если ключ дошёл. Если её нет в первой секунде журнала, контроль не выполнен.
 
 Ничего не трогать 25 секунд.
 
@@ -548,6 +600,10 @@ Pursuit: [Pirate] t N s | target Ship at 1011.2 m, bearing yaw 0.0 pitch -8.5 de
 MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Combat -game -windowed -ResX=1600 -ResY=900 "-ini:Engine:[ConsoleVariables]:sf.Pirate=0" -ExecCmds="sf.FlightLog 1, sf.WeaponDebug 1, sf.Fire 1"
 ```
 
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" --% "F:\UEProject\StarForge\StarForge.uproject" /Game/Maps/L_Combat -game -windowed -ResX=1600 -ResY=900 "-ini:Engine:[ConsoleVariables]:sf.Pirate=0" -ExecCmds="sf.FlightLog 1, sf.WeaponDebug 1, sf.Fire 1"
+```
+
 Стоять 10 секунд. Первые снаряды истекают через 5 с.
 
 **Стоп-ворота, все три.** Строка стенда уровнем `Warning`:
@@ -568,9 +624,9 @@ Weapon: [Ship] shot 1 at t 0.033 s from muzzle (100.000 0.000 280.000) cm, veloc
 Projectile: [Ship] shot 1 expired after 5.00 s, 5000.0 m travelled.
 ```
 
-Строки взяты из `evidence/task7-r1-pirate0-60.log`. Там 75 выстрелов за 15 с, все `NO TARGET`,
-51 истёк, 0 попаданий. Прогон сделан до правки строки стенда, поэтому в нём стояло `is crewed;`
-без `and holds fire until sf.Fire 1`. Строка выше — нынешняя форма из кода.
+Строки взяты из `evidence/task7-r1-pirate0-60.log`, строка стенда там та же. Там 75 выстрелов
+за 15 с, все `NO TARGET`, 51 истёк, 0 попаданий. В раннем `evidence/task7-pirate0-60.log`, до
+правки `700cd8c`, строка стенда читалась `is crewed;`, без `and holds fire until sf.Fire 1`.
 
 **Если выстрелов нет,** оружие всё-таки спрашивает наводку. Это дефект, ради которого контроль и
 написан. **Если нет строки `Combat rig: … withheld by sf.Pirate 0`,** а в строке `combat` на панели
@@ -656,6 +712,16 @@ headless. Его оси остаются осями мира, развёрнут
 ```bash
 MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Combat -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1, sf.PirateAI 0, sf.ConsoleOperator 0"
 ```
+
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" --% "F:\UEProject\StarForge\StarForge.uproject" /Game/Maps/L_Combat -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1, sf.PirateAI 0, sf.ConsoleOperator 0"
+```
+
+`sf.PirateAI 0` только в командной строке, по той же причине, что в B2. Пират, отпущенный в
+движении, уплывает, и позиции C4 и C5 уходят вместе с ним. Замена пеленга панели на пеленг пирата
+держится на том, что пират стоит и не поворачивается. Проверка: строка
+`Pursuit: [Pirate] sf.PirateAI 0 -- …` в кадре 1 и `combat [Pirate] 1011.2 m` на панели в первые
+секунды.
 
 **B4.1 Сразу сесть: `E`.** На панели `combat [Pirate] 1011.2 m   flown by pursuit (standing down)`.
 Пират уже стреляет.

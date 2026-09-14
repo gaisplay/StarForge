@@ -30,6 +30,10 @@
 Прочерков здесь нет: это измерения, а не ожидания. Ниже `…/evidence/` означает
 `.superpowers/sdd/2026-09-14-combat-and-the-pirate/evidence/`.
 
+Каждая строка снята на бинарнике своей задачи или своего круга правок. Финальный HEAD целиком не
+перепрогонялся: итоговую проверку на нём проводит контроллер при закрытии этапа. Строки, которые
+легко принять за снятые на финальном коде, помечены отдельно.
+
 | Проверка | 60 fps | 400 fps |
 |---|---|---|
 | Головные тесты | **83 / 0**, `TEST COMPLETE. EXIT CODE: 0` (`…/evidence/task7-r4-tests.log`) | Без мира (`-nullrhi`, `Automation RunTests`): частоты кадров у этого прогона нет |
@@ -49,15 +53,15 @@
 | Преследование: пеленг по тангажу < 2° | С **2.02 с**: −8.5 на спавне, +2.2 → −0.5 → +0.1 | С **2.01 с**: +2.4 → −0.6 → +0.2 |
 | Грань садится за 10 попаданий | 10-е попадание → `face 0.0/1000.0`, `Shield face +X is down on [Ship].` на **2.967 с** (`…/evidence/task7-r2-combat-60.log`) | На **2.950 с** (`…/evidence/task7-r2-combat-400.log`) |
 | Обесточивание | `[Ship] is powered down …` на **6.700 с**; в дуэли оба в одном кадре на 6.700 с (`…/evidence/task7-r4-duel-60.log`). Далее `Combat: … shields +X 0 -X 0 +Y 0 -Y 0 +Z 0 -Z 0, hull 0.0/2000.0, … powered down.` и `Turret: [Ship] gunned by automation (standing down) \| … \| UNCOMMANDED`. Выстрелов после: **0 / 0** | **6.6725 с**; в дуэли оба на 6.6725 с (`…/evidence/task7-r4-duel-400.log`); выстрелов после **0 / 0** |
-| Столкновение корпусов в дуэли | Контакт `Footing LOST at t=14.93 s`. Пират 80.9 → 28.9 м/с, корабль 0.0 → 52.0 м/с. `skipped carries 0` в 8 из 8 строк, `Frame handover` 0, `Carry NOT RUNNING` 0, сбит с ног на **0.5 с** (`…/evidence/task7-r4-duel-60.log`). Минимум между центрами 844.7 см при первом касании на 854.9 (`…/evidence/task7-r3-diag-contact-60.log`) | `t=14.88 s`. Пират 81.2 → 29.5, корабль 0.0 → 51.7 м/с. Пропусков 0, передач 0, сбит на **0.5 с** (`…/evidence/task7-r4-duel-400.log`). Минимум 817.6 см (`…/evidence/task7-r3-diag-contact-400.log`) |
+| Столкновение корпусов в дуэли | Контакт `Footing LOST at t=14.93 s`. Пират 80.9 → 28.9 м/с, корабль 0.0 → 52.0 м/с. `skipped carries 0` в 8 из 8 строк, `Frame handover` 0, `Carry NOT RUNNING` 0, сбит с ног на **0.5 с** (`…/evidence/task7-r4-duel-60.log`). Замер: минимум между центрами **844.721 см** (`…/evidence/task7-r3-diag-contact-60.log`). Расчёт: первое касание на 854.9 см, по разделяющим осям при подходе пирата под 8.53°, отчёт задачи 7, F2-1. Перекрытие около 10 см — разность расчёта и замера | `t=14.88 s`. Пират 81.2 → 29.5, корабль 0.0 → 51.7 м/с. Пропусков 0, передач 0, сбит на **0.5 с** (`…/evidence/task7-r4-duel-400.log`). Замер: минимум **817.576 см** (`…/evidence/task7-r3-diag-contact-400.log`); против расчётных 854.9 перекрытие около 37 см |
 | Условие передачи 1.0 м/с: отказ | `Frame handover REFUSED: Ship -> Pirate, … 53.28 m/s …`. Человек у стены удара, `Frame handover` нет, пропусков 0 (`…/evidence/task7-r4-diag-wall-floor-60.log`) | `… 81.19 m/s …`, передачи нет (`…/evidence/task7-r4-diag-board-400.log`). Место снаружи стены: внутри кабины объём пирата не дотягивается ни в одной точке (`…/evidence/task7-r4-diag-reach-400.log`) |
 | Условие передачи: стыкованная пара | `relative at man 0.000000 m/s` во всех строках (`…/evidence/task7-r4-diag-docked-60.log`) | `0.000000 m/s` (`…/evidence/task7-r4-diag-docked-400.log`) |
-| `sf.PirateAI 0` | **1011.2 м** в 40 строках из 40, скорость пирата `0.0`, пират стреляет: 36 выстрелов до своего обесточивания на 7.033 с (`…/evidence/task7-r1-pirateai0-60.log`; на HEAD `task7-r2-pirateai0-60.log`, 0 различий) | **1011.2 м** в 39 строках из 39, 36 выстрелов до 7.010 с (`…/evidence/task7-r1-pirateai0-400.log`) |
+| `sf.PirateAI 0` | **1011.2 м** в 40 строках из 40, скорость пирата `0.0`, пират стреляет: 36 выстрелов до своего обесточивания на 7.033 с (`…/evidence/task7-r1-pirateai0-60.log`; повтор `task7-r2-pirateai0-60.log`, 0 различий). **Оба сняты до финального кода**: до `bd9c87a`, `513c17d` и `fa35d20` | **1011.2 м** в 39 строках из 39, 36 выстрелов до 7.010 с (`…/evidence/task7-r1-pirateai0-400.log`) |
 | `sf.Pirate 0` | **75** выстрелов за 15 с, все `turret NO TARGET`; 51 `expired after 5.00 s, 5000.0 m travelled`; 0 попаданий, 0 `Error` (`…/evidence/task7-r1-pirate0-60.log`) | **Не измерено**: прогон сделан только на 60 fps |
 | Увод стоя в бою (пират стреляет, корабль игрока стоит) | `30.0 s settled, drift now 0.000 cm … skipped carries 0 … footing intact` (`…/evidence/task7-r2-combat-60.log`) | То же (`…/evidence/task7-r2-combat-400.log`) |
 | R11: попадание в панель `ECC_WorldDynamic` | 198 попаданий, все `component WallXPos (ECC_WorldDynamic)` (`…/evidence/task7-r1-combat-60.log`) | 198, все `WallXPos (ECC_WorldDynamic)` (`…/evidence/task7-r1-combat-400.log`) |
 | Регрессия: спайк вперёд | 111 = 111 строк `LogStarForge`, **IDENTICAL**; `0.000 cm`, `200.0 m/s` (`…/evidence/task7-r4-spike-fwd-60.log`) | 107 = 107, **IDENTICAL** (`…/evidence/task7-r3-spike-fwd-400.log`) |
-| Регрессия: крен на спайке | Строки полёта, увода и готовности массива 28 = 28, идентичны; `ang roll/pitch/yaw (180.0 0.0 0.0)` (`…/evidence/task7-r2-spike-roll-60.log`) | 108 = 108, **IDENTICAL**; `(180.0 0.0 0.0)`, `inertia (533333, 533333, 533333)` (`…/evidence/task7-r3-spike-roll-400.log`) |
+| Регрессия: крен на спайке | Строки полёта, увода и готовности массива 28 = 28, идентичны; `ang roll/pitch/yaw (180.0 0.0 0.0)` (`…/evidence/task7-r2-spike-roll-60.log`). **Снято до финального кода**: до `bd9c87a`, `513c17d` и `fa35d20` | 108 = 108, **IDENTICAL**; `(180.0 0.0 0.0)`, `inertia (533333, 533333, 533333)` (`…/evidence/task7-r3-spike-roll-400.log`) |
 | Регрессия: петля | 300 = 300, **IDENTICAL**; `60.0 s settled, drift now 0.000 cm`; `Frame handover: Station -> Ship, first carry moved him 0.000 cm over 5 frame(s)`; `REFUSED` 0 (`…/evidence/task7-r4-loop-60.log`) | 296 = 296, **IDENTICAL**; `over 27 frame(s)`; `REFUSED` 0 (`…/evidence/task7-r4-loop-400.log`) |
 
 **Рыскание после потери одного двигателя — находка о §5 и о метрике решателя, а не
@@ -120,10 +124,11 @@
 | A1.1 стартовые строки, набор, порядок любой | Две `Set CVar` CCD, две `Weapon: … muzzle`, `Console operator on [Pirate] stands down`, `Station 'pilot' on [Pirate] taken by pursuit.`, `Station 'gunner' on [Pirate] taken by automation.`, `Docking: [Ship] no station in this level, …`, `Combat rig: …` на `Display` | |
 | A1.1 строка `frame` на панели | Записать дословно. В headless-журналах боевого стенда `Frame handover` нет ни одной | |
 | A1.1 строка `combat` на панели | `combat  [Pirate] 1011.2 m   flown by pursuit   hull 2000.0 / 2000.0   faces down 0 of 6   powered up` | |
-| A1.2 `Shield face +X is down on [Ship].` и `on [Pirate].`, `t` | Headless: оба 2.967 с (60); 2.950 и 2.942 с (400) | |
+| A1.2 `Shield face +X is down on [Ship].` и `on [Pirate].`: номер кадра `[NNN]` и `t` ближайшей предшествующей строки `Weapon: [...] shot N at t N s` того же корабля. В самой строке события игрового времени нет | Headless (время выведено из номера кадра при фиксированной частоте): оба 2.967 с (60); 2.950 и 2.942 с (400) | |
 | A1.2 колонка `+X` в строке `shields` краснеет | Да, в тот же момент | |
-| A1.2 `[Ship] is powered down …` и `[Pirate] is powered down …`, `t` | Headless: оба в одном кадре, 6.700 с (60) / 6.6725 с (400) | |
-| A1.2 выстрелов после обесточивания, корабль / пират | 0 / 0 | |
+| A1.2 `[Ship] is powered down …` и `[Pirate] is powered down …`: какая строка первая, номера кадров, `t` ближайшей предшествующей строки `Weapon: … at t N s` | Headless: оба в одном кадре, 6.700 с (60) / 6.6725 с (400) | |
+| A1.2 строк `Weapon: [Ship] shot` / `Weapon: [Pirate] shot` **до** своей строки `… is powered down` | Не меньше одной у каждого. Без них следующая строка не засчитывается | |
+| A1.2 строк `Weapon: [Ship] shot` / `Weapon: [Pirate] shot` **после** своей строки `… is powered down` | 0 / 0 | |
 | A1.2 панель в момент обесточивания | Шесть красных колонок `shields`; `hull  0.0 / 2000.0   powered down` оранжевым; `flown by console (standing down)` оранжевым; `turret … UNCOMMANDED` жёлтым; `combat … powered down` оранжевым | |
 | A1.2 `Footing LOST at t=…`, строка дословно | Headless: 14.93 с (60) / 14.88 с (400) | |
 | A1.2 скорость пирата и корабля до → после, из строк `Flight:` | Headless: 80.9 → 28.9 и 0.0 → 52.0 м/с (60); 81.2 → 29.5 и 0.0 → 51.7 (400) | |
@@ -147,13 +152,14 @@
 | Шаг | Ожидание | Факт |
 |---|---|---|
 | A2.1 посадка | `Station 'pilot' on [Ship] taken by player.`, `flown by player` зелёным | |
-| A2.2 `t` первой команды `sf.Fire 1` (по первому `Hit on [Pirate]`) | Записать как есть | |
+| A2.2 первое `Hit on [Pirate]`: номер кадра `[NNN]` и `t` ближайшей строки `Pursuit: [Pirate] t N s`. В строке попадания игрового времени нет | Записать как есть | |
 | A2.3 грани в строках `Hit on [Pirate]` | Преследующий пират держит нос на тебе, поэтому ожидается `+X` у середины. Записать все грани, которые встретились | |
 | A2.3 грани в строках `Hit on [Ship]` | Записать как есть | |
-| A2.3 кто обесточен первым, `t` | Не измерено: записать | |
+| A2.3 кто обесточен первым (порядок строк `… is powered down`) и `t` ближайшей строки `Pursuit: [Pirate] t N s` | Не измерено: записать | |
 | A2.3 строки `Thruster N on [...] destroyed …` | Записать дословно, если были | |
 | A2.4 рыскание своего корабля после потери двигателя | Только кратко на разгоне с ассистом; 0 на крейсере | |
 | A2.5 обесточенный пират: скорость из `Flight: [Pirate]`, куда идёт | Записать как есть | |
+| A2.5 удар корпусов, пока сидишь: был ли, пришла ли `Footing LOST at t=…` | Ожидание, не замер: сидя пристёгнут, `Footing LOST` не приходит. Удар по сидящему не снимался ни headless, ни руками | |
 | A2.6 обесточен ты: пират продолжает попадать | `Hit on [Ship] … 100.0 to hull; face 0.0/1000.0, hull 0.0/2000.0.`; `Pursuit: … hold 300 m` | |
 | A2.7 уход на скорости: наибольшее расстояние в `Pursuit:` и скорость корабля | Отставание до `Hold + v²/16`; при 200 м/с 2.8 км | |
 

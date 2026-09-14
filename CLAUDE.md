@@ -448,8 +448,9 @@ Things in the code that look like mistakes and are not:
   `ASFTestShip`'s constructor, and it looks unrelated to people. Without it two hulls overlap
   and pass through each other. On the first combat run a powered-down pirate coasting at
   106 m/s flew through the player's cabin, and its interior volume bound the man
-  (`Frame handover: Ship -> Pirate`). The loss depended on the frame rate: at 60 fps he fell
-  out of every carry, and at 400 he rode away on the pirate's floor with 284 skipped carries.
+  (`Frame handover: Ship -> Pirate`). How he was lost was not even repeatable. At 60 fps he fell
+  out of every carry. At 400 fps he rode away on the pirate's floor with 284 skipped carries in
+  one run, and in another run at the same rate he was left falling, as at 60.
   Blocking, the hulls collide the way §5 says a real physical body should. Contact comes at
   14.93 s (60) and 14.88 s (400); the pirate goes 80.9 → 28.9 m/s and the player's ship
   0 → 52.0 m/s, so momentum is conserved. No handover, 0 skipped carries. Nothing else
@@ -534,7 +535,8 @@ Things in the code that look like mistakes and are not:
   - The automation holds its trigger whenever it has a target, so a muzzle on a weapons-free hull
     would have both measurement rigs shooting at their drone.
   - Armed on both sides, two identical hulls aiming at each other's centres put identical shots
-    into identical faces. They powered down in the same frame at 6.683 s, before the pursuit got
+    into identical faces. They powered down in the same frame at 6.683 s at 60 fps, and one
+    frame apart at 400 (6.6600 and 6.6625 s), before the pursuit got
     anywhere near its hold distance, with 33 shots in ten seconds instead of 50. That was a
     mirror, not a fight.
 
