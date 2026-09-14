@@ -1,5 +1,6 @@
 #include "Ship/SFTurretComponent.h"
 
+#include "GameFramework/Actor.h"
 #include "StarForgeLog.h"
 
 USFTurretComponent::USFTurretComponent()
@@ -17,8 +18,9 @@ void USFTurretComponent::BeginPlay()
 	// these are ship-local centimetres.
 	const FVector Rel = GetRelativeLocation();
 	UE_LOG(LogStarForge, Display,
-		TEXT("Turret mount at ship-local (%.0f %.0f %.0f) cm: yaw +/-%.0f, pitch %.0f..%.0f deg, ")
+		TEXT("Turret mount on [%s] at ship-local (%.0f %.0f %.0f) cm: yaw +/-%.0f, pitch %.0f..%.0f deg, ")
 		TEXT("traverse %.0f deg/s, on target within %.1f deg, %s."),
+		*GetNameSafe(GetOwner()),
 		Rel.X, Rel.Y, Rel.Z, MaxYawDegrees, MinPitchDegrees, MaxPitchDegrees,
 		TraverseRateDegPerSec, OnTargetToleranceDegrees,
 		Barrel ? TEXT("barrel attached") : TEXT("no barrel (numbers only)"));

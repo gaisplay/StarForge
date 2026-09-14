@@ -36,7 +36,17 @@ public:
 	virtual bool ProvideFlightIntent(StarForge::FFlightIntent& Out) override;
 	virtual FString GetOperatorName() const override { return TEXT("console"); }
 
+	/**
+	 * Whether this instance answers the unnamed sf.* family. See ESFShipCrewing.
+	 *
+	 * True by default, so a hull nobody told anything behaves exactly as it did when there
+	 * was only one ship in the world -- which is what keeps both existing rigs unchanged.
+	 */
+	void SetConsoleControlled(bool bIn) { bConsoleControlled = bIn; }
+
 private:
+	bool bConsoleControlled = true;
+
 	/** Whether a refusal has already been heard from the holder below. */
 	bool bAskedForSeat = false;
 

@@ -105,8 +105,8 @@ bool USFThrusterArrayComponent::Rebuild()
 	bReady = true;
 
 	UE_LOG(LogStarForge, Display,
-		TEXT("Thruster array ready: %d thrusters, %.0f kg, inertia (%.0f, %.0f, %.0f) kg m^2."),
-		Thrusters.Num(), MassProperties.Mass,
+		TEXT("Thruster array on [%s] ready: %d thrusters, %.0f kg, inertia (%.0f, %.0f, %.0f) kg m^2."),
+		*GetNameSafe(GetOwner()), Thrusters.Num(), MassProperties.Mass,
 		MassProperties.InertiaDiagonal.X, MassProperties.InertiaDiagonal.Y,
 		MassProperties.InertiaDiagonal.Z);
 

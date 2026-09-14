@@ -51,7 +51,9 @@ void USFAutomationOperatorComponent::BeginPlay()
 	// reason the console operator does it to the pilot station.
 	Gunner->AddTickPrerequisiteComponent(this);
 
-	bWantedSeatLastTick = CVarAutomationOperator.GetValueOnGameThread() != 0;
+	// A hull that does not answer sf.* takes the seat without asking the variable: its
+	// posts are held by automation by definition, which is what makes it automated.
+	bWantedSeatLastTick = !bConsoleControlled || CVarAutomationOperator.GetValueOnGameThread() != 0;
 	if (bWantedSeatLastTick)
 	{
 		Gunner->TryOccupy(this);
@@ -75,7 +77,7 @@ void USFAutomationOperatorComponent::TickComponent(
 
 	// A runtime switch, not a startup default: -ExecCmds runs after BeginPlay, and a
 	// person at the console has to be able to turn this off to take the seat.
-	const bool bWantsSeat = CVarAutomationOperator.GetValueOnGameThread() != 0;
+	const bool bWantsSeat = !bConsoleControlled || CVarAutomationOperator.GetValueOnGameThread() != 0;
 	const UObject* Holder = Gunner->GetOperator().GetObject();
 	const bool bHoldsSeat = Holder == this;
 

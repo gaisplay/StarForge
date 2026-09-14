@@ -30,8 +30,8 @@ bool USFShipStationComponent::TryOccupy(TScriptInterface<ISFStationOperator> New
 
 	Operator = NewOperator;
 
-	UE_LOG(LogStarForge, Display, TEXT("Station '%s' taken by %s."),
-		*StationName, *Operator->GetOperatorName());
+	UE_LOG(LogStarForge, Display, TEXT("Station '%s' on [%s] taken by %s."),
+		*StationName, *GetNameSafe(GetOwner()), *Operator->GetOperatorName());
 
 	return true;
 }

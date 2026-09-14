@@ -22,6 +22,27 @@ class USFInteriorVolumeComponent;
 class ASFTargetDrone;
 
 /**
+ * Who mans this hull. Not a difficulty setting and not an AI flag: spec 4 says there is
+ * no such thing as an AI ship, only a ship whose posts are held by automation. What this
+ * actually decides is narrower and entirely about instruments -- whether this hull answers
+ * the unnamed sf.* family.
+ *
+ * Every one of sf.ShipProfile, sf.Dock, sf.Intent.*, sf.ConsoleOperator, sf.AutomationOperator
+ * and sf.AimAt was written when there was exactly one ship in the world, and each addresses
+ * "the ship" rather than a ship. With two hulls answering them, one command moves both: the
+ * dock edge fires on every component instance, and a person freeing his own gunner's seat
+ * also stands down the pirate's. An Automated hull therefore answers none of them. It is not
+ * deaf by accident -- its posts are held by automation by definition, and those variables are
+ * the player's ship's debug switches.
+ */
+UENUM()
+enum class ESFShipCrewing : uint8
+{
+	PlayerShip,
+	Automated
+};
+
+/**
  * Throwaway measurement rig: a boxed room that flies a scripted manoeuvre at
  * the design's speed and rotation ceilings.
  *
@@ -69,6 +90,24 @@ public:
 	 */
 	UPROPERTY(VisibleAnywhere, Category = "StarForge|Profile")
 	double InteriorHalfExtentCm = 400.0;
+
+	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
+	ESFShipCrewing Crewing = ESFShipCrewing::PlayerShip;
+
+	/**
+	 * Whether this hull spawns the orbiting drone its gunner's automation tracks.
+	 *
+	 * True on both existing rigs, where the drone is the only thing to aim at. False on the
+	 * combat rig, where the thing to aim at is the other ship: two hulls each spawning their
+	 * own drone would give the combat rig two targets nobody asked for, and each automation
+	 * would track its own rather than the enemy.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
+	bool bSpawnTargetDrone = true;
+
+	ESFShipCrewing GetCrewing() const { return Crewing; }
+
+	USFAutomationOperatorComponent* GetAutomationOperator() const { return AutomationOperator; }
 
 	USFShipFrameComponent* GetFrameComponent() const { return Frame; }
 

@@ -450,6 +450,14 @@ FVector ASFTestShip::GetInteriorSpawnWorldLocation() const
 
 void ASFTestShip::BeginPlay()
 {
+	// Before Super, and that ordering is the point: Super is what begins play on the
+	// components, and each of them decides in its own BeginPlay whether to take a seat or
+	// to listen to a console variable. Told afterwards, they would have already acted.
+	const bool bAnswersConsole = (Crewing == ESFShipCrewing::PlayerShip);
+	if (ConsoleOperator) { ConsoleOperator->SetConsoleControlled(bAnswersConsole); }
+	if (AutomationOperator) { AutomationOperator->SetConsoleControlled(bAnswersConsole); }
+	if (Docking) { Docking->SetConsoleControlled(bAnswersConsole); }
+
 	Super::BeginPlay();
 
 	// Said once at startup rather than checked by hand, because a hand check is a
@@ -474,28 +482,39 @@ void ASFTestShip::BeginPlay()
 	// Deferred, because the drone's BeginPlay logs its anchor and takes its first
 	// position from it, and a spawn that finishes before SetAnchor would log "the world
 	// origin" for a drone that is about to be anchored to this ship.
-	FTransform DroneSpawn = GetActorTransform();
-	DroneSpawn.SetScale3D(FVector::OneVector);
-	TargetDrone = GetWorld()->SpawnActorDeferred<ASFTargetDrone>(
-		ASFTargetDrone::StaticClass(), DroneSpawn, this, nullptr,
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-
-	if (TargetDrone)
+	if (bSpawnTargetDrone)
 	{
-		TargetDrone->SetAnchor(this);
-		TargetDrone->FinishSpawning(DroneSpawn);
+		FTransform DroneSpawn = GetActorTransform();
+		DroneSpawn.SetScale3D(FVector::OneVector);
+		TargetDrone = GetWorld()->SpawnActorDeferred<ASFTargetDrone>(
+			ASFTargetDrone::StaticClass(), DroneSpawn, this, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 
-		// Components have begun play inside Super::BeginPlay, so the automation is
-		// already in its seat by now; the first station tick is still ahead, and a null
-		// drone until then is reported as no target rather than aimed at.
-		if (AutomationOperator)
+		if (TargetDrone)
 		{
-			AutomationOperator->SetTargetDrone(TargetDrone);
+			TargetDrone->SetAnchor(this);
+			TargetDrone->FinishSpawning(DroneSpawn);
+
+			// Components have begun play inside Super::BeginPlay, so the automation is
+			// already in its seat by now; the first station tick is still ahead, and a null
+			// drone until then is reported as no target rather than aimed at.
+			if (AutomationOperator)
+			{
+				AutomationOperator->SetTargetDrone(TargetDrone);
+			}
+		}
+		else
+		{
+			UE_LOG(LogStarForge, Error, TEXT("Target drone failed to spawn; the turret will have nothing to track."));
 		}
 	}
 	else
 	{
-		UE_LOG(LogStarForge, Error, TEXT("Target drone failed to spawn; the turret will have nothing to track."));
+		// Said out loud: a gunner post with no target looks exactly like a gunner post
+		// that is not working, and this is the line that tells the two apart.
+		UE_LOG(LogStarForge, Display,
+			TEXT("Ship '%s' spawns no target drone; its gunner's automation will track whatever it is given."),
+			*GetName());
 	}
 }
 
@@ -558,6 +577,11 @@ void ASFTestShip::TickScriptedProfile()
 	{
 		return;
 	}
+
+	// Third refusal, beside the two that ask about the hull. An automated hull does not
+	// answer sf.ShipProfile at all, so the variable cannot fly a pirate by accident while
+	// a person is measuring his own ship with it.
+	if (Crewing != ESFShipCrewing::PlayerShip) { return; }
 
 	const double Phase = 2.0 * UE_DOUBLE_PI * ElapsedSeconds / ProfilePeriodSeconds;
 
@@ -675,7 +699,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	if (!Thrusters || !Thrusters->IsReady())
 	{
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Flight: thruster array NOT built -- no flight numbers to report."));
+			TEXT("Flight: [%s] thruster array NOT built -- no flight numbers to report."), *GetName());
 		return;
 	}
 
@@ -700,7 +724,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	else
 	{
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Flight: no pilot station -- the intent below is nobody's."));
+			TEXT("Flight: [%s] no pilot station -- the intent below is nobody's."), *GetName());
 	}
 
 	const StarForge::FRigidBodyState State = Thrusters->ReadState();
@@ -733,11 +757,12 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	// Naming the order in the line matters: a ship that rolls when asked to pitch is
 	// what confusing it produces, and this log is where that would show.
 	UE_LOG(LogStarForge, Log,
-		TEXT("Flight: flown by %s | intent lin (%.2f %.2f %.2f) ang (%.2f %.2f %.2f) assist %d | ")
+		TEXT("Flight: [%s] flown by %s | intent lin (%.2f %.2f %.2f) ang (%.2f %.2f %.2f) assist %d | ")
 		TEXT("speed %.1f m/s, accel %.1f m/s2, ang roll/pitch/yaw (%.1f %.1f %.1f) deg/s | ")
 		TEXT("force want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) N | ")
 		TEXT("torque want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) Nm | ")
 		TEXT("throttles %d of %d commanded, %d spooled"),
+		*GetName(),
 		*FlyingBy,
 		Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,
 		Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,

@@ -151,7 +151,17 @@ public:
 	/** Lower case: these words are read inside a sentence, not scanned for in a log. */
 	static const TCHAR* RefusalName(StarForge::Docking::EDockingRefusal Refusal);
 
+	/**
+	 * Whether this instance answers the unnamed sf.* family. See ESFShipCrewing.
+	 *
+	 * True by default, so a hull nobody told anything behaves exactly as it did when there
+	 * was only one ship in the world -- which is what keeps both existing rigs unchanged.
+	 */
+	void SetConsoleControlled(bool bIn) { bConsoleControlled = bIn; }
+
 private:
+	bool bConsoleControlled = true;
+
 	/** Idempotent; called from BeginPlay and from DockImmediately, whichever comes first. */
 	void ResolvePorts();
 

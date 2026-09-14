@@ -85,13 +85,28 @@ void USFDockingComponent::ResolvePorts()
 	Thrusters = Owner->FindComponentByClass<USFThrusterArrayComponent>();
 	Frame = Owner->FindComponentByClass<USFShipFrameComponent>();
 
-	// One station in the slice, so the first one found is the one. A second would need a
-	// choice, and a choice needs a rule nobody has written yet -- said here rather than
-	// left for whoever adds the second station to discover.
+	// Counted rather than taken on the first hit. One station is the slice's assumption,
+	// not a fact the level enforces, and a second one would be chosen by iteration order --
+	// which is to say by nothing. The rule this wants eventually is "the nearest free port",
+	// and it is not written yet; until it is, the ambiguity is said out loud rather than
+	// resolved by accident.
+	int32 StationCount = 0;
+	FString ChosenName;
 	for (TActorIterator<ASFTestStation> It(GetWorld()); It; ++It)
 	{
-		StationPort = It->GetDockingPort();
-		break;
+		if (StationCount == 0)
+		{
+			StationPort = It->GetDockingPort();
+			ChosenName = It->GetName();
+		}
+		++StationCount;
+	}
+	if (StationCount > 1)
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Docking: %d stations in this level; '%s' was chosen by iteration order. ")
+			TEXT("Boarding will need the nearest free port instead, and that rule is unwritten."),
+			StationCount, *ChosenName);
 	}
 	bHasStation = StationPort != nullptr;
 
@@ -200,7 +215,8 @@ void USFDockingComponent::LogRefusal() const
 		// separation HasStation() already keeps. Which one is missing, because "could not
 		// measure" on its own sends the reader to check all three.
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Dock: refused -- the approach could not be measured: no %s."),
+			TEXT("Dock: [%s] refused -- the approach could not be measured: no %s."),
+			*GetNameSafe(GetOwner()),
 			!Port ? TEXT("port on this ship")
 				: !StationPort ? TEXT("station port")
 				: TEXT("owner"));
@@ -231,7 +247,7 @@ void USFDockingComponent::LogRefusal() const
 
 	// One line per command, and it names WHICH condition and by how much. A refusal a
 	// pilot cannot act on is a refusal that sends him to correct the wrong thing.
-	UE_LOG(LogStarForge, Warning, TEXT("Dock: refused -- %s"), *Detail);
+	UE_LOG(LogStarForge, Warning, TEXT("Dock: [%s] refused -- %s"), *GetNameSafe(GetOwner()), *Detail);
 }
 
 bool USFDockingComponent::EnterCapture()
@@ -349,7 +365,7 @@ void USFDockingComponent::CompleteCapture()
 	State = ESFDockingState::Docked;
 	CaptureElapsedSeconds = CaptureSeconds;
 
-	UE_LOG(LogStarForge, Display, TEXT("Dock: docked."));
+	UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] docked."), *Owner->GetName());
 }
 
 bool USFDockingComponent::RequestDock()
@@ -366,7 +382,7 @@ bool USFDockingComponent::RequestDock()
 
 	if (!bHasStation)
 	{
-		UE_LOG(LogStarForge, Warning, TEXT("Dock: refused -- no station"));
+		UE_LOG(LogStarForge, Warning, TEXT("Dock: [%s] refused -- no station"), *GetNameSafe(GetOwner()));
 		return false;
 	}
 
@@ -386,7 +402,8 @@ bool USFDockingComponent::RequestDock()
 	}
 
 	UE_LOG(LogStarForge, Display,
-		TEXT("Dock: capturing, %.1f m, %.1f m/s, fwd %.1f deg, up %.1f deg"),
+		TEXT("Dock: [%s] capturing, %.1f m, %.1f m/s, fwd %.1f deg, up %.1f deg"),
+		*GetNameSafe(GetOwner()),
 		LastApproachSI.Distance, LastApproachSI.SpeedMetresPerSec,
 		FMath::RadiansToDegrees(LastApproachSI.ForwardAngleRad),
 		FMath::RadiansToDegrees(LastApproachSI.UpAngleRad));
@@ -442,7 +459,7 @@ bool USFDockingComponent::RequestUndock()
 	State = ESFDockingState::Free;
 	CaptureElapsedSeconds = 0.0;
 
-	UE_LOG(LogStarForge, Display, TEXT("Dock: undocked."));
+	UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] undocked."), *Owner->GetName());
 	return true;
 }
 
@@ -493,6 +510,11 @@ void USFDockingComponent::DockImmediately()
 
 void USFDockingComponent::PollConsoleCommand(double DeltaSeconds)
 {
+	if (!bConsoleControlled)
+	{
+		return;
+	}
+
 	const int32 Command = CVarDock.GetValueOnGameThread();
 
 	if (Command != LastDockCommand)

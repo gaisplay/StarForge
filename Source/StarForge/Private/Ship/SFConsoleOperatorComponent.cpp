@@ -3,6 +3,7 @@
 #include "GameFramework/Actor.h"
 #include "HAL/IConsoleManager.h"
 #include "Ship/SFPilotStationComponent.h"
+#include "StarForgeLog.h"
 
 namespace
 {
@@ -74,6 +75,14 @@ void USFConsoleOperatorComponent::BeginPlay()
 	// would still be flying on behalf of an operator that had just given it up.
 	Pilot->AddTickPrerequisiteComponent(this);
 
+	if (!bConsoleControlled)
+	{
+		UE_LOG(LogStarForge, Display,
+			TEXT("Console operator on '%s' stands down: this hull does not answer sf.*."),
+			*GetOwner()->GetName());
+		return;
+	}
+
 	if (CVarConsoleOperator.GetValueOnGameThread() == 0)
 	{
 		return;
@@ -88,6 +97,11 @@ void USFConsoleOperatorComponent::TickComponent(
 	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!bConsoleControlled)
+	{
+		return;
+	}
 
 	AActor* Owner = GetOwner();
 	if (!Owner)
