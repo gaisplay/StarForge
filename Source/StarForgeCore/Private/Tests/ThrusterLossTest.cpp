@@ -327,16 +327,32 @@ bool FThrusterLossTwoCornersCannotSpanSixAxesTest::RunTest(const FString& Parame
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FThrusterLossSingleLossFliesStraightTest,
-	"StarForge.Core.ThrusterLoss.SingleLossFliesStraight",
+	FThrusterLossSingleLossYawsOnlyAboveTheCeilingTest,
+	"StarForge.Core.ThrusterLoss.SingleLossYawsOnlyAboveTheCeiling",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
 
-bool FThrusterLossSingleLossFliesStraightTest::RunTest(const FString& Parameters)
+bool FThrusterLossSingleLossYawsOnlyAboveTheCeilingTest::RunTest(const FString& Parameters)
 {
-	// Losing index 0 leaves three +X thrusters whose line of action is off the centre of mass: at
-	// full throttle they make 400 kNm about +Z. The ship does NOT lead off to one side for it. A +Y
-	// thruster at x = -2 and a -Y thruster at x = +2 make zero force and -800 kNm between them, and
-	// the solver spends that couple against the moment -- below the reduced ceiling and far above it.
+	// Losing index 0 leaves three +X thrusters whose line of action is off the centre of mass, and
+	// whether the ship then yaws depends on how hard it is asked to push forward.
+	//
+	// Below the reduced 600 kN ceiling it flies straight and spends more throttle: a +Y thruster at
+	// x = -2 and a -Y thruster at x = +2 make zero force and -800 kNm between them, and the solver
+	// spends that couple against the survivors' moment. (Within the last seventy-odd kN below the
+	// ceiling three clamp passes leave a residue of a few kNm, 9.4 at the ceiling itself; that one
+	// shrinks with more passes, and the stick's edge below pins it.) Far above the ceiling -- the
+	// 20 MN assist asks for from rest -- it is straight again.
+	//
+	// In the band between, from about 610 kN to somewhere between 900 kN (measured at 600 kNm) and
+	// 950 kN (measured at zero), the force pins at the ceiling and the yaw torque grows as
+	// 2 x (demand - 600 kN). That band is the allocator's metric, not the geometry: a least-squares
+	// answer in newtons and newton-metres alike trades the force the array cannot deliver for a
+	// torque it can, and in a replica of Solve more clamp passes flip the sign of that torque without
+	// shrinking it. The intact array is asserted straight in the same band, so this test tells the
+	// damage apart from the solver in general.
+	//
+	// The assist drives the demand through the band on every approach to its target speed, which is
+	// why a damaged ship yaws briefly as it nears 200 m/s under assist and cruises straight after.
 	const TArray<FThrusterDef> Layout = MakeLossRigLayout();
 
 	FThrustAllocator Whole;
@@ -359,8 +375,22 @@ bool FThrusterLossSingleLossFliesStraightTest::RunTest(const FString& Parameters
 	AddInfo(FString::Printf(TEXT("300 kN: throttle sum whole %.4f, damaged %.4f; damaged force (%.3f %.3f %.3f) N, torque (%.3f %.3f %.3f) Nm"),
 		WholeSum, DamagedSum, Half.Force.X, Half.Force.Y, Half.Force.Z, Half.Torque.X, Half.Torque.Y, Half.Torque.Z));
 
-	// Assist asks for twenty meganewtons when the stick goes forward from rest: exactly the ceiling,
-	// and still no torque.
+	// Inside the band: 800 kN asked, 200 kN more than the damaged array can deliver, and that 200 kN
+	// comes back as 400 kNm of yaw. The intact array delivers the same request whole and straight.
+	double BandSum = 0.0;
+	const FWrench Band = SolveForward(Damaged, 800000.0, BandSum);
+	TestTrue(TEXT("800 kN asked of the damaged array delivers the 600 kN ceiling, within 1 N on every axis"),
+		Band.Force.Equals(FVector(600000.0, 0.0, 0.0), 1.0));
+	TestEqual(TEXT("and yaws at +400 kNm, twice the 200 kN it cannot deliver"), Band.Torque.Z, 400000.0, 1.0);
+	AddInfo(FString::Printf(TEXT("800 kN: damaged force (%.3f %.3f %.3f) N, torque (%.3f %.3f %.3f) Nm, throttle sum %.4f"),
+		Band.Force.X, Band.Force.Y, Band.Force.Z, Band.Torque.X, Band.Torque.Y, Band.Torque.Z, BandSum));
+
+	double WholeBandSum = 0.0;
+	const FWrench WholeBand = SolveForward(Whole, 800000.0, WholeBandSum);
+	TestTrue(TEXT("the intact array on the same 800 kN makes no torque, under 1 Nm"), WholeBand.Torque.Size() < 1.0);
+
+	// Assist asks for twenty meganewtons when the stick goes forward from rest: far above the band,
+	// exactly the ceiling, and no torque.
 	double DeepSum = 0.0;
 	const FWrench Deep = SolveForward(Damaged, 2.0e7, DeepSum);
 	TestTrue(TEXT("20 MN asked is exactly the 600 kN ceiling delivered, within 1 N"),
@@ -369,9 +399,9 @@ bool FThrusterLossSingleLossFliesStraightTest::RunTest(const FString& Parameters
 	AddInfo(FString::Printf(TEXT("20 MN: damaged force (%.3f %.3f %.3f) N, torque (%.3f %.3f %.3f) Nm, throttle sum %.4f"),
 		Deep.Force.X, Deep.Force.Y, Deep.Force.Z, Deep.Torque.X, Deep.Torque.Y, Deep.Torque.Z, DeepSum));
 
-	// The stick's edge with assist off asks for exactly the ceiling, and three clamp-and-correct
-	// passes do not quite reach it, and what they leave undelivered yaws. Not geometry -- the 20 MN
-	// request above reaches the same ceiling with no torque at all.
+	// The stick's edge with assist off asks for exactly the ceiling, and here a second, smaller effect
+	// is what yaws: three clamp-and-correct passes do not quite converge, and what they leave
+	// undelivered comes back as torque. Unlike the band, this one does shrink with more passes.
 	double EdgeSum = 0.0;
 	const FWrench Edge = SolveForward(Damaged, 600000.0, EdgeSum);
 	TestTrue(TEXT("600 kN asked at the stick's edge is not quite delivered"), Edge.Force.X < 600000.0);
@@ -382,8 +412,8 @@ bool FThrusterLossSingleLossFliesStraightTest::RunTest(const FString& Parameters
 	// And the figures themselves, as this solver gives them. A Python replica of Solve predicted
 	// them to the last digit before this ran: 4687.5 N short, which is 1/128 of the request, and
 	// 9375 Nm of yaw -- 9375 / 533333 kg m^2 is the +1.0 deg/s^2 the rig is expected to show with
-	// assist off. A fourth pass, or a different clamp, moves both; this is where that is noticed
-	// before the rig reading is.
+	// assist off. A fourth pass, or a different clamp, moves both, and moves the band's sign; this is
+	// where that is noticed before the rig reading is.
 	TestEqual(TEXT("the stick's edge delivers 595312.5 N"), Edge.Force.X, 595312.5, 0.01);
 	TestEqual(TEXT("and yaws at 9375.0 Nm"), Edge.Torque.Z, 9375.0, 0.01);
 	AddInfo(FString::Printf(TEXT("600 kN: damaged force (%.3f %.3f %.3f) N, torque (%.3f %.3f %.3f) Nm, throttle sum %.4f"),
