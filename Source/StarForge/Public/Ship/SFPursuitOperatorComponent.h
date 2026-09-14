@@ -7,6 +7,7 @@
 #include "SFPursuitOperatorComponent.generated.h"
 
 class USFShipFrameComponent;
+class USFThrusterArrayComponent;
 
 /**
  * An operator that chases. The fourth implementation of ISFStationOperator, and the first
@@ -20,10 +21,12 @@ class USFShipFrameComponent;
  * point, in my frame", and a hull is a mount with different stops; reusing it keeps
  * StarForgeCore untouched by this task and keeps one answer to one question.
  *
- * Every threshold here is a distance in metres or a time in seconds. HoldDistanceMetres is
- * where it wants to be, DeadBandMetres is how far from there it goes before it asks for full
- * stick, and AlignAngleRad is the angle at which it asks for full stick on a turn -- which with
- * spec 7's 120 deg/s is a time constant of 30/120 = 0.25 s. Not one of them is a frame count.
+ * Every threshold here is in metres and seconds. HoldDistanceMetres is where it wants to be;
+ * BrakingDecelMetresPerSecSq is the deceleration its approach is shaped for, so it arrives at
+ * rest rather than at speed; DeadBandMetres is the band around the hold inside which the
+ * approach speed ramps to zero instead of following that curve; and AlignAngleRad is the angle
+ * at which it asks for full stick on a turn -- which with spec 7's 120 deg/s is a time constant
+ * of 30/120 = 0.25 s. Not one of them is a frame count.
  *
  * It holds a seat only on a hull that does not answer sf.* (see ESFShipCrewing). On the player's
  * ship it is inert: the console operator or a person flies that one.
@@ -45,9 +48,17 @@ public:
 	UPROPERTY(EditAnywhere, Category = "StarForge|Pursuit")
 	double HoldDistanceMetres = 300.0;
 
-	/** How far from the hold distance the stick reaches full travel, in METRES. */
+	/** Band around the hold distance inside which the approach speed ramps linearly to zero, in METRES. */
 	UPROPERTY(EditAnywhere, Category = "StarForge|Pursuit")
 	double DeadBandMetres = 50.0;
+
+	/**
+	 * The deceleration the approach is shaped for, in METRES PER SECOND SQUARED: half of the
+	 * intact array's 16, so a ship that has lost a fore-and-aft thruster (12) still stops inside
+	 * the distance the law assumes. The derivation is where the law is (ProvideFlightIntent).
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Pursuit")
+	double BrakingDecelMetresPerSecSq = 8.0;
 
 	/** Bearing at which a turn asks for full stick, in RADIANS. */
 	UPROPERTY(EditAnywhere, Category = "StarForge|Pursuit")
@@ -82,6 +93,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<USFShipFrameComponent> Frame;
+
+	/** Where the ship's own speed limit is read from; the stick is a fraction of it. */
+	UPROPERTY()
+	TObjectPtr<USFThrusterArrayComponent> Thrusters;
 
 	TWeakObjectPtr<AActor> TargetActor;
 

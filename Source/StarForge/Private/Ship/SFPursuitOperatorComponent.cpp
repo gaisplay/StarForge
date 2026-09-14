@@ -3,7 +3,9 @@
 #include "GameFramework/Actor.h"
 #include "HAL/IConsoleManager.h"
 #include "Ship/SFPilotStationComponent.h"
+#include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
+#include "Ship/SFThrusterArrayComponent.h"
 #include "StarForgeLog.h"
 #include "Units.h"
 
@@ -43,6 +45,7 @@ void USFPursuitOperatorComponent::BeginPlay()
 
 	AActor* Owner = GetOwner();
 	Frame = Owner ? Owner->FindComponentByClass<USFShipFrameComponent>() : nullptr;
+	Thrusters = Owner ? Owner->FindComponentByClass<USFThrusterArrayComponent>() : nullptr;
 	USFPilotStationComponent* Pilot = Owner ? Owner->FindComponentByClass<USFPilotStationComponent>() : nullptr;
 
 	if (!Frame)
@@ -116,13 +119,42 @@ bool USFPursuitOperatorComponent::ProvideFlightIntent(StarForge::FFlightIntent& 
 		return false;
 	}
 
-	// Linear: full stick beyond hold + dead band, full reverse inside hold - dead band, and in
-	// proportion between. With assist on the stick asks for a speed, so between the two it asks
-	// for a speed in proportion rather than coasting, and at the hold distance itself to stop.
-	// 300 m and 50 m, so full stick past 350 and full reverse inside 250.
+	// The stick is a speed with assist on, and it is scaled by the ship's own limit, not a literal.
+	if (!Thrusters || !Thrusters->ShipData)
+	{
+		return false;
+	}
+	const double MaxSpeedMetresPerSec = Thrusters->ShipData->BuildLimits().MaxSpeed;
+	if (!(MaxSpeedMetresPerSec > 0.0))
+	{
+		return false;
+	}
+
+	// Linear: ask for the speed from which a constant deceleration a stops the ship exactly at the
+	// hold distance. Closing at v, it needs v^2 / 2a to stop, so asking for v = sqrt(2 a |e|), with
+	// e the distance past the hold, keeps the gap left equal to the stopping distance all the way
+	// in, and the ship arrives at 300 m at rest instead of at the speed it built up. The law this
+	// replaced asked for full stick until 350 m; the pirate was measured there at 143 m/s, which
+	// needs 640 m to stop at 16 m/s^2, and it flew through its target.
+	//
+	// a = 8 m/s^2, half of what the intact array gives: 800 kN on 50 t is 16. The half is the
+	// margin the assist spends catching up to a speed it is always slightly behind, and it is what
+	// keeps a damaged ship on the curve: one lost fore-and-aft thruster leaves 600 kN, 12 m/s^2,
+	// which stops from v in v^2 / 24 -- still inside the v^2 / 16 the law assumes.
+	//
+	// The square root has an infinite slope at zero, which with the stick a speed demand is an
+	// infinite gain at the hold distance. Inside DeadBandMetres the demand therefore falls
+	// linearly from the curve's value at the band's edge, sqrt(2 x 8 x 50) = 28.3 m/s, to zero:
+	// continuous at the edge, and finite at the hold.
+	//
+	// Every threshold is metres or seconds: 300 m, 50 m and 8 m/s^2.
 	// Every other axis is zero: no roll and no strafe, which with assist on holds both still.
 	Out = StarForge::FFlightIntent();
-	Out.LinearAxis.X = FMath::Clamp((DistanceMetres - HoldDistanceMetres) / DeadBandMetres, -1.0, 1.0);
+	const double PastHoldMetres = DistanceMetres - HoldDistanceMetres;
+	const double WantMetresPerSec = FMath::Abs(PastHoldMetres) >= DeadBandMetres
+		? FMath::Sign(PastHoldMetres) * FMath::Sqrt(2.0 * BrakingDecelMetresPerSecSq * FMath::Abs(PastHoldMetres))
+		: (PastHoldMetres / DeadBandMetres) * FMath::Sqrt(2.0 * BrakingDecelMetresPerSecSq * DeadBandMetres);
+	Out.LinearAxis.X = FMath::Clamp(WantMetresPerSec / MaxSpeedMetresPerSec, -1.0, 1.0);
 
 	// Angular: proportional on the bearing, saturating at AlignAngleRad. With assist on, the
 	// stick asks for a RATE, so this is a first-order approach with a time constant of
