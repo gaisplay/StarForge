@@ -40,7 +40,7 @@
 | грань `+X` села | 2.967 с | 2.950 с |
 | `[Ship] is powered down` | 6.700 с | 6.6725 с |
 
-Журналы: `evidence/task7-r2-combat-{60,400}.log`. Дальше корабль игрока не летает и не стреляет,
+Журналы: `evidence/2026-09-14-task7-r2-combat-{60,400}.log`. Дальше корабль игрока не летает и не стреляет,
 а пират продолжает по нему попадать. Это значит две вещи. Где по шагу надо лететь, садиться и
 двигаться надо сразу. Если `[Ship] is powered down` пришло раньше, чем шаг выполнен, запуск
 повторяется: это не находка.
@@ -124,7 +124,7 @@ git add Content/Maps/L_Combat.umap && git commit -m "feat(combat): add the empty
 | Ветка | `git branch --show-current` → `feat/combat-and-the-pirate` |
 | Коммит | `git rev-parse --short HEAD`: записать в бланк, каким бы он ни был |
 | Дерево | `git status --short`: только файлы владельца (`.agents/`, `.claude/`, `.codex/hooks.json`, `.codex/config.toml`) и, до шага 0, ничего больше |
-| Тесты | **83 / 0**: прогнать командой ниже и считать по её журналу |
+| Тесты | **88 / 0**: прогнать командой ниже и считать по её журналу |
 
 Каждый запуск движка перезаписывает `Saved/Logs/StarForge.log`, в том числе редактор в шаге 0.
 Поэтому тесты гоняются здесь, а не берутся из прошлого прогона:
@@ -134,7 +134,7 @@ git add Content/Maps/L_Combat.umap && git commit -m "feat(combat): add the empty
 ```
 
 ```bash
-grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log   # 83
+grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log   # 88
 grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log      # 0
 grep "TEST COMPLETE. EXIT CODE:" Saved/Logs/StarForge.log             # EXIT CODE: 0
 ```
@@ -705,8 +705,8 @@ Pursuit: [Pirate] t N s | target Ship at 1011.2 m, bearing yaw 0.0 pitch -8.5 de
 Меняющееся расстояние — находка: оператор вернул нулевое намерение вместо отказа, и ассистент
 тормозит корабль, считая, что так велено. Отсутствие попаданий по кораблю — тоже находка: отказ от
 поста пилота заглушил пост канонира. Headless дал `1011.2 m` в 40 строках из 40 на 60 fps и в
-39 из 39 на 400, пират стреляет (`evidence/task7-r1-pirateai0-{60,400}.log`,
-`evidence/task7-r1-pirateai0-nofire-{60,400}.log`).
+39 из 39 на 400, пират стреляет (`evidence/2026-09-14-task7-r1-pirateai0-{60,400}.log`,
+`evidence/2026-09-14-task7-r1-pirateai0-nofire-{60,400}.log`).
 
 **Не удивляться.** Корабль игрока обесточится около 7.0 с: это пират. Расстояние от этого не
 меняется, оба корабля стоят. На панели: `combat [Pirate] 1011.2 m   flown by pursuit (standing down)`.
@@ -935,7 +935,7 @@ Hit on [Pirate] +X face at hull-local (…) cm: …
 `Combat: [Pirate]` пишется `thrusters 12/24 NOT built`.
 
 Это успех механизма и законная красная строка этого стенда. Такой отказ на корабле игрока измерен
-(`evidence/task6-rig-d-{60,400}.log`), на пирате не наблюдался.
+(`evidence/2026-09-14-task6-rig-d-{60,400}.log`), на пирате не наблюдался.
 
 ### B5: C6, частота кадров (headless, ~5 минут)
 
@@ -978,7 +978,7 @@ grep -c "Projectile: .* hit " Saved/Logs/StarForge.log
 | Прибор, 60 и 400 | Выстрелов в окне `[1.0, 11.0)` с | **50** и **50** |
 | Контроль без свипа, 60 и 400 | **0** попаданий | 0 и 0 |
 
-Headless-журналы: `evidence/task3-r1-instrument-{60,400}.log`,
+Headless-журналы: `evidence/2026-09-14-task3-r1-instrument-{60,400}.log`,
 `evidence/2026-09-14-task3-control-nosweep-60.log` и `evidence/2026-09-14-task3-r1-control-nosweep-400.log`.
 
 Окно `[1.0, 11.0)` выведено из времён выстрелов. На 60 fps они идут в `0.033 + 0.2·k`, на 400 в
@@ -1054,7 +1054,7 @@ Headless-журналы: `evidence/task3-r1-instrument-{60,400}.log`,
   одного двигателя `+X` уводит корабль, только когда запрос вперёд лежит примерно между 610 и
   940 кН. Там момент `2 · (запрос − 600 кН)`, до 600 кН·м. С ассистом это кратко на разгоне: пик
   0.8 °/с на 60 fps и 1.3 °/с на 400, у 191 м/с, затем 0 на крейсере
-  (`evidence/task6-rig-c-{60,400}.log`). Вполгаза 0. Без ассиста на краю ручки остаётся около
+  (`evidence/2026-09-14-task6-rig-c-{60,400}.log`). Вполгаза 0. Без ассиста на краю ручки остаётся около
   +1.0 °/с². Это находка о §5 и о метрике решателя: наименьшие квадраты в смешанных единицах
   обменивают недостижимую силу на момент.
 - **Внутри кабины на 400 fps защита передачи не проверена и проверена быть не может.** Объём пирата
