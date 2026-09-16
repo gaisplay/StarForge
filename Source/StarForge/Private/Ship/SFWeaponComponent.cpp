@@ -42,17 +42,30 @@ namespace
 namespace WeaponCadence
 {
 	/**
-	 * How far short of a full interval a shot still counts as due, in seconds.
+	 * How far short of its due time a shot still counts as due: half the step, so a shot goes
+	 * out on the frame NEAREST its due time rather than on the first frame at or after it.
 	 *
-	 * The engine hands a tick its dt as a float, and a float frame is not the frame the
-	 * command line asked for: 0.0025f is 0.00249999994, and eighty of them sum to
-	 * 0.1999999955, short of 0.2. Compared exactly, the shot after a press waited 81 frames at
-	 * 400 fps instead of 80 -- 2.5 ms late -- while at 60 fps 1/60f lies above 1/60 and twelve
-	 * frames landed on time. A microsecond is some two hundred times that shortfall and 2500
-	 * times shorter than a frame at 400 fps, so it absorbs the rounding without ever letting a
-	 * shot out a frame early.
+	 * The schedule in TickCadence is absolute -- shot n is due n intervals after the press, and
+	 * no shot's time is derived from the one before it -- so the only error left is the frame
+	 * grid, and half a step is the smallest error that grid admits.
+	 *
+	 * No fixed tolerance can do that, and the microsecond that stood here could not. The engine
+	 * hands a tick its dt as a float, and float(1/400) is 0.0024999999441, short of 1/400 by
+	 * 5.59e-11: the game's own clock runs 22 ns slow per second at 400 fps, so 0.2 s of it is
+	 * 80.0000018 frames and the due time leaves the frame grid by 4.47e-9 an interval. A fixed
+	 * margin is therefore a budget and not a bound -- a microsecond's worth is spent after 224
+	 * intervals, 44.7 s of unbroken fire, after which one interval takes 81 frames. Simulated in
+	 * double over a 60 s run with a float dt: with a microsecond the 224th gap is 81 frames,
+	 * with half a step every gap is 80, and 60 fps is 12 frames throughout either way because
+	 * float(1/60) lies above 1/60.
+	 *
+	 * Capped at half an interval, so a step longer than the cadence cannot turn the lookahead
+	 * into a second shot on the tick the trigger goes down.
 	 */
-	constexpr double ShotDueToleranceSeconds = 1.0e-6;
+	double ShotDueToleranceSeconds(double DeltaSeconds, double SecondsBetweenShots)
+	{
+		return 0.5 * FMath::Min(DeltaSeconds, SecondsBetweenShots);
+	}
 }
 }
 
@@ -84,15 +97,16 @@ void USFWeaponComponent::BeginPlay()
 
 	if (!(ShipData->SecondsBetweenShots > 0.0))
 	{
-		// Refused rather than clamped: the trigger loop below subtracts this figure until the
-		// accumulator is under it, and a figure that is not positive never gets there.
+		// Refused rather than clamped: the trigger loop below fires while the clock has reached
+		// the next multiple of this figure, and a figure that is not positive is reached by
+		// every multiple at once.
 		UE_LOG(LogStarForge, Error,
 			TEXT("Weapon: [%s] SecondsBetweenShots is %.3f, which is not a cadence; it will not fire."),
 			*GetNameSafe(Owner), ShipData->SecondsBetweenShots);
 		return;
 	}
 
-	SecondsSinceShot = ShipData->SecondsBetweenShots;
+	SecondsSinceTrigger = ShipData->SecondsBetweenShots;
 
 	if (!Frame)
 	{
@@ -142,9 +156,13 @@ void USFWeaponComponent::TickCadence(bool bTriggerDown, double DeltaSeconds)
 	}
 	const double SecondsBetweenShots = ShipData->SecondsBetweenShots;
 
-	// By time, with the interval subtracted rather than the accumulator zeroed: zeroing would
-	// throw away each frame's remainder and make the rate depend on dt.
-	SecondsSinceShot += DeltaSeconds;
+	// One clock since the press, and the count of shots taken from it. Shot n is due n intervals
+	// after the press, and that due time is computed rather than carried: no shot's timing
+	// descends from the one before it, so a whole run has the residual of a single interval.
+	// An accumulator with the interval subtracted off at each shot is the same arithmetic
+	// written backwards and was simulated frame-for-frame identical to this, down to the same
+	// 81-frame gap at shot 224; it reads, wrongly, as though the remainder were what kept time.
+	SecondsSinceTrigger += DeltaSeconds;
 	if (!bTriggerDown)
 	{
 		bTriggerWasHeld = false;
@@ -152,17 +170,22 @@ void USFWeaponComponent::TickCadence(bool bTriggerDown, double DeltaSeconds)
 	}
 	if (!bTriggerWasHeld)
 	{
-		// Capped to one interval on the tick the trigger goes down, for two reasons. Left to
-		// grow while the trigger was up, the accumulator would fire fifteen shots in this one
-		// frame after a three-second pause -- a burst whose size is the length of the pause.
-		// And capped only while up, this tick's own dt would ride on top of the full interval
-		// as a remainder, bringing the second shot one frame early: 17 ms at 60 fps, 2.5 at 400.
-		SecondsSinceShot = FMath::Min(SecondsSinceShot, SecondsBetweenShots);
+		// The press starts a new schedule, from the time since the last SHOT rather than from
+		// zero, capped at one interval. Both halves carry load. Uncapped, a three-second pause
+		// would fire fifteen shots in this one frame -- a burst whose size is the length of the
+		// pause. Started from zero, releasing and pressing again would be a way to fire faster
+		// than the cadence, and this tick's own dt would ride on top of the full interval,
+		// bringing the second shot one frame early: 17 ms at 60 fps, 2.5 at 400.
+		SecondsSinceTrigger = FMath::Min(
+			SecondsSinceTrigger - ShotsSincePress * SecondsBetweenShots, SecondsBetweenShots);
+		ShotsSincePress = 0;
 		bTriggerWasHeld = true;
 	}
-	while (SecondsSinceShot >= SecondsBetweenShots - WeaponCadence::ShotDueToleranceSeconds)
+
+	const double DueTolerance = WeaponCadence::ShotDueToleranceSeconds(DeltaSeconds, SecondsBetweenShots);
+	while (SecondsSinceTrigger >= (ShotsSincePress + 1) * SecondsBetweenShots - DueTolerance)
 	{
-		SecondsSinceShot -= SecondsBetweenShots;
+		++ShotsSincePress;
 		FireOne();
 	}
 }

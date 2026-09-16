@@ -73,7 +73,7 @@ public:
 	void SetWeaponsFree(bool bIn) { bWeaponsFree = bIn; }
 
 private:
-	/** The time accounting both trigger calls share: accumulator, press edge, shots. */
+	/** The time accounting both trigger calls share: the clock, the press edge, the shots. */
 	void TickCadence(bool bTriggerDown, double DeltaSeconds);
 
 	void FireOne();
@@ -86,10 +86,15 @@ private:
 	TObjectPtr<USFTurretComponent> Mount;
 
 	/**
-	 * Time toward the next shot. BeginPlay sets it to a full interval, so a weapon that has
-	 * not fired fires on the first tick its trigger is held.
+	 * Seconds since the trigger last went down. Shot n of that press is due n intervals along
+	 * it, so the schedule is absolute and one interval's rounding cannot be inherited by the
+	 * next. BeginPlay sets it to a full interval, so a weapon that has not fired fires on the
+	 * first tick its trigger is held.
 	 */
-	double SecondsSinceShot = 0.0;
+	double SecondsSinceTrigger = 0.0;
+
+	/** Shots taken since that press, which is what the next one's due time is counted from. */
+	int32 ShotsSincePress = 0;
 
 	/** Whether the trigger was down on the last tick, so the tick it goes down can be told apart. */
 	bool bTriggerWasHeld = false;
