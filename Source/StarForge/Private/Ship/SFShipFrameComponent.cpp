@@ -3,6 +3,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/Actor.h"
 #include "ShipFrameMath.h"
+#include "StarForgeLog.h"
 #include "Units.h"
 
 namespace
@@ -74,6 +75,23 @@ void USFShipFrameComponent::TickComponent(
 	// the felt acceleration over the 19.62 grav-plate ceiling, and the occupant was
 	// knocked down eleven times at 400 fps and not once at 60.
 	const UPrimitiveComponent* SimulatingRoot = GetSimulatingRoot(GetOwner());
+
+	// Which of the two reads is running says nothing in any other line, and a frame changes
+	// over mid-run: a hull leaves simulation to dock and rejoins it to undock. Said on the
+	// first tick and on every change, so any rate in a log can be traced to the read that
+	// produced it -- the question that cost a whole round when the differenced rate was
+	// blamed on the thruster spool.
+	const bool bFromBody = (SimulatingRoot != nullptr);
+	if (!bHasSample || bFromBody != bReadsFromBody)
+	{
+		const AActor* Owner = GetOwner();
+		UE_LOG(LogStarForge, Display, TEXT("Frame [%s]: angular velocity %s."),
+			Owner ? *Owner->GetActorNameOrLabel() : TEXT("none"),
+			bFromBody
+				? TEXT("read from the simulating body")
+				: TEXT("differenced from the transform -- no simulating body"));
+	}
+	bReadsFromBody = bFromBody;
 
 	if (SimulatingRoot)
 	{

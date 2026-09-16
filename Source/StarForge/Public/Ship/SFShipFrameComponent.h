@@ -61,6 +61,13 @@ public:
 	 * halves of the figure off one component: the ship used to compute this one from
 	 * its Chaos velocity, which meant the movement component would have had to know
 	 * the test ship's class to read it.
+	 *
+	 * One component, but no longer one sampling. On a simulating hull the angular half
+	 * is the body's instantaneous rate and this half is a second difference over two
+	 * frames, so a collision reads its peak turn on the frame it happens and its felt
+	 * acceleration a frame later. That difference is why the duel's `Footing LOST` line
+	 * reports a turn in the hundreds of deg/s where the once-a-second flight readout,
+	 * sampled between impacts, reports tens.
 	 */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	FVector GetLinearAccelMetersPerSecSq() const { return LinearAccelMetersPerSecSq; }
@@ -75,6 +82,9 @@ private:
 	FTransform LastSampledTransform;
 	FVector AngularVelocityRadPerSec = FVector::ZeroVector;
 	bool bHasSample = false;
+
+	/** Which read produced the rate above, so a change of source can be said once. */
+	bool bReadsFromBody = false;
 
 	FVector LinearVelocityMetersPerSec = FVector::ZeroVector;
 	FVector LinearAccelMetersPerSecSq = FVector::ZeroVector;
