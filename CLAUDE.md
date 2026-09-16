@@ -428,6 +428,38 @@ Things in the code that look like mistakes and are not:
   the two is two or three frames at 60 fps and thirteen to eighteen at 320. A frame count
   is a frame rate — the same shape as the Chaos sleep counter — and any threshold added to
   this project from now on is written in seconds and tested at 400 fps as well as 60.
+- **`USFShipFrameComponent` asks a simulating hull for its angular velocity and differences
+  only a carrier that has no body.** The branch in `TickComponent` looks like an optimisation
+  over one uniform read, and the uniform read is what it replaced. Differencing a transform
+  divides that transform's *error* by the frame time, and the transform an actor hands back is
+  not its body's: every physics sync round-trips the rotation through an `FRotator`
+  (`SceneComponent.cpp` 3314–3341), and `FQuat::Rotator()` answers exactly ±90° of pitch for
+  anything within 0.081° of gimbal lock (`SINGULARITY_THRESHOLD 0.4999995f`, `UnrealMath.cpp`
+  654–669). A fixed error in *position*, divided by a frame, is a rate that grows with the frame
+  rate: 4.86 deg/s at 60 fps and 32.41 at 400.
+
+  It cost a round to find, because it hid under a ceiling. On the spike rig under full pitch the
+  instrument read 146.7–152.1 deg/s once every half turn where the hull turned 120.0 and Chaos
+  reported 119.999355 on all 10002 frames; at r = 3 m the grav-plate ceiling is crossed at
+  146.5 deg/s, so the occupant was knocked down eleven times at 400 fps and not once at 60. The
+  arithmetic predicts it exactly: `120 + 0.0666 × 400 = 146.6`. Pure roll is immune — the
+  engine's singularity test `Z·X − W·Y` is identically zero there — which is why checkpoint 5's
+  three grav-plate thresholds and checkpoint 4's felt figure were unaffected and needed no
+  re-measurement.
+
+  Two consequences to keep in mind. The linear half of the same instrument is still differenced
+  on every carrier, deliberately: a location passes through that round trip as the doubles it
+  already was, and differencing the root keeps *v* the velocity of the frame origin, which is
+  what the handover maths composes ω against — `GetPhysicsLinearVelocity` would hand back the
+  centre of mass instead. And the two halves are now sampled differently, so on the frame of a
+  collision `Footing LOST` reports the body's instantaneous turn in the hundreds of deg/s while
+  the once-a-second `Flight:` line, sampled between impacts, reports tens. Both are right.
+
+  **Which read a frame is on is in the log:** `Frame [X]: angular velocity read from the
+  simulating body` or `… differenced from the transform -- no simulating body`, said on the
+  first tick and again on every change. A hull says the first; the station and a docked hull say
+  the second, because docking takes the hull out of simulation before the eased run-in. The dock
+  cycle (`sf.Dock 2`) prints both, one per change.
 - **A second console key, `F1`, in `Config/DefaultInput.ini`.** The engine binds the console
   to `Tilde` alone, and on a keyboard layout that does not produce Tilde from the key left of
   "1" the console never opens — silently, with nothing in the log. It cost a whole run of
@@ -452,9 +484,22 @@ Things in the code that look like mistakes and are not:
   out of every carry. At 400 fps he rode away on the pirate's floor with 284 skipped carries in
   one run, and in another run at the same rate he was left falling, as at 60.
   Blocking, the hulls collide the way §5 says a real physical body should. Contact comes at
-  14.93 s (60) and 14.88 s (400); the pirate goes 80.9 → 28.9 m/s and the player's ship
-  0 → 52.0 m/s, so momentum is conserved. No handover, 0 skipped carries. Nothing else
-  physical in the project answers that channel, and both old rigs are line-for-line identical.
+  15.07 s (60) and 14.88 s (400); the pirate goes 79.6 → 28.5 m/s and the player's ship
+  0 → 51.1 m/s at 60 fps, 81.2 → 23.5 and 0 → 57.7 at 400, so momentum is conserved to the last
+  digit at both rates. No handover, 0 skipped carries. Nothing else physical in the project
+  answers that channel, and both old rigs are line-for-line identical.
+
+  **What the collision does not do is repeat itself across frame rates, and that is not a
+  defect.** Two boxes meeting at 30 m/s resolve on a contact manifold the step size decides, so
+  the same code leaves the player's hull tumbling at 21 deg/s of pitch at 60 fps and 170 at 400
+  — and the tumble, not the impact, decides what happens to the man. At 60 fps he is knocked
+  down for 0.5 s and stands up at the front wall. At 400 fps the hull's spin puts the
+  centripetal term at r = 3 m over the 19.62 ceiling (which it crosses at 146.5 deg/s), so the
+  knockdown never ends: he is pinned in the back-top corner, ship-local `(-356, y, +302)`,
+  sliding along −Y at about 7 cm/s, away from the hatch, for 65.7 s of an 80 s window. The
+  drift line reads `784.6 cm` and that is his corner, not an escape — `skipped carries 0`,
+  `Carry NOT RUNNING` never, the carry called once a frame throughout. Read the verdict and the
+  carry counters, never the figures, when judging this run.
 - **An interior volume hands a person over only between carriers moving within 1.0 m/s of each
   other where he stands.** `USFInteriorVolumeComponent::TryHandover` looks like it second-guesses
   stage 3's rule that entering a volume binds. It is what keeps a man in his own frame when hulls
@@ -507,8 +552,10 @@ Things in the code that look like mistakes and are not:
   skip by zeroing. It used to zero them, and a thruster lost in flight snapped every survivor to
   nothing. Three frames after the kill at 60 fps the ship read `accel 8.9`, `got 444444 N`,
   `0 spooled`, and lost 0.5 m/s. Carried, it reads `accel 16.0`, `got 800000 N`, `4 spooled`, and
-  the speed goes 79.2 → 95.2 → 111.2 → 127.2 m/s, the same figures as a kill before launch. At
-  400 fps it is 16.0 before and after. No path needs a reset: undocking carries zeros, because
+  the speed goes 79.1 → 95.1 → 111.1 → 127.1 m/s, the same figures as a kill before launch. At
+  400 fps it is 16.0 before and after (79.4 → 95.4 → 111.5 → 127.5). Those speeds were 0.1 m/s
+  higher until the spool was given the lag's exact solution: a forward-Euler step of the same
+  time constant arrives a shade early, and the sequence is the place it shows. No path needs a reset: undocking carries zeros, because
   docking locks the array and clears its demand. A kill in flight can only be asked for because
   `sf.KillThruster` takes a delay.
 - **The pursuit asks for `sign(e) * sqrt(2 * a * |e|)` with `a = 8 m/s²`, scaled by
