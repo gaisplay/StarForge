@@ -1,6 +1,8 @@
 #include "Misc/AutomationTest.h"
 #include "ShipFrameMath.h"
 
+#include <limits>
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FShipFrameCarryTranslationTest,
 	"StarForge.Core.ShipFrame.CarryTranslation",
@@ -382,6 +384,241 @@ bool FShipFrameFootingRelapseRestartsTheDelayTest::RunTest(const FString& Parame
 		Footing.Update(false, 1.0 / 60.0, 0.5);
 	}
 	TestFalse(TEXT("up once the delay has passed since the relapse"), Footing.bDown);
+
+	return true;
+}
+
+/**
+ * The handover guard's arithmetic, lifted out of USFInteriorVolumeComponent so it can be
+ * pinned. The component keeps the decision -- who is handed to whom, and under what limit --
+ * and this keeps the speed it decides on.
+ *
+ * The limit itself is a literal in the component and is mirrored here rather than shared,
+ * for the reason the component gives: it is the docking window's figure by derivation and
+ * not by reference, so editing the docking window must not move it.
+ */
+namespace
+{
+	constexpr double HandoverLimitMetresPerSec = 1.0;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameHandoverAtRestTogetherTest,
+	"StarForge.Core.ShipFrame.Handover.CarriersAtRestTogetherReadZero",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameHandoverAtRestTogetherTest::RunTest(const FString& Parameters)
+{
+	// A docked pair: two frames a hundred metres apart, travelling together. Apart in space
+	// and identical in motion is the case stage 3's hatch crossing depends on, and it must
+	// read zero rather than the distance between them.
+	StarForge::ShipFrame::FCarrierMotion Station;
+	Station.OriginMetres = FVector(0.0, 0.0, 0.0);
+	Station.LinearVelocityMetresPerSec = FVector(120.0, -30.0, 5.0);
+
+	StarForge::ShipFrame::FCarrierMotion Ship;
+	Ship.OriginMetres = FVector(100.0, 0.0, 0.0);
+	Ship.LinearVelocityMetresPerSec = FVector(120.0, -30.0, 5.0);
+
+	double Speed = -1.0;
+	TestTrue(TEXT("two finite carriers give a speed"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(Station, Ship, FVector(40.0, 0.0, 0.0), Speed));
+	TestTrue(TEXT("carriers travelling together read zero"), FMath::IsNearlyEqual(Speed, 0.0, 1e-12));
+
+	// And while neither turns the point does not matter: the same pair read from the far side
+	// of the station is still zero.
+	Speed = -1.0;
+	TestTrue(TEXT("read again elsewhere"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(
+			Station, Ship, FVector(-4000.0, 900.0, 60.0), Speed));
+	TestTrue(TEXT("still zero wherever he stands"), FMath::IsNearlyEqual(Speed, 0.0, 1e-12));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameHandoverTranslationTest,
+	"StarForge.Core.ShipFrame.Handover.TranslationReadsTheDifference",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameHandoverTranslationTest::RunTest(const FString& Parameters)
+{
+	// The first combat run, with the figure it produced: a pirate coasting through the
+	// player's cabin at 106 m/s while the player's ship stood still.
+	StarForge::ShipFrame::FCarrierMotion Player;
+	StarForge::ShipFrame::FCarrierMotion Pirate;
+	Pirate.OriginMetres = FVector(8.0, 0.0, 1.5);
+	Pirate.LinearVelocityMetresPerSec = FVector(-106.0, 0.0, 0.0);
+
+	double Speed = -1.0;
+	TestTrue(TEXT("a coasting pirate gives a speed"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(Player, Pirate, FVector(1.0, 0.0, 0.0), Speed));
+	TestTrue(TEXT("the difference of the two velocities"), FMath::IsNearlyEqual(Speed, 106.0, 1e-12));
+
+	// A difference and not a sum of magnitudes: two ships flying the same way at different
+	// speeds are 0.5 m/s apart, inside the limit, however fast both of them are going.
+	Player.LinearVelocityMetresPerSec = FVector(-105.5, 0.0, 0.0);
+	Speed = -1.0;
+	TestTrue(TEXT("both moving gives a speed"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(Player, Pirate, FVector(1.0, 0.0, 0.0), Speed));
+	TestTrue(TEXT("only the difference counts"), FMath::IsNearlyEqual(Speed, 0.5, 1e-12));
+
+	// Which of the two is named first is only a sign, and a length throws it away.
+	double Reversed = -1.0;
+	TestTrue(TEXT("read the other way round"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(Pirate, Player, FVector(1.0, 0.0, 0.0), Reversed));
+	TestTrue(TEXT("swapping the carriers changes nothing"), FMath::IsNearlyEqual(Reversed, Speed, 1e-12));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameHandoverSpinTest,
+	"StarForge.Core.ShipFrame.Handover.SpinIsReadWhereHeStands",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameHandoverSpinTest::RunTest(const FString& Parameters)
+{
+	// Why the speed is taken at his position and not between the two origins: a hull rolling
+	// about its own centre has an origin at rest and a deck that is not. Spec 7's roll rate,
+	// 180 deg/s, is pi rad/s.
+	const double RollRadPerSec = UE_DOUBLE_PI;
+
+	StarForge::ShipFrame::FCarrierMotion Still;
+	StarForge::ShipFrame::FCarrierMotion Rolling;
+	Rolling.AngularVelocityRadPerSec = FVector(RollRadPerSec, 0.0, 0.0);
+
+	// At the origin the two agree exactly, and a guard that compared the centres would stop
+	// here and hand him over.
+	double AtTheCentre = -1.0;
+	TestTrue(TEXT("the centre gives a speed"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(Still, Rolling, FVector::ZeroVector, AtTheCentre));
+	TestTrue(TEXT("a spin about the origin is nothing at the origin"),
+		FMath::IsNearlyEqual(AtTheCentre, 0.0, 1e-12));
+
+	// Four metres out across the roll axis, about the half-width of the cabin: w x r, which is
+	// pi rad/s times 4 m and nearly thirteen times the handover limit.
+	double AtTheWall = -1.0;
+	TestTrue(TEXT("the wall gives a speed"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(Still, Rolling, FVector(0.0, 4.0, 0.0), AtTheWall));
+	TestTrue(TEXT("w x r where he stands"),
+		FMath::IsNearlyEqual(AtTheWall, 4.0 * RollRadPerSec, 1e-12));
+
+	// And nothing along the axis itself, however far out, because the cross product is zero
+	// there: a man standing on the roll axis is at rest with the still carrier.
+	double AlongTheAxis = -1.0;
+	TestTrue(TEXT("the axis gives a speed"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(Still, Rolling, FVector(4000.0, 0.0, 0.0), AlongTheAxis));
+	TestTrue(TEXT("a point on the axis does not move"),
+		FMath::IsNearlyEqual(AlongTheAxis, 0.0, 1e-12));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameHandoverBoundaryTest,
+	"StarForge.Core.ShipFrame.Handover.TheOneMetrePerSecondBoundary",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameHandoverBoundaryTest::RunTest(const FString& Parameters)
+{
+	// A station turning at exactly 1 rad/s, so the speed at a point r metres off its axis is r
+	// metres per second and the limit lands on the metre mark. Built out of the spin rather
+	// than out of a velocity on purpose: an implementation that dropped the w x r term would
+	// read zero here and pass every carrier at every radius.
+	StarForge::ShipFrame::FCarrierMotion Ship;
+	StarForge::ShipFrame::FCarrierMotion Station;
+	Station.AngularVelocityRadPerSec = FVector(0.0, 0.0, 1.0);
+
+	const auto SpeedAtRadius = [this, &Ship, &Station](double RadiusMetres)
+	{
+		double Speed = -1.0;
+		TestTrue(TEXT("a finite radius gives a speed"),
+			StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(
+				Ship, Station, FVector(RadiusMetres, 0.0, 0.0), Speed));
+		return Speed;
+	};
+
+	// The limit is inclusive at the caller -- the refusal is written !(speed <= limit) -- so a
+	// metre exactly is a handover and not a refusal.
+	const double AtTheMark = SpeedAtRadius(1.0);
+	TestTrue(TEXT("a metre a second reads a metre a second"), FMath::IsNearlyEqual(AtTheMark, 1.0, 1e-12));
+	TestTrue(TEXT("and the mark itself is inside the limit"), AtTheMark <= HandoverLimitMetresPerSec);
+
+	// A nanometre a second either side of it, eight orders above what the square root of a
+	// double loses here.
+	TestTrue(TEXT("just under the mark is inside"),
+		SpeedAtRadius(1.0 - 1.0e-9) <= HandoverLimitMetresPerSec);
+	TestFalse(TEXT("just over the mark is outside"),
+		SpeedAtRadius(1.0 + 1.0e-9) <= HandoverLimitMetresPerSec);
+
+	// The same two carriers read at two places: one man is handed over and another, a metre
+	// further out on the same deck, is not. That is the whole reason for the point argument.
+	TestTrue(TEXT("near the axis he crosses"), SpeedAtRadius(0.5) <= HandoverLimitMetresPerSec);
+	TestFalse(TEXT("out at the rim he does not"), SpeedAtRadius(1.5) <= HandoverLimitMetresPerSec);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameHandoverRefusesNonFiniteTest,
+	"StarForge.Core.ShipFrame.Handover.NonFiniteInputIsRefused",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameHandoverRefusesNonFiniteTest::RunTest(const FString& Parameters)
+{
+	// A frame differences transforms to get its velocity, so a frame that has not ticked yet,
+	// or one whose two samples were taken at the same instant, can hand this function a NaN.
+	// Refusing rather than returning a number is what lets the caller keep the man where he
+	// is: a NaN compared against a limit answers whichever way the comparison was written.
+	const double NaN = std::numeric_limits<double>::quiet_NaN();
+	const double Inf = std::numeric_limits<double>::infinity();
+
+	const auto Refuses = [this](
+		const StarForge::ShipFrame::FCarrierMotion& A,
+		const StarForge::ShipFrame::FCarrierMotion& B,
+		const FVector& Point,
+		const TCHAR* What)
+	{
+		// The sentinel is half the test. An implementation that wrote before it checked would
+		// leave something else here, and the caller prints this figure into its log line.
+		double Speed = -7.0;
+		TestFalse(What, StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(A, B, Point, Speed));
+		TestEqual(TEXT("the output is left untouched"), Speed, -7.0);
+	};
+
+	const StarForge::ShipFrame::FCarrierMotion Sound;
+
+	{
+		StarForge::ShipFrame::FCarrierMotion Bad;
+		Bad.OriginMetres = FVector(NaN, 0.0, 0.0);
+		Refuses(Bad, Sound, FVector::ZeroVector, TEXT("an origin that is not a number refuses"));
+		Refuses(Sound, Bad, FVector::ZeroVector, TEXT("on either side"));
+	}
+	{
+		StarForge::ShipFrame::FCarrierMotion Bad;
+		Bad.LinearVelocityMetresPerSec = FVector(0.0, NaN, 0.0);
+		Refuses(Bad, Sound, FVector::ZeroVector, TEXT("a linear velocity that is not a number refuses"));
+		Refuses(Sound, Bad, FVector::ZeroVector, TEXT("on either side"));
+	}
+	{
+		StarForge::ShipFrame::FCarrierMotion Bad;
+		Bad.AngularVelocityRadPerSec = FVector(0.0, 0.0, NaN);
+		Refuses(Bad, Sound, FVector::ZeroVector, TEXT("an angular velocity that is not a number refuses"));
+		Refuses(Sound, Bad, FVector::ZeroVector, TEXT("on either side"));
+	}
+
+	Refuses(Sound, Sound, FVector(0.0, NaN, 0.0), TEXT("a position that is not a number refuses"));
+
+	// An infinity is not a NaN and a ContainsNaN would let it through: it survives the
+	// subtraction and comes back as an infinite speed, which passes no limit -- but only by
+	// accident of the comparison, and it would be printed into the log as the measured speed.
+	{
+		StarForge::ShipFrame::FCarrierMotion Bad;
+		Bad.LinearVelocityMetresPerSec = FVector(Inf, 0.0, 0.0);
+		Refuses(Bad, Sound, FVector::ZeroVector, TEXT("an infinite velocity refuses"));
+	}
+	Refuses(Sound, Sound, FVector(-Inf, 0.0, 0.0), TEXT("an infinite position refuses"));
 
 	return true;
 }

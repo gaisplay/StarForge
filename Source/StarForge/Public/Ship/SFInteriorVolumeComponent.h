@@ -69,6 +69,11 @@ public:
 	 * |(vA + wA x rA) - (vB + wB x rB)|, each r from that frame's origin to the point. Read from
 	 * the frame components' own velocities, so a docked hull attached to a still station reads the
 	 * station's zero.
+	 *
+	 * The arithmetic itself is StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec, where it can
+	 * be tested; this reads the two frames, converts the one length through StarForge::Units, and
+	 * returns a NaN where that function refuses, which the caller's negated comparison treats as a
+	 * refusal. WorldPointCm is centimetres, as its name says, and the result is not.
 	 */
 	static double RelativeSpeedAtMetresPerSec(
 		const USFShipFrameComponent& A, const USFShipFrameComponent& B, const FVector& WorldPointCm);

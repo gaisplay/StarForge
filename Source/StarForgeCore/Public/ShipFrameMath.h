@@ -3,10 +3,13 @@
 #include "CoreMinimal.h"
 
 /**
- * Reference-frame conversions for occupants riding a moving ship.
+ * Reference-frame conversions for occupants riding a moving ship, and what the ship's
+ * motion does to a man standing in it.
  *
- * These functions are unit-agnostic: they operate on whatever length unit the
- * caller passes in consistently. The game passes centimetres, matching Unreal.
+ * The transform helpers are unit-agnostic: they operate on whatever length unit the
+ * caller passes in consistently. The game passes centimetres, matching Unreal. The ones
+ * carrying a time -- accelerations, velocities, the grav-plate limit -- are SI like the
+ * rest of StarForgeCore, and every one of those says so in its name.
  */
 namespace StarForge::ShipFrame
 {
@@ -99,4 +102,46 @@ namespace StarForge::ShipFrame
 		double YawDegrees,
 		double PitchDegrees,
 		double MaxPitchDegrees = 89.0);
+
+	/**
+	 * A carrier's motion, as much of it as one point on that carrier needs: where the frame's
+	 * origin is, how fast the origin travels, and how fast the frame turns about it.
+	 *
+	 * Metres, seconds and radians, and the field names say so. Unlike the transform helpers
+	 * above this cannot be unit-agnostic: an angular velocity in radians per second crossed
+	 * with an offset gives a speed, so fixing the time unit fixes the length unit with it. The
+	 * game holds centimetres and converts at the call, through StarForge::Units.
+	 *
+	 * The frame's ORIENTATION is deliberately absent. The angular velocity and the offset are
+	 * both world-axis vectors, so the rotation never enters the arithmetic, and a function
+	 * taking the whole transform would be taking a quantity it must not use.
+	 */
+	struct STARFORGECORE_API FCarrierMotion
+	{
+		FVector OriginMetres = FVector::ZeroVector;
+		FVector LinearVelocityMetresPerSec = FVector::ZeroVector;
+		FVector AngularVelocityRadPerSec = FVector::ZeroVector;
+	};
+
+	/**
+	 * How fast two carriers move relative to each other AT ONE POINT: the length of
+	 * (vA + wA x rA) - (vB + wB x rB), where each r is the point's offset from that carrier's
+	 * own origin.
+	 *
+	 * At a point and not between the origins, because a carrier that spins moves its deck at
+	 * w x r. Two hulls whose origins are at rest with respect to each other can still slide
+	 * past each other where a man stands, and it is the floor under him that is about to
+	 * change. This is the arithmetic behind the interior volume's handover guard -- what keeps
+	 * a man in his own frame when two hulls touch -- and the limit it is weighed against stays
+	 * with the caller, which is where the decision belongs.
+	 *
+	 * Returns false and leaves Out untouched when any argument is not finite, the contract
+	 * StepProjectile and the damage functions keep, so a velocity gone NaN refuses instead of
+	 * reading as a speed.
+	 */
+	STARFORGECORE_API bool RelativeSpeedAtPointMetresPerSec(
+		const FCarrierMotion& A,
+		const FCarrierMotion& B,
+		const FVector& PointMetres,
+		double& OutSpeedMetresPerSec);
 }

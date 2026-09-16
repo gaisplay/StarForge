@@ -3,9 +3,12 @@
 #include "GameFramework/Actor.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
+#include "ShipFrameMath.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "StarForgeLog.h"
 #include "Units.h"
+
+#include <limits>
 
 namespace
 {
@@ -31,19 +34,32 @@ namespace InteriorHandover
 	 *
 	 * Measured at his position rather than between the centres, because a carrier that spins moves
 	 * its deck at w x r, and two hulls whose centres are at rest can still slide past each other
-	 * where he stands.
+	 * where he stands. That arithmetic is StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec,
+	 * and it is pinned by StarForge.Core.ShipFrame.Handover; the limit stays here, because who is
+	 * handed to whom is this component's decision and not the maths module's.
 	 */
 	constexpr double MaxRelativeSpeedMetresPerSec = 1.0;
 
-	FVector PointVelocityMetresPerSec(const USFShipFrameComponent& Frame, const FVector& WorldPointCm)
+	FVector MetresFromCm(const FVector& Cm)
 	{
-		const FVector OffsetCm = WorldPointCm - Frame.GetFrameTransform().GetLocation();
-		const FVector OffsetMetres(
-			StarForge::Units::CmToMetres(OffsetCm.X),
-			StarForge::Units::CmToMetres(OffsetCm.Y),
-			StarForge::Units::CmToMetres(OffsetCm.Z));
-		return Frame.GetLinearVelocityMetersPerSec()
-			+ FVector::CrossProduct(Frame.GetAngularVelocityRadPerSec(), OffsetMetres);
+		return FVector(
+			StarForge::Units::CmToMetres(Cm.X),
+			StarForge::Units::CmToMetres(Cm.Y),
+			StarForge::Units::CmToMetres(Cm.Z));
+	}
+
+	/**
+	 * A frame as the maths module wants it. The two velocities are already SI -- the frame
+	 * component converts them where it derives them -- so the only boundary crossed here is the
+	 * origin, and it crosses through StarForge::Units like every other.
+	 */
+	StarForge::ShipFrame::FCarrierMotion CarrierMotion(const USFShipFrameComponent& Frame)
+	{
+		StarForge::ShipFrame::FCarrierMotion Motion;
+		Motion.OriginMetres = MetresFromCm(Frame.GetFrameTransform().GetLocation());
+		Motion.LinearVelocityMetresPerSec = Frame.GetLinearVelocityMetersPerSec();
+		Motion.AngularVelocityRadPerSec = Frame.GetAngularVelocityRadPerSec();
+		return Motion;
 	}
 }
 }
@@ -104,8 +120,18 @@ void USFInteriorVolumeComponent::BeginPlay()
 double USFInteriorVolumeComponent::RelativeSpeedAtMetresPerSec(
 	const USFShipFrameComponent& A, const USFShipFrameComponent& B, const FVector& WorldPointCm)
 {
-	return (InteriorHandover::PointVelocityMetresPerSec(A, WorldPointCm)
-		- InteriorHandover::PointVelocityMetresPerSec(B, WorldPointCm)).Size();
+	// Seeded with the answer a refusal gives. The maths refuses a velocity that is not finite
+	// and leaves this untouched, and a NaN fails the negated comparison at the call site -- so
+	// the man stays where he is, which is what this returned when it computed the NaN itself.
+	double SpeedMetresPerSec = std::numeric_limits<double>::quiet_NaN();
+
+	StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(
+		InteriorHandover::CarrierMotion(A),
+		InteriorHandover::CarrierMotion(B),
+		InteriorHandover::MetresFromCm(WorldPointCm),
+		SpeedMetresPerSec);
+
+	return SpeedMetresPerSec;
 }
 
 void USFInteriorVolumeComponent::TryHandover(ASFCharacter* Character)
