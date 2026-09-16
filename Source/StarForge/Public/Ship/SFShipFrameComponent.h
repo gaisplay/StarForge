@@ -39,7 +39,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	FTransform CarryOccupant(const FTransform& PrevFrame, const FTransform& OccupantWorld) const;
 
-	/** Angular velocity of this frame in radians per second, world space. */
+	/**
+	 * Angular velocity of this frame in radians per second, world space.
+	 *
+	 * Read from the body where the carrier has one and differenced from its transform
+	 * where it has none. TickComponent says why the two cannot be the same read.
+	 */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	FVector GetAngularVelocityRadPerSec() const;
 
@@ -52,10 +57,10 @@ public:
 	 *
 	 * The felt-acceleration figure of spec 6 is this plus the centripetal term from
 	 * the angular velocity above, and the knockdown is decided on it. It is derived
-	 * here, from the same transform sample as the angular velocity, so that the figure
-	 * comes from one instrument. The ship used to compute it from its Chaos velocity,
-	 * which meant the movement component would have had to know the test ship's class
-	 * to read it.
+	 * here, by differencing the transform, so that the movement component reads both
+	 * halves of the figure off one component: the ship used to compute this one from
+	 * its Chaos velocity, which meant the movement component would have had to know
+	 * the test ship's class to read it.
 	 */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	FVector GetLinearAccelMetersPerSecSq() const { return LinearAccelMetersPerSecSq; }
