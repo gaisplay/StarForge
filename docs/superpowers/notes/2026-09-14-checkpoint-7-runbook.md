@@ -168,9 +168,20 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 ```
 
 С ключами в PowerShell после пути к программе ставится `--%`. Он передаёт остаток строки движку
-как есть, с кавычками и квадратными скобками, в том виде, в каком его написали бы в cmd. Из
-PowerShell такие строки в этом проекте не запускались. Дошли ли ключи, проверяет первая строка
-ворот каждого запуска.
+как есть, с кавычками и квадратными скобками, в том виде, в каком его написали бы в cmd.
+
+**Обе формы из PowerShell проверены живьём 2026-09-17**, безоконно, на голове ветки, и обе дошли до
+движка слово в слово: строка `LogInit: Command Line:` совпала с той, что печатает запуск из Git
+Bash. Форма URL подняла стенд (`Combat rig: …` уровнем `Display`), а ключ с квадратными скобками
+`"-ini:Engine:[ConsoleVariables]:sf.Pirate=0"` был принят — в журнале
+`LogConfig: CVar [[sf.Pirate:0]] deferred - dummy variable created`, строка стенда ушла `Warning` с
+`no pirate, withheld by sf.Pirate 0`, и все выстрелы вышли `NO TARGET`. Оконная форма отличается
+только ключами `-windowed -ResX -ResY`, которых оболочка не разбирает.
+
+**Две оговорки PowerShell.** После `--%` переменные оболочки не работают, поэтому смена каталога
+делается отдельным оператором перед командой (`Set-Location F:\UEProject\StarForge;`). И карты
+`L_Combat` может не быть — тогда первый аргумент тот же, что в Git Bash:
+`"/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFCombatGameMode"`.
 
 **Четырём запускам ключи нужны в командной строке, консоль их не заменит.** Пока открываешь
 консоль и печатаешь, проходят секунды, а стенд живёт с нулевого кадра.
@@ -965,6 +976,21 @@ grep "Weapon: \[Ship\] shot" Saved/Logs/StarForge.log | awk '{for(i=1;i<NF;i++) 
 
 ```bash
 grep -c "Projectile: .* hit " Saved/Logs/StarForge.log
+```
+
+**Те же три счёта в PowerShell.** Проверены на `evidence/2026-09-14-task3-r1-instrument-60.log`:
+дают те же `95 hull-local (-0.000 -410.000 116.200)` и те же `50` выстрелов в окне.
+
+```powershell
+Select-String -Path Saved\Logs\StarForge.log -Pattern 'Projectile: \[Ship\] shot .* hit .*turret ON TARGET' | ForEach-Object { [regex]::Match($_.Line, 'hull-local \([^)]*\)').Value } | Group-Object | Select-Object Count, Name
+```
+
+```powershell
+(Select-String -Path Saved\Logs\StarForge.log -Pattern 'Weapon: \[Ship\] shot' | ForEach-Object { [double][regex]::Match($_.Line, ' at t ([\d.]+) s').Groups[1].Value } | Where-Object { $_ -ge 1.0 -and $_ -lt 11.0 }).Count
+```
+
+```powershell
+(Select-String -Path Saved\Logs\StarForge.log -Pattern 'Projectile: .* hit ').Count
 ```
 
 **Считать попадания по `Projectile: .* hit `, а не по `hull-local`.** Второе ловит ещё строки
