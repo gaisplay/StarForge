@@ -447,10 +447,21 @@ void USFThrusterArrayComponent::ApplyDemand(const StarForge::FWrench& DemandShip
 			continue;
 		}
 
-		// First-order lag: one ResponseTime covers about 63 per cent of a step. The
-		// clamp matters at low frame rates, where DeltaSeconds can exceed the time
-		// constant and an unclamped factor would overshoot and oscillate.
-		const double Alpha = FMath::Clamp(DeltaSeconds / Tau, 0.0, 1.0);
+		// First-order lag, solved over the step rather than stepped through it. The
+		// forward-Euler factor that stood here -- DeltaSeconds / Tau, clamped so a step
+		// longer than the time constant could not overshoot and oscillate -- gives a
+		// response whose time constant belongs to the frame rate: -dt / ln(1 - dt/Tau) is
+		// 0.0411 s at 60 fps and 0.0487 s at 400 against the 0.05 s the data asset
+		// authors, 19 per cent apart, and at 60 fps dt/Tau is a third, nowhere near the
+		// small-step regime where Euler and the lag agree. Settled thrust is unaffected,
+		// which is why every stage-2 rate check passed at both rates and this stood until
+		// stage 4 read the TRANSIENT: the frames after a thruster is lost, and the margin
+		// the assist spends catching up to a speed it is always slightly behind.
+		//
+		// The exponential is the exact solution of the lag over the step, so a step of T
+		// leaves the throttle where N steps of T/N do, and it lies in [0, 1) by
+		// construction -- there is nothing left to clamp.
+		const double Alpha = 1.0 - FMath::Exp(-DeltaSeconds / Tau);
 		LastThrottles[Index] += (TargetThrottles[Index] - LastThrottles[Index]) * Alpha;
 	}
 
