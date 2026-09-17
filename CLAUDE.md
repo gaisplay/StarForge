@@ -263,82 +263,53 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 ## Current state
 
-**Stage 3 is finished, passed by hand, and merged: `main` is at merge commit `8695a09`,
-thirty-one commits over the plan's own commit.** 66 headless tests, clean build, and the loop rig
-verified at 60 and 400 fps both before and after the merge.
+**The vertical slice is finished. Stage 4 — combat and the pirate — is merged: `main` is at
+merge commit `a256a02`, fifty-one commits over the branch point.** 88 headless tests, a build
+from nothing with no warnings, and all three rigs green at 60 and 400 fps on the merged result.
+Spec §13 ends at "Точка проверки 4. Срез готов." — there is no stage the spec names after this
+one, and **the next step is a spec, not a plan.** Start from
+`docs/superpowers/notes/2026-09-17-handoff-stage-5.md`.
 
-There are now two reference frames. `ASFTestStation` is a boxed room with its own
-`USFShipFrameComponent` and no physics body of any kind; the ship docks to it kinematically —
-thruster array locked, hull taken out of simulation, a one-second eased run-in to the mated pose,
-root attached to the station's socket — so the relative velocity afterwards is zero by
-construction rather than by convergence. Docking is commanded (`F` from the pilot's seat,
-`sf.Dock` from the console), never automatic. A person is bound to a carrier by walking into its
-`USFInteriorVolumeComponent`; entering binds and leaving deliberately does not unbind, so the ten
-centimetres of wall between the two volumes belong to whoever bound him last. The second rig is
-`ASFLoopGameMode` on `Content/Maps/L_Loop`: station at the origin, ship spawned already docked,
-person in the cabin. `L_FrameSpike` did not move a single default.
+**What stage 4 added.** Ballistics and damage maths in `StarForgeCore` under tests; a projectile
+with a swept path and a muzzle on the turret; shields per face whose regeneration integrates over
+the step (the switch-on form disagrees with itself by 43% between frame rates); hull strength and a
+power-down that takes shields, turret and thrusters with it; thrusters destroyed one at a time with
+the allocator rebuilt over the survivors and refusing once two corners cannot span six axes; and a
+pirate that is `ASFTestShip` with `Crewing = Automated` — a pursuit operator in the pilot's seat and
+stage 2's gunner automation in the other. There is no AI ship. The rig is `ASFCombatGameMode` on
+`L_Combat`, and every launch line is above.
 
-**The sentence the stage was built for came from the person who walked it:** the handover through
-the hatch is not visible — "as though I were moving across a single surface" — and the log reads
-`0.000 cm` for all twenty-seven crossings of that session. Checkpoint 6's form,
-`docs/superpowers/notes/2026-09-10-checkpoint-6-results.md`, carries every figure with its log in
-`notes/evidence/`. **Read it, and the stage-4 handoff beside it, before trusting anything older.**
+**Checkpoint 7 was taken by hand on 2026-09-17** and its form,
+`docs/superpowers/notes/2026-09-14-checkpoint-7-results.md`, filled from eleven logs in
+`notes/evidence/`: six controls counted, `skipped carries 0` in every line of every log, no carry
+that stopped, no handover without a refusal, two hulls colliding with momentum conserved to the
+last digit at both rates. Eight of nine by-eye rows are still empty and go forward as open
+observations; the one that is filled says the cabin is a blind cube — a hit on the hull is felt by
+nothing inside it.
 
-**What is now measured rather than reasoned about, at 60 and 400 fps:** the ship spawns docked and
-a standing occupant drifts `0.000 cm` over sixty settled seconds; a full roll after undocking
-still reaches `180.0 deg/s` at 400 fps, so the hull's never-sleep settings survive being switched
-out of simulation and back; a kinematic Chaos body reports its mass properties (`533333` before
-and after undocking); the carry survives the schedule change in both directions — once per frame
-on a docked base, twice on a simulating one; refusals name the failing condition in the order
-distance, speed, forward, up; and three instruments were each shown to speak where the other two
-cannot — the floor-versus-frame cross-check on a still ship (49 warnings while drift and carry
-read healthy), `Carry NOT RUNNING` on a ship that leaves from under a wrongly-bound man (2.7 s,
-`mode Falling, base none`), and the handover line on a binding to a moving carrier
-(`58.978 cm over 1 frame(s)`, which is 200 m/s at 339 fps to 0.03%).
+**The main risk of §12 is closed.** Motion decomposition survived four manual checkpoints (1, 4/5,
+6, 7); plans B and C were never needed. What the slice carried forward is not in the mechanism but
+in what a person meets first: a knockdown threshold that chatters at its edge (19.63 / 19.82 /
+19.71 against 19.62, three trips in a row), a cabin the hatch left unsealed (`peak drift 884 cm`
+wall to wall under a hull strike), a seated man never struck, a human who cannot take the gunner's
+post, the owner's open choice between refusing to fly on a degraded array and flying sideways, and
+a collision whose outcome does not repeat even on one build at one rate — which is why the gates on
+that run are the carry counters and the numbers are protocol. The handoff lists all of it with
+addresses.
 
-**The plan had two arithmetic errors, both wrong in the direction that looks right, and both were
-found by re-deriving rather than re-reading.** The capture's peak acceleration is 23.0 m/s² at the
-window's edge, not the 18.0 the plan claimed, and it is over the 19.62 grav-plate ceiling rather
-than under it — accepted because the command comes from a strapped-in pilot and nobody else is
-aboard. And the station's interior volume was four metres short in Y, leaving the whole airlock
-tunnel claimed by no volume at all; no run could have caught it, only arithmetic. A trailing
-comment with a number in it lied both times.
+**Every earlier flight check still passes at 60 and 400 fps**: 200.0 m/s saturating at exactly
+800 kN, roll 180.0 and pitch/yaw 120.0 with nothing on the other axes, the scripted profile
+standing the pilot's post down, the `sf.ShipGravity 0` control detaching the occupant, a
+knocked-down occupant staying aboard, the loop's hatch crossing at `0.000 cm`. Warnings the
+instruments cannot give and that still hold: take a seat on the move (sitting is one teleport the
+drift gauge does not see); the interior flies with the occupant, so a ship turning at 180 deg/s
+changes nothing on screen; `F` outside the pilot's seat answers in the log only.
 
-**The manual checkpoint found three more, none of them in the mechanism.** The cross-check's
-threshold was a frame count where its own comment said a sixth of a second, so at 320 fps it
-warned on every walk through the hatch — a frame count is a frame rate, the Chaos sleep counter's
-defect wearing a different name; one runbook step asked for something two hands cannot do; and
-another could be "performed" without leaving the room and look exactly like a control that found
-nothing. All three are fixed, and the first is confirmed by twenty-seven crossings producing one
-warning — a man who stopped on the seam, which is reported on purpose.
-
-**Every stage-2 flight check still passes, and every one runs at 60 and 400 fps.** Forward thrust
-reaches 200.0 m/s and saturates at exactly 800 kN; roll settles at 180.0 deg/s, pitch and yaw at
-120.0, with nothing on the other axes and no linear speed from a pure torque; the scripted profile
-stands the pilot's post down; the `sf.ShipGravity 0` control detaches the occupant; a knocked-down
-occupant under the profile stays aboard. Until 2026-09-10 those rates were measured only at a
-fixed 60 fps and "a full roll settles at exactly 180.0" was false above about 250 fps; a rate that
-holds at one frame rate and not the other is the shape this project's worst defect took, and
-every threshold added since is written in seconds.
-
-Two warnings from checkpoint 4 that the instruments cannot give and that still hold: sitting down
-is a single teleport the drift gauge does not know about, so take the seat on the move; and the
-interior flies with the occupant, so a ship turning at 180 deg/s changes nothing on screen, which
-is the design working and reads like nothing happening. One more from checkpoint 6: `F` outside
-the pilot's seat answers in the log only, and at the keyboard that is indistinguishable from an
-unbound key.
-
-**Next action:** plan stage 4 from `docs/superpowers/notes/2026-09-14-handoff-stage-4.md` —
-combat: projectiles, hits, shields, hull strength, and a pirate that is the same `ASFTestShip`
-with its posts held by automation. The gunner's post, the turret, the automation operator and the
-target drone already exist from stage 2's plan «в»; §13 places them in stage 4 by an accident of
-dating, so the plan starts from projectiles. The handoff lists what the second ship breaks first:
-every `sf.*` variable assumes one ship, `ResolvePorts` is bound to the station's type, and the two
-hulls answer to different collision channels.
-
-Still open, none blocking: no gamepad exists, so the analog input path has never been watched;
-§6's "dragged across the deck" stays marked inexact by choice; and twenty-odd deferred minors are
-grouped in the handoff, none of them structural.
+**Next action:** read the stage-5 handoff, then write the spec for the phase after the slice. The
+handoff's recommended order is: harden what a person feels (the list above), then a second-phase
+spec whose first candidate is the crew — a third implementation of §4's operator beside the player
+and the automation. The spec's own rules for that text: thresholds in seconds, never frames; every
+constant derived, never re-read; every negative control performable by hand and able to fail.
 
 Things in the code that look like mistakes and are not:
 
