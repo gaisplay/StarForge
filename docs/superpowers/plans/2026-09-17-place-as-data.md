@@ -157,9 +157,9 @@ Content/Maps/L_Place.umap                 создаётся руками в р�
 CLAUDE.md                            правится: две переменные, рецепт четвёртого стенда,
                                      две записи в «things that look like mistakes»
 docs/superpowers/notes/
-  2026-09-17-stage-5-baseline.md     создаётся (задача 1)
-  2026-09-17-checkpoint-8-runbook.md создаётся (задача 6)
-  2026-09-17-checkpoint-8-results.md создаётся (задача 6)
+  2026-09-18-stage-5-baseline.md     создаётся (задача 1)
+  2026-09-18-checkpoint-8-runbook.md создаётся (задача 6)
+  2026-09-18-checkpoint-8-results.md создаётся (задача 6)
 ```
 
 Разделение: `Place.h` не знает, что такое актор, мир, кадр и носитель — он знает начало координат, габарит и два потолка. `USFPlaceDataAsset` не знает, что такое сборка — он знает, что в месте есть носители, и умеет назвать их класс. `ASFPlaceGameMode` не знает, помещается ли место — он спрашивает, печатает ответ целиком и на отказе не строит ничего. `ASFTestStation` не знает, что он теперь стоит в месте: этот этап не правит в нём ни строки.
@@ -256,13 +256,13 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 Задача не пишет кода. Её результат — документ с цифрами и дословными строками, против которого задача 5 будет сверяться.
 
 **Files:**
-- Create: `docs/superpowers/notes/2026-09-17-stage-5-baseline.md`
+- Create: `docs/superpowers/notes/2026-09-18-stage-5-baseline.md`
 
 **Interfaces:**
 - Потребляет: ничего.
 - Отдаёт задаче 5: бланк с семью прогонами, у каждого — путь к сохранённому журналу в `docs/superpowers/notes/evidence/`, и дословные строки `Loop rig:`, `Combat rig:`, `Shipboard drift:`, `Frame handover:`.
 
-- [ ] **Step 1: Завести ветку**
+- [x] **Step 1: Завести ветку**
 
 ```bash
 git switch -c feat/place-as-data main
@@ -271,7 +271,7 @@ git log -1 --format="%H %s"
 
 Записать полученный хэш в шапку бланка: опорная линия без коммита, на котором она снята, — это цифры ниоткуда.
 
-- [ ] **Step 2: Убедиться, что дерево чистое от правок кода**
+- [x] **Step 2: Убедиться, что дерево чистое от правок кода**
 
 ```bash
 git status --short
@@ -279,7 +279,7 @@ git status --short
 
 Ожидается только некоммиченный инструментарий владельца (`.agents/`, `.claude/`, `.codex/`). Любой изменённый файл под `Source/` или `Config/` — стоп: опорная линия снимается с `main`, а не с чьей-то недоделки.
 
-- [ ] **Step 3: Собрать из ничего**
+- [x] **Step 3: Собрать из ничего**
 
 ```bash
 powershell -NoProfile -Command "Stop-Process -Name UnrealEditor -Force" 2>/dev/null; tasklist | findstr Unreal
@@ -288,7 +288,7 @@ powershell -NoProfile -Command "Stop-Process -Name UnrealEditor -Force" 2>/dev/n
 
 Записать: число предупреждений (ожидается 0) и время сборки.
 
-- [ ] **Step 4: Головные тесты**
+- [x] **Step 4: Головные тесты**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "F:/UEProject/StarForge/StarForge.uproject" -ExecCmds="Automation RunTests StarForge.Core;Quit" -unattended -nopause -nullrhi -nosplash -log
@@ -298,12 +298,12 @@ grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log
 
 Ожидается **88 / 0**.
 
-- [ ] **Step 5: Семь прогонов, каждый со своим сохранённым журналом**
+- [x] **Step 5: Семь прогонов, каждый со своим сохранённым журналом**
 
 После каждого прогона журнал копируется, иначе следующий запуск его затрёт:
 
 ```bash
-cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-17-baseline-spike-60.log
+cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-18-baseline-spike-60.log
 ```
 
 | № | Стенд | Команда (сверх общей части) | Что записать |
@@ -316,22 +316,24 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-17-baseline-
 | 6 | бой, 60 | `-fps=60 -seconds=40 -ExecCmds="sf.FlightLog 1"` | строка `Combat rig:` дословно и её уровень, дистанция на 19 с, `skipped carries` |
 | 7 | бой, 400 | то же, `-fps=400` | то же |
 
-Общая часть каждой команды — из раздела «Как проверяется»; для петли и боя не забыть `MSYS_NO_PATHCONV=1` и `< /dev/null`.
+Общая часть каждой команды — из раздела «Как проверяется»; для петли не забыть `MSYS_NO_PATHCONV=1` и `< /dev/null`.
 
-- [ ] **Step 6: Записать бланк опорной линии**
+**Бой снимается URL-формой, а не по карте, и это не выбор: `Content/Maps/L_Combat.umap` не существует.** Обнаружено при снятии этой самой опорной линии 2026-09-18: запуск по карте уходит с кодом 0, кладёт 205 КБ журнала без единой строки `LogStarForge` и прячет единственный признак — `LogLoad: Error: Failed to enter /Game/Maps/L_Combat` — среди безобидных `Failed to load 'aqProf.dll'`. Карта не появлялась ни в одном коммите ни одной ветки; все восемь журналов точки 7 сняты формой `"/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFCombatGameMode"`, и прогоны 6 и 7 сняты ею же. Подробности и оба провалившихся журнала — в находке Н1 бланка опорной линии.
 
-`docs/superpowers/notes/2026-09-17-stage-5-baseline.md`. Разделы:
+- [x] **Step 6: Записать бланк опорной линии**
+
+`docs/superpowers/notes/2026-09-18-stage-5-baseline.md`. Разделы:
 
 1. **Шапка:** дата, коммит, ветка, версия движка, число предупреждений сборки, `88 / 0`.
 2. **Таблица семи прогонов** с колонками «стенд», «частота», «журнал», и по колонке на каждую записанную величину. **Прочерков быть не должно:** это измерения, а не ожидания.
 3. **Дословные строки стендов** — `Loop rig:` и `Combat rig:` целиком, с уровнем (`Display`), в блоке кода. Это то, с чем задача 5 будет сверяться посимвольно.
 4. **Что считается расхождением:** любое изменение любой цифры или любого символа этих строк. Задача 5 не имеет права «объяснить» расхождение — она обязана его записать как находку и остановить этап.
 
-- [ ] **Step 7: Коммит**
+- [x] **Step 7: Коммит**
 
 ```bash
 git status --short
-git add docs/superpowers/notes/2026-09-17-stage-5-baseline.md docs/superpowers/notes/evidence/2026-09-17-baseline-*.log
+git add docs/superpowers/notes/2026-09-18-stage-5-baseline.md docs/superpowers/notes/evidence/2026-09-18-baseline-*.log
 git commit -F - <<'MSG'
 docs: record what the three rigs say before stage 5 touches anything
 
@@ -1774,7 +1776,7 @@ MSG
 
 **Files:**
 - Edit: `Source/StarForge/Private/SFPlaceGameMode.cpp` — только если прогоны найдут в нём дефект
-- Create: `docs/superpowers/notes/evidence/2026-09-17-place-*.log` (журналы шести прогонов)
+- Create: `docs/superpowers/notes/evidence/2026-09-18-place-*.log` (журналы шести прогонов)
 
 **Interfaces:**
 - Потребляет из задачи 3: `sf.PlaceOffsetM`, `sf.PlaceRadiusM`, строку `Place size:`, строку `Place rig:`.
@@ -1786,7 +1788,7 @@ MSG
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFPlaceGameMode" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=40 "-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=43000000000" -ExecCmds="sf.FlightLog 1, sf.Dock 0, sf.Intent.X 1" -log < /dev/null
-cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-17-place-near-60.log
+cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-18-place-near-60.log
 ```
 
 И на `-fps=400`.
@@ -1807,7 +1809,7 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-17-place-nea
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFPlaceGameMode" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=25 "-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=45000000000" -ExecCmds="sf.FlightLog 1" -log < /dev/null
-cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-17-place-over-60.log
+cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-18-place-over-60.log
 ```
 
 И на `-fps=400`.
@@ -1828,7 +1830,7 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-17-place-ove
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFPlaceGameMode" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=25 "-ini:Engine:[ConsoleVariables]:sf.PlaceRadiusM=20000000000" -ExecCmds="sf.FlightLog 1" -log < /dev/null
-cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-17-place-slow-60.log
+cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-18-place-slow-60.log
 ```
 
 И на `-fps=400`.
@@ -1857,7 +1859,7 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-17-place-slo
 
 ```bash
 git status --short
-git add docs/superpowers/notes/evidence/2026-09-17-place-*.log
+git add docs/superpowers/notes/evidence/2026-09-18-place-*.log
 git commit -F - <<'MSG'
 test(world): run the size controls, including the one that proves the border helps
 
@@ -1888,8 +1890,8 @@ MSG
 Ворота §13: «три старых стенда сошлись строка в строку: `L_FrameSpike`, `L_Loop` и `L_Combat` не сдвинулись ни одним умолчанием». Задача не пишет кода и не имеет права ничего чинить подгонкой.
 
 **Files:**
-- Edit: `docs/superpowers/notes/2026-09-17-stage-5-baseline.md` — вторая колонка «после»
-- Create: `docs/superpowers/notes/evidence/2026-09-17-regression-*.log`
+- Edit: `docs/superpowers/notes/2026-09-18-stage-5-baseline.md` — вторая колонка «после»
+- Create: `docs/superpowers/notes/evidence/2026-09-18-regression-*.log`
 
 **Interfaces:**
 - Потребляет из задачи 1: бланк опорной линии и семь журналов.
@@ -1905,13 +1907,13 @@ git diff --stat main -- Source/ Config/ Content/
 
 - [ ] **Step 2: Повторить семь прогонов задачи 1**
 
-Те же команды, те же ключи, те же длительности. Журналы — в `evidence/2026-09-17-regression-*.log`.
+Те же команды, те же ключи, те же длительности. **Команды берутся из раздела «Команды, которыми сняты прогоны» бланка опорной линии, а не из памяти и не из `CLAUDE.md`**: бой идёт URL-формой (находка Н1), петля — по карте. Регрессия, снятая другой командой, сравнивает не то же самое. Журналы — в `evidence/2026-09-18-regression-*.log`.
 
 - [ ] **Step 3: Сверить построчно**
 
 ```bash
-diff <(grep -E "Loop rig:" docs/superpowers/notes/evidence/2026-09-17-baseline-loop-60.log) \
-     <(grep -E "Loop rig:" docs/superpowers/notes/evidence/2026-09-17-regression-loop-60.log)
+diff <(grep -E "Loop rig:" docs/superpowers/notes/evidence/2026-09-18-baseline-loop-60.log) \
+     <(grep -E "Loop rig:" docs/superpowers/notes/evidence/2026-09-18-regression-loop-60.log)
 ```
 
 То же для `Combat rig:`, `Shipboard drift:`, `Frame handover:`, `Flight:` на установившемся режиме, `Dock:`.
@@ -1942,7 +1944,7 @@ grep -n "Engine" Source/StarForgeCore/StarForgeCore.Build.cs
 
 ```bash
 git status --short
-git add docs/superpowers/notes/2026-09-17-stage-5-baseline.md docs/superpowers/notes/evidence/2026-09-17-regression-*.log
+git add docs/superpowers/notes/2026-09-18-stage-5-baseline.md docs/superpowers/notes/evidence/2026-09-18-regression-*.log
 git commit -F - <<'MSG'
 test: the three old rigs come out line for line, and the form now says so on paper
 
@@ -1968,8 +1970,8 @@ MSG
 - Create (руками, в редакторе): `Content/Places/DA_Place_OpenSpace.uasset`
 - Create (руками, в редакторе): `Content/Maps/L_Place.umap`
 - Edit: `CLAUDE.md`
-- Create: `docs/superpowers/notes/2026-09-17-checkpoint-8-runbook.md`
-- Create: `docs/superpowers/notes/2026-09-17-checkpoint-8-results.md`
+- Create: `docs/superpowers/notes/2026-09-18-checkpoint-8-runbook.md`
+- Create: `docs/superpowers/notes/2026-09-18-checkpoint-8-results.md`
 
 **Interfaces:**
 - Потребляет из задач 3 и 4: строки `Place size:`, `Place carrier:`, `Place rig:`, шесть журналов контролей.
@@ -2004,12 +2006,23 @@ File → Save Current Level As → папка Maps, имя L_Place
 
 Уровень остаётся **пустым**: место, корабль, пешку и панель создаёт `ASFPlaceGameMode`. Оба файла идут через Git LFS — это уже настроено `.gitattributes`.
 
+**Ворота шага: пока эти две команды не дали ожидаемого, шаг 1 запускать нельзя.**
+
+```bash
+ls -la Content/Maps/L_Place.umap Content/Places/DA_Place_OpenSpace.uasset
+MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Place -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=5 -log < /dev/null
+grep -c "Bringing World /Game/Maps/L_Place" Saved/Logs/StarForge.log   # обязано быть 1
+grep -c "Failed to load package" Saved/Logs/StarForge.log              # обязано быть 0
+```
+
+Эти ворота стоят здесь потому, что ровно этот шаг уже однажды тихо не случился. Ранбук точки 7 просил создать `L_Combat.umap` таким же абзацем; карту не создали, `CLAUDE.md` записал её как существующую, и полтора этапа никто не замечал, потому что все замеры шли URL-формой. Несозданная карта отличается от созданной **одной строкой в журнале** и ничем больше: прогон по ней выходит с кодом 0. Просьба к человеку — не ворота; ворота — это строка `Bringing World`, переписанная в бланк.
+
 - [ ] **Step 1: Приёмка ассета — строка размера обязана совпасть с той, что дало место из кода**
 
 ```bash
 MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Place -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log < /dev/null
 grep "Place size:" Saved/Logs/StarForge.log
-diff <(grep "Place size:" docs/superpowers/notes/evidence/2026-09-17-place-default-60.log) \
+diff <(grep "Place size:" docs/superpowers/notes/evidence/2026-09-18-place-default-60.log) \
      <(grep "Place size:" Saved/Logs/StarForge.log)
 ```
 
@@ -2037,7 +2050,7 @@ diff <(grep "Place size:" docs/superpowers/notes/evidence/2026-09-17-place-defau
 
 - [ ] **Step 5: Написать ранбук**
 
-`docs/superpowers/notes/2026-09-17-checkpoint-8-runbook.md`, по образцу `2026-09-14-checkpoint-7-runbook.md`. Обязательные разделы:
+`docs/superpowers/notes/2026-09-18-checkpoint-8-runbook.md`, по образцу `2026-09-14-checkpoint-7-runbook.md`. Обязательные разделы:
 
 1. **Что знать до первого запуска.** Место — это данные; стенд четвёртый и три старых не двигались; отвергнутое место не строит вообще ничего, и `Error` в этом прогоне — норма.
 2. **Перед началом. Шаг 0** — создать `DA_Place_OpenSpace` и `L_Place` руками (текст шага 0 выше), если этого ещё не сделали.
@@ -2062,7 +2075,7 @@ diff <(grep "Place size:" docs/superpowers/notes/evidence/2026-09-17-place-defau
 
 - [ ] **Step 6: Написать бланк**
 
-`docs/superpowers/notes/2026-09-17-checkpoint-8-results.md`, пустой, с графами под цифры, по образцу `2026-09-14-checkpoint-7-results.md`. Разделы:
+`docs/superpowers/notes/2026-09-18-checkpoint-8-results.md`, пустой, с графами под цифры, по образцу `2026-09-14-checkpoint-7-results.md`. Разделы:
 
 1. **Шапка:** дата, сборка, ветка и коммит, карты, частота кадров в окне.
 2. **«Что уже проверено без рук (headless, 60 и 400 fps)»** — таблица с двумя колонками частот, **без прочерков**: головные тесты **96 / 0**; границы модулей (`Engine` в `StarForgeCore` нет); семь мутантов и какие тесты каждый убил; строка размера стендового места со всеми шестью числами; строка носителя; совпадение с петлёй по люку, уводу, скорости и крену; контроли П1–П4.
@@ -2078,7 +2091,7 @@ diff <(grep "Place size:" docs/superpowers/notes/evidence/2026-09-17-place-defau
 
 ```bash
 git status --short
-git add CLAUDE.md Content/Places/DA_Place_OpenSpace.uasset Content/Maps/L_Place.umap docs/superpowers/notes/2026-09-17-checkpoint-8-runbook.md docs/superpowers/notes/2026-09-17-checkpoint-8-results.md
+git add CLAUDE.md Content/Places/DA_Place_OpenSpace.uasset Content/Maps/L_Place.umap docs/superpowers/notes/2026-09-18-checkpoint-8-runbook.md docs/superpowers/notes/2026-09-18-checkpoint-8-results.md
 git commit -F - <<'MSG'
 docs: write the runbook and results form for checkpoint 8, and give the rig its map
 
