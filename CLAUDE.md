@@ -12,10 +12,24 @@ Design docs are in Russian under `docs/superpowers/`; code, comments and commit 
 - `docs/superpowers/plans/` — implementation plans, task-by-task with checkboxes.
 - `docs/superpowers/notes/` — checkpoint runbooks and result forms for manual measurements.
 - `docs/superpowers/source/` — the novel the design was originally argued from, read and
-  digested. **Background reading, not a source of requirements.** Development follows the
-  spec and the plans; where the two disagree, the spec wins and the disagreement is not a
-  defect to fix. Its own reconciliation section lists five places the design departs from
-  the book on purpose. Do not open it to plan work.
+  digested. **Its standing changed on 2026-09-17, and the old rule is kept below because the
+  reason for it still holds inside the slice.**
+
+  *During the slice* it was background reading and not a source of requirements: the spec was
+  the authority, §1–§13 said what to build and why, and opening the novel to plan work could
+  only introduce requirements the spec had already weighed and rejected. That rule did its job.
+
+  *After the slice* there is no "why" left to follow — §13 ends at "Точка проверки 4. Срез
+  готов." and names no stage after it. The second-phase spec is therefore argued **from the
+  novel again**, deliberately and by the owner's decision. The order still stands: novel →
+  spec → plan → code. Nothing is built from the novel directly, and no plan cites it.
+
+  **The five deliberate departures in its own §9.2 stay departures**, and one of them carries a
+  number worth knowing before reading anything else: the source's combat speeds are 1–5 km/s
+  against §7's 200/400 m/s. That is not a sixth disagreement — it is the arithmetic of the
+  third, which records that nobody walks the ship during combat in the source. Walking is this
+  project's own idea, and 200/400 is what walking costs. Section §10 of the digest lists what
+  was thrown out on purpose; do not bring it back.
 
 Read the spec before changing anything structural. Most non-obvious code here is a deliberate answer to a documented failure mode, not an accident.
 
