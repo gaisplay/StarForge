@@ -102,7 +102,7 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 rewrites an argument that starts with `/` as a Windows path — `/Game/Maps/L_Loop` reaches the
 engine as `C:/Program Files/Git/Game/Maps/L_Loop` — and the engine then finds no map, brings
 up no world and sits in an empty level for the whole run: no station, no `Loop rig:` line,
-`dock free -- NO STATION in this level`, and an exit code of 0. Measured on 2026-09-13; the
+`Dock: [Ship] free -- no station`, and an exit code of 0. Measured on 2026-09-13; the
 tell in the log is `LogInit: Command Line: "C:/Program Files/Git/Game/Maps/L_Loop" …` with no
 `Bringing World` line at all. From cmd or PowerShell the plain form is fine. The URL form
 below was not rewritten in any recorded run.
@@ -163,13 +163,64 @@ line. With it, none of the next 23 did.
 The mode reads it in `StartPlay`, before `-ExecCmds` applies. Use one `-ini` switch per variable:
 two variables joined by a comma in one switch were not taken.
 
-**Three lines that are red on the other rigs are correct here.** Checkpoint 7's runbook lists
+**Two lines that are red on the other rigs are correct here.** Checkpoint 7's runbook lists
 them with the condition under which each becomes a finding again:
 
-- `dock free -- NO STATION in this level` — there is no station;
 - `Frame handover REFUSED` when the hulls touch;
 - `thruster array NOT built` with its `Error`, once hits have left the survivors on two corners.
   The `Error` repeats on every later destruction.
+
+**This list said three until 2026-09-18, and the third was never a line this project prints.**
+It was written as `dock free -- NO STATION in this level` and called red. Measured on the
+merged tree: forty seconds of the combat rig produce **zero** `LogStarForge` lines at `Warning`
+or `Error`. What the rig actually prints about having no station is two lines, in lower case
+and neither of them red — `Docking: [Ship] no station in this level, window 3.0 m, …` once at
+`Display`, and `Dock: [Ship] free -- no station` once a second at `Log`. The only red line with
+those words is `Dock: [%s] refused -- no station` (`SFDockingComponent.cpp:388`), a `Warning`
+that needs somebody to actually **ask** to dock, which nothing does in an ordinary run. A
+runbook sending an operator to look for words in a case the code never emits sends him to find
+nothing and call it a pass.
+
+**The place rig is a fourth map, and none of the other three moved.** `ASFPlaceGameMode` on
+`Content/Maps/L_Place` — an empty level whose one setting is a `GameMode Override` of
+`SFPlaceGameMode`, created by hand in the editor (step 0 of checkpoint 8's runbook). Here the
+world stops being what a game mode's constructor says it is: the mode reads a **place** —
+`USFPlaceDataAsset`, carrying a kind, an origin, a radius, a system and a list of carriers —
+**measures whether it fits in the world before assembling any of it**, prints that measurement
+whether it fits or not, and only then builds. At its authored defaults it assembles exactly what
+the loop rig does, and its figures were compared against the loop's line for line.
+
+The measurement is `StarForge::Place::MeasurePlace` in `StarForgeCore`, under nine headless
+tests, and it returns a reason and six numbers rather than a verdict. Two ceilings bound
+different lengths and are checked separately: the engine's bounds the **reach**, meaning the
+distance from the world origin to the furthest point of the place, and the crossing budget
+bounds the place's own **diameter**.
+
+By map, once `L_Place.umap` exists:
+
+```bash
+MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Place -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log < /dev/null
+```
+
+By the URL, which needs no map. The first argument is quoted, for the same reason as the loop's.
+Every figure stage 5 recorded was taken this way, because the map did not exist yet.
+
+```bash
+"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFPlaceGameMode" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log < /dev/null
+```
+
+**Two lines are red on this rig legitimately, and only under a stated condition.**
+`Place size: … -- REFUSED. Reason: …` and `Place rig: … NOTHING WAS ASSEMBLED`, both `Error`,
+are correct **only when `sf.PlaceOffsetM` or `sf.PlaceRadiusM` is on the command line** — that
+is, in a negative control. **Without such a key either one is a finding**, and the condition
+matters more than usual here: a red line that fires when the mechanism succeeds is the worst
+kind of false finding, because it looks exactly like a real one. A refused place assembles
+nothing at all, so its run carries no `Place carrier:`, no `Dock:`, no `Shipboard drift` and no
+`Frame [` line anywhere.
+
+A third line, `Place rig: … a place written in code`, is a `Warning` and is legitimate only
+while `Content/Places/DA_Place_OpenSpace.uasset` does not exist. Once it does, that warning is
+a finding: it means the asset was not found where it is supposed to be.
 
 Console variables the rig understands:
 
@@ -196,6 +247,8 @@ Console variables the rig understands:
 | `sf.Pirate` | 1 | 0: the combat rig spawns no pirate. The player's automation has no target, and the rig line goes out as a `Warning`. **Read once in `StartPlay`, before `-ExecCmds` applies**, so it has to be set before the level starts: `"-ini:Engine:[ConsoleVariables]:sf.Pirate=0"` on the command line, or in the editor's console before Play. Typed mid-run, it does nothing until the level restarts |
 | `sf.PirateAI` | 1 | 0: the pursuit operator declines the pirate's pilot post. It returns `false`, not a zeroed intent, which with assist on would brake the ship. The pirate coasts, the distance does not change (1011.2 m for 40 s at 60 and 400 fps), and it keeps firing. Read live. **A named exception**: only automated hulls read it, because only they seat this operator |
 | `sf.KillThruster N [DelaySeconds]` | *(a command)* | Not a variable. Destroys thruster `N`, by its index in the ship data asset, on the player's ship (never an automated one), and rebuilds the array over the survivors. Runs once per entry, so twelve entries in one `-ExecCmds` list are twelve kills. The optional second argument delays the kill by that many seconds of game time, because every `-ExecCmds` entry runs on the first frame, before anything has spooled. Refuses with a `Warning` a thruster already destroyed, an index out of range, a malformed argument or a negative delay |
+| `sf.PlaceOffsetM` | *(empty)* | Metres the place rig moves its place along `+X`, on top of the authored origin. **A string variable, not a numeric one**: a `float` at 4.3e10 rounds in steps of about four kilometres, a quarter of the rig place's own extent. **Read once in `StartPlay`, before `-ExecCmds` applies**, so it has to arrive as `"-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=45000000000"`, one `-ini` switch per variable. A value that does not parse is a `Warning` and the authored origin stands -- parsed through `FDefaultValueHelper::ParseDouble`, which validates the whole string, and never through `Atod`, which answers zero for a string with no number in it and cannot say so |
+| `sf.PlaceRadiusM` | *(empty)* | Metres of extent, **replacing** the authored radius rather than adding to it, because a control that could only grow a place could never ask for a smaller one. A second variable is needed because the two ceilings break on different inputs: the engine's on distance and the crossing budget on extent, and a control able to break only one cannot tell the two refusals apart |
 
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
 
@@ -277,12 +330,34 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 ## Current state
 
-**The vertical slice is finished. Stage 4 — combat and the pirate — is merged: `main` is at
-merge commit `a256a02`, fifty-one commits over the branch point; `main` now stands five commits past it, at `1e208f9`.** 88 headless tests, a build
-from nothing with no warnings, and all three rigs green at 60 and 400 fps on the merged result.
-Spec §13 ends at "Точка проверки 4. Срез готов." — there is no stage the spec names after this
-one, and **the next step is a spec, not a plan.** Start from
-`docs/superpowers/notes/2026-09-17-handoff-stage-5.md`.
+**The vertical slice is finished and the second phase has begun. Stage 5 — the place as data —
+is written and measured on `feat/place-as-data`, waiting on one hand-made map and asset before
+checkpoint 8 can be taken.** 97 headless tests, a clean rebuild with no warnings, and all four
+rigs green at 60 and 400 fps.
+
+**Stage 5 changed no existing file.** Seven files added, none modified, none removed — and the
+three old rigs were re-run afterwards and compared against a baseline taken before any of it was
+written: fourteen families of log line, 1625 lines, with the timestamp and frame number stripped
+and nothing else normalised. Nothing differs. Both records are in
+`docs/superpowers/notes/2026-09-18-stage-5-baseline.md`.
+
+**What stage 5 added.** A place — a continuous volume with a kind, an origin, an extent, a system
+and a list of carriers — as a `UDataAsset` rather than as lines in a game mode's constructor; a
+size predicate in `StarForgeCore` that answers with a reason and six numbers rather than a
+boolean, and refuses before anything is assembled; the fourth rig, `ASFPlaceGameMode` on
+`L_Place`, which at its authored defaults builds exactly the world the loop rig builds and was
+compared against it line for line; and four negative controls on the size, run at both frame
+rates.
+
+**What is left of stage 5.** `Content/Maps/L_Place.umap` and
+`Content/Places/DA_Place_OpenSpace.uasset` are created by hand in the editor — step 0 of
+checkpoint 8's runbook — and until they exist the rig assembles a place written in code and says
+so in a `Warning`. Then checkpoint 8 is taken by hand.
+
+**Read `docs/superpowers/specs/2026-09-17-world-as-a-graph-of-places.md` before anything
+structural in the second phase**, and note that its §10.4 folds two ceilings into one comparison
+where §5 derives them as bounds on different lengths; the entry below on the two ceilings says
+what the code does instead and why.
 
 **What stage 4 added.** Ballistics and damage maths in `StarForgeCore` under tests; a projectile
 with a swept path and a muzzle on the turret; shields per face whose regeneration integrates over
@@ -588,6 +663,45 @@ Things in the code that look like mistakes and are not:
   line-for-line identical. The thruster lock is still one bool shared by every reason: undocking
   clears it unconditionally, so a ship powered down while docked would fly again after undocking.
   No rig can do that to a ship this stage.
+
+- **Two size ceilings checked separately, where the spec states one comparison against the
+  smaller of them.** `StarForge::Place::MeasurePlace` compares reach against the engine's
+  ceiling and diameter against the crossing budget, each with its own refusal reason, and §10.4
+  of the second-phase spec asks for "extent plus distance from the origin against
+  min(4.398·10¹² cm, the time ceiling of §5)". That reads like one line of arithmetic the
+  predicate declined to write.
+
+  It bounds two different lengths. §5 derives the time ceiling from `D ≤ v·T` where `D` is the
+  **diameter of a place**, not the distance to it; the engine's bounds how far from the world
+  origin a simulating body may be. Taken literally, the spec's single comparison refuses a
+  place a kilometre wide sitting 2·10¹⁰ m out **because it cannot be crossed** — a crossing
+  that in fact takes seven microseconds. A refusal with the wrong reason is worse than no
+  refusal: it sends whoever reads it to shrink a place that needed moving. Operationally the
+  spec's "smaller ceiling" still holds, because a place violating either is refused.
+
+  What holds it: the test `TheTighterCeilingIsTheOneThatBinds` in `StarForgeCore`, and
+  checkpoint 8's control П3, which asks for a 2·10¹⁰ m radius at the origin and requires
+  `Reason: crossing time.` — where `Reason: engine reach.` would be the finding.
+
+- **2⁴² cm is held as measured, not as quoted.** The world-size ceiling in `Place.h` reads
+  `4.398046511104e10` metres with a comment saying no constant of that name was found in the
+  shipped engine, and that looks like a citation somebody could not be bothered to chase down.
+  It was chased. `4398046511104` appears nowhere in `Runtime/Core/Public` or
+  `Runtime/Experimental/Chaos`; `WORLD_MAX` and `HALF_WORLD_MAX` survive in 5.8 only inside a
+  commented-out line of `LargeWorldRenderPosition.cpp`.
+
+  The number stands between two measurements, and the logs are named:
+  `notes/evidence/2026-09-17-worldsize-*.log`. At 4.30·10¹² cm the loop rig flies — 200.0 m/s,
+  `0.000 cm` of drift, at 60 and 400 fps. At 4.50·10¹² cm the ship stops existing the frame its
+  physics body comes on: the log ends after `Dock: [Ship] undocked.`, the station keeps
+  printing, `LogStarForge: Error` is zero and the file closes cleanly. 2⁴² sits between them.
+
+  Why the distinction earns a comment: a figure presented as an engine citation is a figure
+  nobody re-measures when the engine changes version. Presented as measured, with the runs
+  named, it is a figure the next person knows how to re-take. The default itself is asserted by
+  `TheDefaultLimitsAreTheSpecsNumbers`, which exists because every other test in that file
+  spells its own limits and the default was therefore checked by nobody: written as `e12`
+  instead of `e10`, all other tests stayed green.
 
 When reading the checkpoint HUD: **check the measured-time line before the drift
 figure.** A drift of zero is what both a perfect minute and a dead instrument look
