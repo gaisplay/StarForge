@@ -2,6 +2,33 @@
 
 namespace StarForge::ShipFrame
 {
+	namespace
+	{
+		/**
+		 * Every component finite. An infinity is not a NaN, and here it would come back as a
+		 * relative speed of infinity -- which the caller's guard would refuse, correctly, but
+		 * only by accident of the comparison rather than by this function's contract.
+		 */
+		bool IsFinite(const FVector& V)
+		{
+			return FMath::IsFinite(V.X) && FMath::IsFinite(V.Y) && FMath::IsFinite(V.Z);
+		}
+
+		bool IsFinite(const FCarrierMotion& Motion)
+		{
+			return IsFinite(Motion.OriginMetres)
+				&& IsFinite(Motion.LinearVelocityMetresPerSec)
+				&& IsFinite(Motion.AngularVelocityRadPerSec);
+		}
+
+		/** v + w x r, the velocity of the one point of a carrier the caller asked about. */
+		FVector PointVelocityMetresPerSec(const FCarrierMotion& Motion, const FVector& PointMetres)
+		{
+			return Motion.LinearVelocityMetresPerSec
+				+ FVector::CrossProduct(Motion.AngularVelocityRadPerSec, PointMetres - Motion.OriginMetres);
+		}
+	}
+
 	FTransform WorldToLocal(const FTransform& ShipWorld, const FTransform& OccupantWorld)
 	{
 		return OccupantWorld.GetRelativeTransform(ShipWorld);
@@ -111,5 +138,23 @@ namespace StarForge::ShipFrame
 		View = FQuat(Right, -FMath::DegreesToRadians(AllowedPitch)) * View;
 
 		return View.GetNormalized();
+	}
+
+	bool RelativeSpeedAtPointMetresPerSec(
+		const FCarrierMotion& A,
+		const FCarrierMotion& B,
+		const FVector& PointMetres,
+		double& OutSpeedMetresPerSec)
+	{
+		// Negated, so a NaN fails the guard instead of falling through it, and Out is left
+		// untouched on every refusal.
+		if (!IsFinite(A)) { return false; }
+		if (!IsFinite(B)) { return false; }
+		if (!IsFinite(PointMetres)) { return false; }
+
+		OutSpeedMetresPerSec =
+			(PointVelocityMetresPerSec(A, PointMetres) - PointVelocityMetresPerSec(B, PointMetres)).Size();
+
+		return true;
 	}
 }

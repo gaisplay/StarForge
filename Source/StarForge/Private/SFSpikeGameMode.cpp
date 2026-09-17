@@ -18,6 +18,11 @@ void ASFSpikeGameMode::StartPlay()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
+	// Named as the loop rig names it, so a line from this rig and a line from that one carry
+	// the same label. Requested, not Required_Fatal: a taken name is not worth a crash.
+	SpawnParams.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
+	SpawnParams.Name = TEXT("Ship");
+
 	Ship = GetWorld()->SpawnActor<ASFTestShip>(
 		ASFTestShip::StaticClass(), FTransform::Identity, SpawnParams);
 

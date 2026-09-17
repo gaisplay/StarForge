@@ -2,10 +2,11 @@
 
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
-#include "Kismet/GameplayStatics.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
+#include "Ship/SFDamageableComponent.h"
 #include "Ship/SFDockingComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFPilotStationComponent.h"
@@ -15,6 +16,7 @@
 #include "Ship/SFTurretComponent.h"
 #include "ShipFrameMath.h"
 #include "TurretMath.h"
+#include "Units.h"
 
 namespace
 {
@@ -30,50 +32,112 @@ namespace
 	 * scene blew to pure white and every white or green line -- which is most of
 	 * them, since white and green are what a healthy run looks like -- disappeared
 	 * against it. A dark panel behind the text keeps it legible whatever the scene
-	 * does. Sized generously: a panel slightly too large costs nothing, a line
-	 * falling off the bottom of a too-small one is the same defect all over again.
+	 * does.
 	 *
-	 * Raised to 640 when the flight block was added: those lines pushed the readout
-	 * past the old 480 and the last of them fell off the panel, which is the exact
-	 * illegibility the panel was introduced to fix.
-	 *
-	 * Raised again to 760 for the gunner block. A healthy run is 23 lines at 22 px from
-	 * a 48 px top with one 10 px gap, so the last line's text ends near 564 against a
-	 * panel bottom of 796; the three red diagnostic lines above add 66 more, and the
-	 * knockdown's footing line is still to come. A line falling off the bottom is the
-	 * defect this panel exists to prevent.
-	 *
-	 * Raised again to 820 for the frame and dock lines: two more at 22 px, plus the
-	 * margin a line needs so it does not sit on the panel's edge. A line falling off the
-	 * bottom is the defect this panel exists to prevent, and it has now been prevented
-	 * three times by the same arithmetic.
+	 * The height is not among these, and it used to be. It was 480, then 640 for the
+	 * flight block, 760 for the gunner block and 820 for the frame and dock lines --
+	 * each time raised by hand, by the same arithmetic, after the last line had already
+	 * fallen off the bottom or was about to. Every block still to come would have needed
+	 * it done again. The lines are queued instead, and the panel is sized to where the
+	 * last of them ended (see DrawHUD), so a line added to the readout cannot outgrow it.
 	 */
 	constexpr float PanelX = 20.0f;
 	constexpr float PanelY = 36.0f;
 	constexpr float PanelWidth = 760.0f;
-	constexpr float PanelHeight = 820.0f;
+
+	namespace ReadoutLayout
+	{
+		/** Where the first line's text starts; the gap above it is also left below the last. */
+		constexpr double FirstLineY = 48.0;
+		constexpr float TextX = 32.0f;
+		constexpr double LineHeight = 22.0;
+
+		/**
+		 * The shields line is drawn in columns so a face at zero can be coloured on its own.
+		 * Fixed columns rather than text measured and laid end to end: a face regenerating from
+		 * 640 to 1000 would otherwise shift every face after it on every frame. A hundred pixels
+		 * a column holds "+X 1000" with room to spare in the medium font; six from 120 end
+		 * before 720, inside the panel's right edge at 780.
+		 */
+		constexpr float ShieldFirstColumnX = 120.0f;
+		constexpr float ShieldColumnWidth = 100.0f;
+	}
+
+	/**
+	 * The player's ship: the hull the man is bound to, or failing that the hull crewed by the player
+	 * -- he may be standing on the station, and his ship is still the one the readout is about.
+	 *
+	 * Never "the first ASFTestShip in the level". With a pirate in it, iteration order would decide
+	 * whose flight numbers, shields and turret this readout prints under the player's name, and the
+	 * order happened to be right on the combat rig only because the player's ship spawns first.
+	 */
+	const ASFTestShip* FindPlayersShip(const UWorld* World, const APawn* Pawn)
+	{
+		const ASFCharacter* Occupant = Cast<ASFCharacter>(Pawn);
+		const USFShipboardMovementComponent* Movement = Occupant ? Occupant->GetShipboardMovement() : nullptr;
+		const USFShipFrameComponent* BoundFrame = Movement ? Movement->GetShipFrame() : nullptr;
+		if (const ASFTestShip* Bound = BoundFrame ? Cast<ASFTestShip>(BoundFrame->GetOwner()) : nullptr)
+		{
+			return Bound;
+		}
+
+		for (TActorIterator<ASFTestShip> It(World); It; ++It)
+		{
+			if (It->GetCrewing() == ESFShipCrewing::PlayerShip)
+			{
+				return *It;
+			}
+		}
+		return nullptr;
+	}
+}
+
+void ASFFrameDriftHUD::QueueText(const FString& Text, float X, double Y, const FLinearColor& Color)
+{
+	FReadoutText& Queued = PendingText.AddDefaulted_GetRef();
+	Queued.Text = Text;
+	Queued.X = X;
+	Queued.Y = static_cast<float>(Y);
+	Queued.Color = Color;
 }
 
 void ASFFrameDriftHUD::DrawLine(const FString& Text, double& Y, const FLinearColor& Color)
 {
-	if (Canvas)
-	{
-		Canvas->SetDrawColor(Color.ToFColor(true));
-		Canvas->DrawText(GEngine->GetMediumFont(), Text, 32.0f, static_cast<float>(Y));
-	}
-	Y += 22.0;
+	QueueText(Text, ReadoutLayout::TextX, Y, Color);
+	Y += ReadoutLayout::LineHeight;
 }
 
 void ASFFrameDriftHUD::DrawHUD()
 {
 	Super::DrawHUD();
 
+	PendingText.Reset();
+	double Y = ReadoutLayout::FirstLineY;
+	DrawReadout(Y);
+
 	// Behind everything else: white and green, which is what most lines are on a
-	// healthy run, vanished against the blown-out scene at the old light level.
-	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), PanelX, PanelY, PanelWidth, PanelHeight);
+	// healthy run, vanished against the blown-out scene at the old light level. Drawn
+	// after the readout has been laid out and before any of it is put on the canvas,
+	// which is the whole reason the lines are queued: the panel's bottom is where the
+	// last line ended, on every exit from DrawReadout, including the early ones.
+	const double PanelBottom = Y + (ReadoutLayout::FirstLineY - PanelY);
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), PanelX, PanelY, PanelWidth,
+		static_cast<float>(PanelBottom - PanelY));
 
-	double Y = 48.0;
+	if (!Canvas)
+	{
+		return;
+	}
 
+	for (const FReadoutText& Queued : PendingText)
+	{
+		Canvas->SetDrawColor(Queued.Color.ToFColor(true));
+		Canvas->DrawText(GEngine->GetMediumFont(), Queued.Text, Queued.X, Queued.Y);
+	}
+}
+
+void ASFFrameDriftHUD::DrawReadout(double& Y)
+{
 	// sf.ShipGravity is the negative-control switch (see SFShipboardMovementComponent):
 	// with it off, gravity is left at world down and the carry breaks on its own. This
 	// line has to be the first thing drawn, unconditionally, so a control run can never
@@ -256,13 +320,12 @@ void ASFFrameDriftHUD::DrawHUD()
 	// The dock line is about the ship, not about whichever carrier he happens to be
 	// standing in: a man on the station still needs to see whether his ship is attached
 	// to it. Found the same way the flight block finds it, for the same reason.
-	const ASFTestShip* DockShip = Cast<ASFTestShip>(
-		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+	const ASFTestShip* DockShip = FindPlayersShip(GetWorld(), GetOwningPawn());
 	const USFDockingComponent* Docking = DockShip ? DockShip->GetDocking() : nullptr;
 
 	if (!Docking)
 	{
-		DrawLine(TEXT("dock    -- no ship with a docking component in the level"), Y, FLinearColor::Red);
+		DrawLine(TEXT("dock    -- no player's ship with a docking component in the level"), Y, FLinearColor::Red);
 	}
 	else if (!Docking->HasStation())
 	{
@@ -310,6 +373,43 @@ void ASFFrameDriftHUD::DrawHUD()
 			break;
 		}
 		}
+	}
+
+	// Below frame, like dock and for the same reason: while the frame line is red, whatever is
+	// under it describes something other than what is happening. Read from the same ship as the
+	// dock line -- the ship, not whichever carrier he is standing in.
+	const USFDamageableComponent* Damageable = DockShip ? DockShip->GetDamageable() : nullptr;
+	if (!Damageable)
+	{
+		DrawLine(TEXT("shields -- no player's ship with a damageable component in the level"), Y, FLinearColor::Red);
+	}
+	else if (!Damageable->IsReady())
+	{
+		// Not six red zeros and a hull of 0.0 / 0.0: that is what a ship shot to pieces looks like.
+		DrawLine(TEXT("shields -- damageable component NOT ready, no shield or hull figures (see the log)"), Y, FLinearColor::Red);
+	}
+	else
+	{
+		// A face on its own in red when it is at zero, because a hit there goes straight to the
+		// hull, and one red number among six says which side that is.
+		QueueText(TEXT("shields"), ReadoutLayout::TextX, Y, FLinearColor::White);
+		for (int32 i = 0; i < StarForge::Damage::FaceCount; ++i)
+		{
+			const StarForge::Damage::EShipFace Face = static_cast<StarForge::Damage::EShipFace>(i);
+			const double Charge = Damageable->GetFaceCharge(Face);
+			QueueText(FString::Printf(TEXT("%s %.0f"), StarForge::Damage::FaceName(Face), Charge),
+				ReadoutLayout::ShieldFirstColumnX + ReadoutLayout::ShieldColumnWidth * static_cast<float>(i),
+				Y,
+				Charge <= 0.0 ? FLinearColor::Red : FLinearColor::White);
+		}
+		Y += ReadoutLayout::LineHeight;
+
+		const bool bPoweredDown = Damageable->IsPoweredDown();
+		DrawLine(FString::Printf(TEXT("hull    %.1f / %.1f%s"),
+			Damageable->GetHullStrength(), Damageable->GetHullCapacity(),
+			bPoweredDown ? TEXT("   powered down") : TEXT("")),
+			Y,
+			bPoweredDown ? FLinearColor(1.0f, 0.45f, 0.0f) : FLinearColor::White);
 	}
 
 	if (Frame && Ship)
@@ -365,16 +465,71 @@ void ASFFrameDriftHUD::DrawHUD()
 	DrawLine(TEXT(""), Y);
 	DrawFlightBlock(Y);
 	DrawGunnerBlock(Y);
+
+	// The other ship -- on the combat rig, the pirate. It is the ship that is not the player's.
+	const ASFTestShip* OwnShip = DockShip;
+	const ASFTestShip* Enemy = nullptr;
+	for (TActorIterator<ASFTestShip> It(GetWorld()); It; ++It)
+	{
+		if (*It != OwnShip)
+		{
+			Enemy = *It;
+			break;
+		}
+	}
+
+	if (!Enemy)
+	{
+		DrawLine(TEXT("combat  no other ship in this level"), Y);
+		return;
+	}
+
+	const double EnemyDistanceMetres = OwnShip
+		? StarForge::Units::CmToMetres(FVector::Dist(OwnShip->GetActorLocation(), Enemy->GetActorLocation()))
+		: 0.0;
+
+	// Who flies it, with "standing down" when the post is held and declining: sf.PirateAI 0 and a
+	// powered-down pirate both read that way, and a pirate that simply sits still does not.
+	const USFPilotStationComponent* EnemyPilot = Enemy->GetPilotStation();
+	const FString EnemyFlownBy = EnemyPilot
+		? EnemyPilot->GetOperatorDisplayName()
+			+ ((EnemyPilot->IsOccupied() && !EnemyPilot->IsOperatorFlying()) ? TEXT(" (standing down)") : TEXT(""))
+		: FString(TEXT("no pilot station"));
+
+	const USFDamageableComponent* EnemyDamage = Enemy->GetDamageable();
+	if (!EnemyDamage || !EnemyDamage->IsReady())
+	{
+		DrawLine(FString::Printf(TEXT("combat  [%s] %.1f m   flown by %s   damageable component NOT ready"),
+			*Enemy->GetName(), EnemyDistanceMetres, *EnemyFlownBy), Y, FLinearColor::Red);
+		return;
+	}
+
+	int32 FacesDown = 0;
+	for (int32 i = 0; i < StarForge::Damage::FaceCount; ++i)
+	{
+		if (EnemyDamage->GetFaceCharge(static_cast<StarForge::Damage::EShipFace>(i)) <= 0.0)
+		{
+			++FacesDown;
+		}
+	}
+
+	const bool bEnemyDown = EnemyDamage->IsPoweredDown();
+	DrawLine(FString::Printf(TEXT("combat  [%s] %.1f m   flown by %s   hull %.1f / %.1f   faces down %d of %d   %s"),
+		*Enemy->GetName(), EnemyDistanceMetres, *EnemyFlownBy,
+		EnemyDamage->GetHullStrength(), EnemyDamage->GetHullCapacity(),
+		FacesDown, StarForge::Damage::FaceCount,
+		bEnemyDown ? TEXT("powered down") : TEXT("powered up")),
+		Y,
+		bEnemyDown ? FLinearColor(1.0f, 0.45f, 0.0f) : FLinearColor::White);
 }
 
 void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 {
-	const ASFTestShip* Ship = Cast<ASFTestShip>(
-		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+	const ASFTestShip* Ship = FindPlayersShip(GetWorld(), GetOwningPawn());
 
 	if (!Ship || !Ship->GetThrusters())
 	{
-		DrawLine(TEXT("flight: no ship with a thruster array in the level"), Y, FLinearColor::Red);
+		DrawLine(TEXT("flight: no player's ship with a thruster array in the level"), Y, FLinearColor::Red);
 		return;
 	}
 
@@ -517,8 +672,7 @@ void ASFFrameDriftHUD::DrawFlightBlock(double& Y)
 
 void ASFFrameDriftHUD::DrawGunnerBlock(double& Y)
 {
-	const ASFTestShip* Ship = Cast<ASFTestShip>(
-		UGameplayStatics::GetActorOfClass(GetWorld(), ASFTestShip::StaticClass()));
+	const ASFTestShip* Ship = FindPlayersShip(GetWorld(), GetOwningPawn());
 	const USFGunnerStationComponent* Gunner = Ship ? Ship->GetGunnerStation() : nullptr;
 	const USFTurretComponent* Turret = Gunner ? Gunner->GetTurret() : nullptr;
 

@@ -66,7 +66,17 @@ public:
 	 */
 	bool IsScriptedProfileStateUnknown() const { return bScriptedProfileUnknown; }
 
+	/**
+	 * Whether this instance answers the unnamed sf.* family. See ESFShipCrewing.
+	 *
+	 * True by default, so a hull nobody told anything behaves exactly as it did when there
+	 * was only one ship in the world -- which is what keeps both existing rigs unchanged.
+	 */
+	void SetConsoleControlled(bool bIn) { bConsoleControlled = bIn; }
+
 private:
+	bool bConsoleControlled = true;
+
 	UPROPERTY()
 	TObjectPtr<USFThrusterArrayComponent> Thrusters;
 

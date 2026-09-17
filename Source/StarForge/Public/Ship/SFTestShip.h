@@ -15,11 +15,39 @@ class USFPilotStationComponent;
 class USFGunnerStationComponent;
 class USFConsoleOperatorComponent;
 class USFAutomationOperatorComponent;
+class USFPursuitOperatorComponent;
 class USFTurretComponent;
+class USFWeaponComponent;
+class USFDamageableComponent;
 class USFDockingPortComponent;
 class USFDockingComponent;
 class USFInteriorVolumeComponent;
 class ASFTargetDrone;
+
+/**
+ * Who mans this hull. Not a difficulty setting and not an AI flag: spec 4 says there is
+ * no such thing as an AI ship, only a ship whose posts are held by automation. What this
+ * actually decides is narrower and entirely about instruments -- whether this hull answers
+ * the unnamed sf.* family.
+ *
+ * Every one of sf.ShipProfile, sf.Dock, sf.Intent.*, sf.ConsoleOperator, sf.AutomationOperator
+ * and sf.AimAt was written when there was exactly one ship in the world, and each addresses
+ * "the ship" rather than a ship. With two hulls answering them, one command moves both: the
+ * dock edge fires on every component instance, and a person freeing his own gunner's seat
+ * also stands down the pirate's. An Automated hull therefore answers none of them. It is not
+ * deaf by accident -- its posts are held by automation by definition, and those variables are
+ * the player's ship's debug switches.
+ *
+ * Named exceptions: sf.Shields, which every hull answers (see SFDamageableComponent.cpp), and
+ * sf.PirateAI, which only an Automated hull answers, because only there does the pursuit
+ * operator that reads it hold a seat (see SFPursuitOperatorComponent.cpp).
+ */
+UENUM()
+enum class ESFShipCrewing : uint8
+{
+	PlayerShip,
+	Automated
+};
 
 /**
  * Throwaway measurement rig: a boxed room that flies a scripted manoeuvre at
@@ -70,6 +98,49 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "StarForge|Profile")
 	double InteriorHalfExtentCm = 400.0;
 
+	/**
+	 * Read at BeginPlay, where it is handed to the posts and the docking component, and read
+	 * again every frame by the scripted profile. A hull spawned into a running world must
+	 * have it set between SpawnActorDeferred and FinishSpawning: set after SpawnActor, the
+	 * components have already begun play on the old value while the profile follows the new
+	 * one, and the hull is half deaf.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
+	ESFShipCrewing Crewing = ESFShipCrewing::PlayerShip;
+
+	/**
+	 * Whether this hull spawns the orbiting drone its gunner's automation tracks.
+	 *
+	 * True on both existing rigs, where the drone is the only thing to aim at. False on the
+	 * combat rig, where the thing to aim at is the other ship: two hulls each spawning their
+	 * own drone would give the combat rig two targets nobody asked for, and each automation
+	 * would track its own rather than the enemy.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
+	bool bSpawnTargetDrone = true;
+
+	/**
+	 * Whether the gunner's trigger reaches the muzzle.
+	 *
+	 * False by default, and that is what keeps both existing rigs silent: the automation holds
+	 * the trigger whenever it has a target, so with a muzzle on the barrel they would otherwise
+	 * open fire on the drone five times a second, and no figure recorded on them was taken with
+	 * shots in the air. A hull that answers the console still fires on sf.Fire 1 whatever this
+	 * says, as long as an operator holds the gunner's post (USFWeaponComponent::ApplyTrigger).
+	 * The combat rig sets it on the pirate and leaves the player's ship holding fire until sf.Fire 1.
+	 *
+	 * Handed to the weapon before Super::BeginPlay, like Crewing, and for the same reason.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
+	bool bWeaponsFree = false;
+
+	ESFShipCrewing GetCrewing() const { return Crewing; }
+
+	USFAutomationOperatorComponent* GetAutomationOperator() const { return AutomationOperator; }
+
+	/** Holds the pilot's post on an Automated hull; inert on the player's. */
+	USFPursuitOperatorComponent* GetPursuitOperator() const { return PursuitOperator; }
+
 	USFShipFrameComponent* GetFrameComponent() const { return Frame; }
 
 	/** The simulated body: the thruster array applies its wrench to this. */
@@ -82,6 +153,12 @@ public:
 	USFGunnerStationComponent* GetGunnerStation() const { return GunnerStation; }
 
 	USFTurretComponent* GetTurret() const { return Turret; }
+
+	/** The muzzle, at the tip of the barrel the turret turns. */
+	USFWeaponComponent* GetWeapon() const { return Weapon; }
+
+	/** Shield faces and hull strength: what a hit on this hull spends. */
+	USFDamageableComponent* GetDamageable() const { return Damageable; }
 
 	/** The ship's half of the airlock. Its +X points out through the hatch. */
 	USFDockingPortComponent* GetDockingPort() const { return DockingPort; }
@@ -153,6 +230,9 @@ private:
 	TObjectPtr<USFAutomationOperatorComponent> AutomationOperator;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFPursuitOperatorComponent> PursuitOperator;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFTurretComponent> Turret;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
@@ -170,6 +250,12 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<UStaticMeshComponent> TurretBarrelMesh;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFWeaponComponent> Weapon;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFDamageableComponent> Damageable;
 
 	/**
 	 * Lights the interior from the room's centre so the walk test is visible at all.

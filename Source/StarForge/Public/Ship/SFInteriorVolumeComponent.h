@@ -4,6 +4,7 @@
 #include "Components/BoxComponent.h"
 #include "SFInteriorVolumeComponent.generated.h"
 
+class ASFCharacter;
 class USFShipFrameComponent;
 
 /**
@@ -19,6 +20,12 @@ class USFShipFrameComponent;
  *
  * It knows nothing about docking, and must not: an airlock handover and a boarding
  * action are the same event, which is what spec 8 says this mechanism buys.
+ *
+ * Entering binds only while the carrier he is bound to and this one move together where he
+ * stands (see TryHandover). A hull striking another brings its volume onto whoever stands at
+ * the struck wall, and a handover then would put him on a carrier moving at the speed of the
+ * collision. That is the one thing this class does know about motion, and it is asked of the
+ * two frames, not of docking.
  */
 UCLASS(ClassGroup = (StarForge), meta = (BlueprintSpawnableComponent))
 class STARFORGE_API USFInteriorVolumeComponent : public UBoxComponent
@@ -29,6 +36,12 @@ public:
 	USFInteriorVolumeComponent();
 
 	virtual void BeginPlay() override;
+
+	/** Ticks only while somebody inside this volume has been refused a handover (see TryHandover). */
+	virtual void TickComponent(
+		float DeltaTime,
+		ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
 
 	/**
 	 * The frame this volume hands out: its owner's, resolved on the first ask and kept.
@@ -51,7 +64,36 @@ public:
 	 */
 	bool ContainsPoint(const FVector& WorldPoint) const;
 
+	/**
+	 * How fast two carriers move relative to each other at a world point, in metres per second:
+	 * |(vA + wA x rA) - (vB + wB x rB)|, each r from that frame's origin to the point. Read from
+	 * the frame components' own velocities, so a docked hull attached to a still station reads the
+	 * station's zero.
+	 *
+	 * The arithmetic itself is StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec, where it can
+	 * be tested; this reads the two frames, converts the one length through StarForge::Units, and
+	 * returns a NaN where that function refuses, which the caller's negated comparison treats as a
+	 * refusal. WorldPointCm is centimetres, as its name says, and the result is not.
+	 */
+	static double RelativeSpeedAtMetresPerSec(
+		const USFShipFrameComponent& A, const USFShipFrameComponent& B, const FVector& WorldPointCm);
+
 private:
+	/**
+	 * Binds Character to this volume's frame unless he is bound to another carrier that moves
+	 * relative to this one, where he stands, faster than the handover limit. A first binding --
+	 * nothing to hand him from -- is not a handover and always goes through. A refusal is said
+	 * once per episode and retried every tick while he stays in the volume.
+	 */
+	void TryHandover(ASFCharacter* Character);
+
+	UFUNCTION()
+	void HandleEndOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComp,
+		int32 OtherBodyIndex);
+
 	UFUNCTION()
 	void HandleBeginOverlap(
 		UPrimitiveComponent* OverlappedComponent,
@@ -63,4 +105,7 @@ private:
 
 	UPROPERTY()
 	mutable TObjectPtr<USFShipFrameComponent> OwnerFrame;
+
+	/** Inside this volume, refused, and not yet told again: the open episodes. */
+	TArray<TWeakObjectPtr<ASFCharacter>> RefusedOccupants;
 };

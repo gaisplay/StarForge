@@ -2,6 +2,7 @@
 
 #include "GameFramework/Actor.h"
 #include "Ship/SFTurretComponent.h"
+#include "Ship/SFWeaponComponent.h"
 #include "StarForgeLog.h"
 
 USFGunnerStationComponent::USFGunnerStationComponent()
@@ -26,6 +27,7 @@ void USFGunnerStationComponent::BeginPlay()
 	if (AActor* Owner = GetOwner())
 	{
 		Turret = Owner->FindComponentByClass<USFTurretComponent>();
+		Weapon = Owner->FindComponentByClass<USFWeaponComponent>();
 	}
 
 	if (!Turret)
@@ -33,7 +35,16 @@ void USFGunnerStationComponent::BeginPlay()
 		// Loudly: a gunner station with nothing to command looks exactly like a turret
 		// that will not move, and the readout cannot tell the two apart on its own.
 		UE_LOG(LogStarForge, Error,
-			TEXT("Gunner station found no turret on its owner; nothing will be aimed."));
+			TEXT("Gunner station on [%s] found no turret; nothing will be aimed."), *GetNameSafe(GetOwner()));
+	}
+
+	if (!Weapon)
+	{
+		// A warning, not an error: a gunner's post without a turret is useless, and one
+		// without a muzzle still aims.
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Gunner station on [%s] found no weapon; the turret will aim and nothing will fire."),
+			*GetNameSafe(GetOwner()));
 	}
 }
 
@@ -44,10 +55,19 @@ void USFGunnerStationComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	// The weapon hears from this tick on every path out of it: ApplyTrigger where an operator
+	// provided an intent, ReleaseTrigger exactly where the turret is told nobody commanded it.
+	// The release is not optional, and not because of a stale trigger -- the weapon has no
+	// tick and cannot fire between calls. It is because the weapon keeps its clock and its
+	// press edge only through these calls. Skip the release on the ticks nobody gunned, and
+	// that time never reaches the accumulator, while a trigger that was down when the post
+	// emptied still reads as held: when the post is manned again the press is not seen as a
+	// press, and the first shot comes up to a whole interval late instead of at once.
 	if (!Turret)
 	{
 		LastIntent = StarForge::FTurretIntent();
 		bOperatorGunning = false;
+		if (Weapon) { Weapon->ReleaseTrigger(DeltaTime); }
 		return;
 	}
 
@@ -56,6 +76,20 @@ void USFGunnerStationComponent::TickComponent(
 		LastIntent = StarForge::FTurretIntent();
 		bOperatorGunning = false;
 		Turret->ClearCommand();
+		if (Weapon) { Weapon->ReleaseTrigger(DeltaTime); }
+		return;
+	}
+
+	// A locked turret, for whatever reason locked it. The post does not know that a ship can be
+	// powered down and must not: it knows the thing it commands is refusing commands, and the
+	// honest report of that is the one the pilot's post makes for a locked array -- nobody in
+	// this seat is gunning. The operator is not asked, so no trigger it holds reaches the muzzle.
+	if (Turret->IsLocked())
+	{
+		LastIntent = StarForge::FTurretIntent();
+		bOperatorGunning = false;
+		Turret->ClearCommand();
+		if (Weapon) { Weapon->ReleaseTrigger(DeltaTime); }
 		return;
 	}
 
@@ -72,15 +106,19 @@ void USFGunnerStationComponent::TickComponent(
 		LastIntent = StarForge::FTurretIntent();
 		bOperatorGunning = false;
 		Turret->ClearCommand();
+		if (Weapon) { Weapon->ReleaseTrigger(DeltaTime); }
 		return;
 	}
 
 	LastIntent = Intent;
 	bOperatorGunning = true;
 
+	// With no target the trigger still goes through as the operator holds it, the same value
+	// the turret records: the weapon fires on the trigger, not on the aim.
 	if (!Intent.bHasTarget)
 	{
 		Turret->ApplyNoTarget(Intent.bFiring);
+		if (Weapon) { Weapon->ApplyTrigger(Intent.bFiring, DeltaTime); }
 		return;
 	}
 
@@ -92,8 +130,11 @@ void USFGunnerStationComponent::TickComponent(
 		// A target on the mount itself is not a bearing. Reported as no target rather
 		// than aimed at with a made-up angle.
 		Turret->ApplyNoTarget(Intent.bFiring);
+		if (Weapon) { Weapon->ApplyTrigger(Intent.bFiring, DeltaTime); }
 		return;
 	}
 
+	// After the bearing, so the muzzle a shot leaves from is where this tick's slew put it.
 	Turret->ApplyBearing(Bearing, Intent.bFiring, DeltaTime);
+	if (Weapon) { Weapon->ApplyTrigger(Intent.bFiring, DeltaTime); }
 }

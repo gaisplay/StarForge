@@ -1,5 +1,6 @@
 #include "Ship/SFTurretComponent.h"
 
+#include "GameFramework/Actor.h"
 #include "StarForgeLog.h"
 
 USFTurretComponent::USFTurretComponent()
@@ -17,8 +18,9 @@ void USFTurretComponent::BeginPlay()
 	// these are ship-local centimetres.
 	const FVector Rel = GetRelativeLocation();
 	UE_LOG(LogStarForge, Display,
-		TEXT("Turret mount at ship-local (%.0f %.0f %.0f) cm: yaw +/-%.0f, pitch %.0f..%.0f deg, ")
+		TEXT("Turret mount on [%s] at ship-local (%.0f %.0f %.0f) cm: yaw +/-%.0f, pitch %.0f..%.0f deg, ")
 		TEXT("traverse %.0f deg/s, on target within %.1f deg, %s."),
+		*GetNameSafe(GetOwner()),
 		Rel.X, Rel.Y, Rel.Z, MaxYawDegrees, MinPitchDegrees, MaxPitchDegrees,
 		TraverseRateDegPerSec, OnTargetToleranceDegrees,
 		Barrel ? TEXT("barrel attached") : TEXT("no barrel (numbers only)"));
@@ -45,6 +47,14 @@ StarForge::Turret::FTurretLimits USFTurretComponent::BuildLimits() const
 void USFTurretComponent::ApplyBearing(
 	const StarForge::Turret::FTurretAim& Bearing, bool bInFiring, double DeltaSeconds)
 {
+	// Cleared rather than merely ignored, as the thruster array does: a locked turret that kept
+	// the last bearing and trigger would print them as a live command.
+	if (bLocked)
+	{
+		ClearCommand();
+		return;
+	}
+
 	LastBearing = Bearing;
 	bHasBearing = true;
 	bFiring = bInFiring;
@@ -71,6 +81,12 @@ void USFTurretComponent::ApplyBearing(
 
 void USFTurretComponent::ApplyNoTarget(bool bInFiring)
 {
+	if (bLocked)
+	{
+		ClearCommand();
+		return;
+	}
+
 	// The barrel holds where it is. Swinging it home would read as movement on a
 	// turret that has nothing to move for.
 	bHasBearing = false;
@@ -83,6 +99,11 @@ void USFTurretComponent::ClearCommand()
 	bHasBearing = false;
 	bFiring = false;
 	State = ESFTurretState::Uncommanded;
+}
+
+void USFTurretComponent::SetLocked(bool bInLocked)
+{
+	bLocked = bInLocked;
 }
 
 void USFTurretComponent::RotateBarrel()

@@ -145,8 +145,8 @@ PowerShell префикс не нужен. Форму с подменой по U
 Station at world (0 0 0) cm: 12 x 8 x 8 m box, hatch in the -Y wall, 200 cm tunnel, frame present, no physics body.
 Docking port on Station at hull-local (0 -600 -265) cm, out along (0.00 -1.00 0.00), deck up (0.00 0.00 1.00).
 Docking port on Ship at hull-local (0 400 -265) cm, out along (0.00 1.00 0.00), deck up (0.00 0.00 1.00).
-Docking: station found, window 3.0 m, 1.0 m/s, fwd 10 deg, up 10 deg, capture 1.0 s.
-Dock: docked.
+Docking: [Ship] station found, window 3.0 m, 1.0 m/s, fwd 10 deg, up 10 deg, capture 1.0 s.
+Dock: [Ship] docked.
 Loop rig: scripted profile off; the ship spawns docked; the man stands in the cabin.
 ```
 
@@ -167,7 +167,7 @@ Loop rig: scripted profile off; the ship spawns docked; the man stands in the ca
 сдвинется снова; **искать строки надо по имени, а не по месту в списке.**
 
 Ключевая из шести — та, что начинается с `Docking:`. На стенде петли она обязана читаться
-`station found`. `Docking: no station in this level` означает, что подмена режима игры не
+`station found`. `Docking: [Ship] no station in this level` означает, что подмена режима игры не
 сработала и грузится обычный стенд `L_FrameSpike`: либо не та карта, либо потерялись кавычки
 вокруг URL с `?game=`. Дальше читать нечего.
 
@@ -246,10 +246,11 @@ Loop rig: scripted profile off; the ship spawns docked; the man stands in the ca
 в окне, и не говорит, куда лететь. Тройка говорит. Без неё эта точка проверки невыполнима, и
 она затем и добавлена.
 
-**Две разные строки начинаются с `Dock: capturing`, и путать их нельзя.**
-`Dock: capturing, 2.8 m, 0.4 m/s, fwd 3.1 deg, up 0.2 deg` — с запятой и четырьмя числами —
-пишется **один раз на команду** и говорит, с чего доводка началась. `Dock: capturing 0.6 of
-1.0 s` — без запятой — это секундный отчёт `sf.FlightLog`. В бланк идут числа из первой.
+**Две разные строки начинаются с `Dock: [Ship] capturing`, и путать их нельзя.**
+`Dock: [Ship] capturing, 2.8 m, 0.4 m/s, fwd 3.1 deg, up 0.2 deg` — с запятой и четырьмя
+числами — пишется **один раз на команду** и говорит, с чего доводка началась.
+`Dock: [Ship] capturing 0.6 of 1.0 s` — без запятой — это секундный отчёт `sf.FlightLog`. В
+бланк идут числа из первой.
 
 **Пристыкованным никого не роняет вообще.** Ничего не вращается, ничего не ускоряется, порог
 гравиплит `sqrt(19.62/r)` при нулевой угловой скорости недостижим. Это первое, что стоит
@@ -309,14 +310,14 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-10-checkpoin
 телепорт, о котором прибор увода не знает, и с места он запишет пройденное до кресла
 расстояние как увод. Измерено в точке проверки 4: 46.429 см при расстоянии 46.5 см.
 
-Ожидается `Station 'pilot' taken by player.` и панель `flown by player`. Цвет при этом
+Ожидается `Station 'pilot' on [Ship] taken by player.` и панель `flown by player`. Цвет при этом
 останется оранжевым со словами `(standing down)`, пока корабль пристыкован: **двигатели
 заперты, и пост честно говорит, что никто этим кораблём не управляет.** Это не отказ посадки.
 
 **A3. Отстыковаться.** Нажать `F`. Обязано появиться:
 
 ```
-Dock: undocked.
+Dock: [Ship] undocked.
 ```
 
 Панель: `dock    free | port 0.0 m at (+0.0 +0.0 +0.0) ship  0.0 m/s  fwd 0.0  up 0.0  -- CAN DOCK`
@@ -350,7 +351,7 @@ Dock: undocked.
 появиться **ровно одна** строка вида:
 
 ```
-Dock: refused -- distance 34.7 m over 3.0
+Dock: [Ship] refused -- distance 34.7 m over 3.0
 ```
 
 Записать её дословно: причина и оба числа. Поток таких строк вместо одной означал бы, что
@@ -361,9 +362,9 @@ Dock: refused -- distance 34.7 m over 3.0
 Условия окна — 3 м, 1 м/с, 10° и 10°; строка `dock` называет, какое из них не выполнено.
 Дождаться зелёного `CAN DOCK` и нажать `F`. Ожидается:
 
-- `Dock: capturing, N m, N m/s, fwd N deg, up N deg` — **записать все четыре числа**;
+- `Dock: [Ship] capturing, N m, N m/s, fwd N deg, up N deg` — **записать все четыре числа**;
 - панель `dock    capturing 0.6 of 1.0 s` оранжевым примерно секунду;
-- `Dock: docked.` и `dock    docked` жёлтым.
+- `Dock: [Ship] docked.` и `dock    docked` жёлтым.
 
 **Смотреть в этот момент на интерьер.** Он должен ехать плавно и не дёргаться.
 
@@ -507,7 +508,7 @@ Frame bound by console to Station (sf.BindFrame). This ignores where he is stand
 - видимый рывок на люке при `0.000 cm` в журнале;
 - `dock    free -- NO STATION in this level` красным — грузится не та карта;
 - `dock    -- no ship with a docking component in the level` красным;
-- `Flight: thruster array NOT built`;
+- `Flight: [Ship] thruster array NOT built`;
 - строка панели, в которой виден сырой формат (`%.1f`, `%s`) — панель не исполнялась ни разу,
   и такая находка возможна именно здесь;
 - любая строка `LogStarForge: Error`.
@@ -520,7 +521,7 @@ Frame bound by console to Station (sf.BindFrame). This ignores where he is stand
 `Docking is commanded from the pilot's seat.`; если нет вообще ничего — клавиша не дошла,
 проверь фокус окна.
 
-**`F` отвечает `Dock: undock ignored -- the ship is mid-capture.`** Доводка идёт, и она не
+**`F` отвечает `Dock: [Ship] undock ignored -- the ship is mid-capture.`** Доводка идёт, и она не
 отменяема: посреди двух поз корпус не принадлежит никому. Подождать секунду.
 
 **Консоль не открывается.** Раскладка. Жать `F1`.

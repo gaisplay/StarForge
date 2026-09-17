@@ -79,6 +79,19 @@ public:
 	/** Nobody commanded this tick. */
 	void ClearCommand();
 
+	/**
+	 * Locks the turret: ApplyBearing and ApplyNoTarget become no-ops that also clear the
+	 * command, so the readout says nobody commanded it.
+	 *
+	 * The same shape as the thruster array's lock and for the same reason: the turret refuses,
+	 * not the post and not the operator. The post asks whether its turret is locked, and neither
+	 * it nor whoever holds it has to know why. A powered-down ship locks it. Docking does not:
+	 * a docked ship still lays its gun, and the loop rig's figures were taken with it doing so.
+	 */
+	void SetLocked(bool bInLocked);
+
+	bool IsLocked() const { return bLocked; }
+
 	StarForge::Turret::FTurretAim GetAim() const { return Aim; }
 	StarForge::Turret::FTurretAim GetLastBearing() const { return LastBearing; }
 	bool HasBearing() const { return bHasBearing; }
@@ -99,4 +112,7 @@ private:
 	bool bHasBearing = false;
 	ESFTurretState State = ESFTurretState::Uncommanded;
 	bool bFiring = false;
+
+	/** True while something has locked the turret. See SetLocked. */
+	bool bLocked = false;
 };

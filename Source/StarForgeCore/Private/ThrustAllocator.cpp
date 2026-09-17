@@ -106,7 +106,26 @@ namespace StarForge
 
 		// An array that cannot span all six axes produces a Gram matrix that only the
 		// damping made invertible, and the solution it yields is meaningless. Detect
-		// it by asking for each axis in turn and seeing whether anything comes back.
+		// it by asking for each axis in turn and requiring the probe to come back AS
+		// ITSELF, on all six components.
+		//
+		// Asking only whether anything comes back on the probed axis catches nothing but
+		// a coordinate axis that is wholly unreachable, and a damaged array's missing
+		// direction is almost never one: two full corners side by side on the rig's
+		// layout cannot reach a vertical force and a pitch torque together, yet every axis
+		// on its own still gets something back. Such a check answers "ready" at rank five,
+		// and at a single corner's rank three.
+		//
+		// Returning itself is enough, and provably so. A unit probe comes back as its
+		// projection onto what the array can reach; if a unit direction u is out of reach,
+		// probe k comes back short by u_k^2 on its own axis, and some u_k^2 is at least
+		// 1/6. So a rank-deficient array misses some probe by at least 1/6, while a full
+		// one misses only by the damping -- about 1e-13 on the rig's layout and 1e-9 on the
+		// thousand-newton test fixture. The tolerance sits orders of magnitude from both.
+		// It does couple to scale: an array whose weakest direction is under a few newtons
+		// would be refused for the damping alone, and nothing in this project is that weak.
+		constexpr double SpanTolerance = 1e-3;
+
 		for (int32 Axis = 0; Axis < 6; ++Axis)
 		{
 			double Probe[6] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
@@ -124,12 +143,16 @@ namespace StarForge
 				Throttles[Index] = Sum;
 			}
 
+			// Negated, so a NaN anywhere in the answer is a refusal rather than a pass.
 			const FWrench Achieved = ComputeAchieved(Throttles);
-			if (FMath::Abs(Achieved.Component(Axis)) < 1e-6)
+			for (int32 Component = 0; Component < 6; ++Component)
 			{
-				Columns.Reset();
-				Response.Reset();
-				return false;
+				if (!(FMath::Abs(Achieved.Component(Component) - Probe[Component]) <= SpanTolerance))
+				{
+					Columns.Reset();
+					Response.Reset();
+					return false;
+				}
 			}
 		}
 

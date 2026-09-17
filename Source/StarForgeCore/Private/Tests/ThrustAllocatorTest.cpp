@@ -78,6 +78,8 @@ bool FThrusterWrenchRespectsCentreOfMassTest::RunTest(const FString& Parameters)
 
 #include "ThrustAllocator.h"
 
+#include <limits>
+
 namespace
 {
 	/**
@@ -292,6 +294,18 @@ bool FThrustAllocatorRejectsDegenerateArrayTest::RunTest(const FString& Paramete
 	TestFalse(TEXT("an array that cannot span six axes is rejected"),
 		Allocator.Build(Single, FVector::ZeroVector));
 	TestFalse(TEXT("and reports itself unbuilt"), Allocator.IsBuilt());
+
+	// A NaN thrust on one thruster of an otherwise sound array. The inversion does not stop at a
+	// NaN pivot, so every probe comes back NaN, and only a check written as the negation of
+	// "close enough" refuses that; written the obvious way round, NaN is never "too far" and the
+	// array builds.
+	TArray<StarForge::FThrusterDef> Poisoned = MakeSymmetricArray();
+	Poisoned[0].MaxThrust = std::numeric_limits<double>::quiet_NaN();
+
+	StarForge::FThrustAllocator PoisonedAllocator;
+	TestFalse(TEXT("an array with a NaN thrust is rejected"),
+		PoisonedAllocator.Build(Poisoned, FVector::ZeroVector));
+	TestFalse(TEXT("and reports itself unbuilt"), PoisonedAllocator.IsBuilt());
 
 	return true;
 }

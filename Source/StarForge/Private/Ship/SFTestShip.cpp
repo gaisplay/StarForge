@@ -9,16 +9,19 @@
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "Ship/SFAutomationOperatorComponent.h"
 #include "Ship/SFConsoleOperatorComponent.h"
+#include "Ship/SFDamageableComponent.h"
 #include "Ship/SFDockingComponent.h"
 #include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFInteriorVolumeComponent.h"
 #include "Ship/SFPilotStationComponent.h"
+#include "Ship/SFPursuitOperatorComponent.h"
 #include "Ship/SFShipDataAsset.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTargetDrone.h"
 #include "Ship/SFThrusterArrayComponent.h"
 #include "Ship/SFTurretComponent.h"
+#include "Ship/SFWeaponComponent.h"
 #include "StarForgeLog.h"
 #include "Units.h"
 #include "UObject/ConstructorHelpers.h"
@@ -146,6 +149,38 @@ ASFTestShip::ASFTestShip()
 	// solid cube instead of the hollow room the panels make.
 	Hull->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
 	Hull->SetCollisionObjectType(ECC_WorldDynamic);
+
+	// Blocks another hull, and nothing else changes. Spec 5 makes the ship a real physical body
+	// "so that collisions and hits work normally", and the shape component's default profile,
+	// OverlapAllDynamic, left two hulls passing through each other: the first combat run flew a
+	// coasting pirate straight through the player's cabin, where its interior volume claimed the
+	// man and the carry lost him. Blocking keeps a hull out of the cabin's middle, not off its walls:
+	// contact still presses one hull some centimetres into the other (see the CCD note below), and
+	// the man is protected by the handover guard, not by this line.
+	//
+	// Only ECC_WorldDynamic, which is what a hull is. Every other physics-colliding thing in these
+	// rigs answers something else or has no body: the station's panels are query-only and it has
+	// no physics body, the drone has no collision, a projectile is a query, and the character's
+	// capsule is ECC_Pawn, which this box still only overlaps. A lone ship therefore meets nothing
+	// it did not meet before, docked or free.
+	Hull->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+
+	// Continuous detection, with its thresholds set in Config/DefaultEngine.ini under
+	// [ConsoleVariables]: a step is swept only when the pair moves more than 8 cm in it, and a swept
+	// step is rolled back to at most 4 cm. That is not a bound on penetration -- ordinary contact
+	// can still build it over several unswept steps -- and the ini says what was measured: first
+	// touch at 854.9 cm between centres for the combat rig's pitched approach, and about 10 cm of
+	// overlap at 60 fps and 37 cm at 400, against about 122 cm at 60 fps with the engine's own
+	// thresholds. The box's extent is not the place to buy more: it is what Chaos derives the inertia
+	// from, and 533333 kg m^2 is a recorded figure.
+	//
+	// The margin that matters is 20 cm: a panel's outer face is at +/-410 and the cabin's volume at
+	// +/-390, so a hull pressed that far into this one brings its interior volume onto a man at the
+	// wall. What protects him is not this flag but the handover guard in
+	// USFInteriorVolumeComponent::TryHandover, which refuses to bind him to a carrier moving faster
+	// than 1.0 m/s relative to his own where he stands.
+	Hull->BodyInstance.bUseCCD = true;
+
 	Hull->SetSimulatePhysics(true);
 
 	// A ship in space does not fall, and the rig has no other use for gravity.
@@ -236,6 +271,11 @@ ASFTestShip::ASFTestShip()
 		StarForge::Units::CmToMetres(-InteriorHalfExtentCm + SpawnClearanceCm));
 
 	AutomationOperator = CreateDefaultSubobject<USFAutomationOperatorComponent>(TEXT("AutomationOperator"));
+
+	// On every hull, not only on a pirate, because there is no pirate class: Crewing is set after
+	// construction, so the one hull type carries both operators and Crewing decides which of them
+	// sits down (see BeginPlay). On the player's ship this one never takes the seat.
+	PursuitOperator = CreateDefaultSubobject<USFPursuitOperatorComponent>(TEXT("PursuitOperator"));
 
 	// The ship data asset is wired here rather than assigned on a placed actor
 	// because there is no placed actor to assign it on: L_FrameSpike is deliberately
@@ -390,6 +430,29 @@ ASFTestShip::ASFTestShip()
 	{
 		TurretBarrelMesh->SetStaticMesh(BarrelMesh.Object);
 	}
+
+	// At the apex of the cone. The mesh is offset half its length along the pivot's +X and is
+	// BarrelLengthCm long, so its tip is exactly BarrelLengthCm from the axis the turret turns
+	// about -- and hanging the muzzle off the same pivot means the shot leaves where the
+	// picture says the barrel points.
+	Weapon = CreateDefaultSubobject<USFWeaponComponent>(TEXT("Weapon"));
+	Weapon->SetupAttachment(TurretBarrel);
+	Weapon->SetRelativeLocation(FVector(BarrelLengthCm, 0.0, 0.0));
+	if (ShipDataAsset.Succeeded())
+	{
+		Weapon->ShipData = ShipDataAsset.Object;
+	}
+
+	// The half-extents the panels are placed from, not a second figure. Hits land on the panels'
+	// outer faces at 410, not 400; the face is decided by the ratios of the three coordinates to
+	// these, so on a hull with the same half-extent on every axis the ten centimetres change
+	// nothing.
+	Damageable = CreateDefaultSubobject<USFDamageableComponent>(TEXT("Damageable"));
+	Damageable->HalfExtentsCm = FVector(InteriorHalfExtentCm);
+	if (ShipDataAsset.Succeeded())
+	{
+		Damageable->ShipData = ShipDataAsset.Object;
+	}
 }
 
 UStaticMeshComponent* ASFTestShip::AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale)
@@ -450,6 +513,22 @@ FVector ASFTestShip::GetInteriorSpawnWorldLocation() const
 
 void ASFTestShip::BeginPlay()
 {
+	// Before Super, and that ordering is the point: Super is what begins play on the
+	// components, and each of them decides in its own BeginPlay whether to take a seat or
+	// to listen to a console variable. Told afterwards, they would have already acted.
+	const bool bAnswersConsole = (Crewing == ESFShipCrewing::PlayerShip);
+	if (PilotStation) { PilotStation->SetConsoleControlled(bAnswersConsole); }
+	if (Thrusters) { Thrusters->SetConsoleControlled(bAnswersConsole); }
+	if (ConsoleOperator) { ConsoleOperator->SetConsoleControlled(bAnswersConsole); }
+	if (AutomationOperator) { AutomationOperator->SetConsoleControlled(bAnswersConsole); }
+	if (PursuitOperator) { PursuitOperator->SetConsoleControlled(bAnswersConsole); }
+	if (Docking) { Docking->SetConsoleControlled(bAnswersConsole); }
+	if (Weapon)
+	{
+		Weapon->SetConsoleControlled(bAnswersConsole);
+		Weapon->SetWeaponsFree(bWeaponsFree);
+	}
+
 	Super::BeginPlay();
 
 	// Said once at startup rather than checked by hand, because a hand check is a
@@ -474,28 +553,40 @@ void ASFTestShip::BeginPlay()
 	// Deferred, because the drone's BeginPlay logs its anchor and takes its first
 	// position from it, and a spawn that finishes before SetAnchor would log "the world
 	// origin" for a drone that is about to be anchored to this ship.
-	FTransform DroneSpawn = GetActorTransform();
-	DroneSpawn.SetScale3D(FVector::OneVector);
-	TargetDrone = GetWorld()->SpawnActorDeferred<ASFTargetDrone>(
-		ASFTargetDrone::StaticClass(), DroneSpawn, this, nullptr,
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-
-	if (TargetDrone)
+	if (bSpawnTargetDrone)
 	{
-		TargetDrone->SetAnchor(this);
-		TargetDrone->FinishSpawning(DroneSpawn);
+		FTransform DroneSpawn = GetActorTransform();
+		DroneSpawn.SetScale3D(FVector::OneVector);
+		TargetDrone = GetWorld()->SpawnActorDeferred<ASFTargetDrone>(
+			ASFTargetDrone::StaticClass(), DroneSpawn, this, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 
-		// Components have begun play inside Super::BeginPlay, so the automation is
-		// already in its seat by now; the first station tick is still ahead, and a null
-		// drone until then is reported as no target rather than aimed at.
-		if (AutomationOperator)
+		if (TargetDrone)
 		{
-			AutomationOperator->SetTargetDrone(TargetDrone);
+			TargetDrone->SetAnchor(this);
+			TargetDrone->FinishSpawning(DroneSpawn);
+
+			// Components have begun play inside Super::BeginPlay, so the automation is
+			// already in its seat by now; the first station tick is still ahead, and a null
+			// drone until then is reported as no target rather than aimed at.
+			if (AutomationOperator)
+			{
+				AutomationOperator->SetTargetActor(TargetDrone);
+			}
+		}
+		else
+		{
+			UE_LOG(LogStarForge, Error,
+				TEXT("Target drone for [%s] failed to spawn; the turret will have nothing to track."), *GetName());
 		}
 	}
 	else
 	{
-		UE_LOG(LogStarForge, Error, TEXT("Target drone failed to spawn; the turret will have nothing to track."));
+		// Said out loud: a gunner post with no target looks exactly like a gunner post
+		// that is not working, and this is the line that tells the two apart.
+		UE_LOG(LogStarForge, Display,
+			TEXT("Ship [%s] spawns no target drone; its gunner's automation will track whatever it is given."),
+			*GetName());
 	}
 }
 
@@ -558,6 +649,11 @@ void ASFTestShip::TickScriptedProfile()
 	{
 		return;
 	}
+
+	// Third refusal, beside the two that ask about the hull. An automated hull does not
+	// answer sf.ShipProfile at all, so the variable cannot fly a pirate by accident while
+	// a person is measuring his own ship with it.
+	if (Crewing != ESFShipCrewing::PlayerShip) { return; }
 
 	const double Phase = 2.0 * UE_DOUBLE_PI * ElapsedSeconds / ProfilePeriodSeconds;
 
@@ -624,7 +720,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 			break;
 		}
 
-		UE_LOG(LogStarForge, Log, TEXT("Dock: %s"), *DockText);
+		UE_LOG(LogStarForge, Log, TEXT("Dock: [%s] %s"), *GetName(), *DockText);
 	}
 
 	// The turret reports before the thruster check: a ship whose array never built can
@@ -657,14 +753,82 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 		const StarForge::Turret::FTurretAim Aim = GunnerTurret->GetAim();
 
 		UE_LOG(LogStarForge, Log,
-			TEXT("Turret: gunned by %s | target %s firing %d | bearing %s | aim yaw %.1f pitch %.1f deg | %s"),
-			*GunnedBy, *Target, TurretIntent.bFiring ? 1 : 0, *BearingText,
+			TEXT("Turret: [%s] gunned by %s | target %s firing %d | bearing %s | aim yaw %.1f pitch %.1f deg | %s"),
+			*GetName(), *GunnedBy, *Target, TurretIntent.bFiring ? 1 : 0, *BearingText,
 			FMath::RadiansToDegrees(Aim.YawRad), FMath::RadiansToDegrees(Aim.PitchRad),
 			USFTurretComponent::StateName(GunnerTurret->GetState()));
 	}
 	else
 	{
-		UE_LOG(LogStarForge, Warning, TEXT("Turret: no gunner station or no turret -- nothing is aiming."));
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Turret: [%s] no gunner station or no turret -- nothing is aiming."), *GetName());
+	}
+
+	// A line of its own rather than more fields on Flight:, which already takes reading in pieces.
+	// Before the thruster check for the turret's reason: a hull whose array never built can still
+	// be shot, and a Combat line that vanished with the array would read as a hull nobody can hurt.
+	if (Damageable && !Damageable->IsReady())
+	{
+		// Its accessors read zero, which is also what a ship shot to pieces reads. Said instead,
+		// as the thruster count below says NOT built rather than 0/24.
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Combat: [%s] damageable component NOT ready -- no shield or hull figures to report."), *GetName());
+	}
+	else if (Damageable)
+	{
+		FString ShieldText;
+		for (int32 i = 0; i < StarForge::Damage::FaceCount; ++i)
+		{
+			const StarForge::Damage::EShipFace Face = static_cast<StarForge::Damage::EShipFace>(i);
+			ShieldText += FString::Printf(TEXT(" %s %.0f"),
+				StarForge::Damage::FaceName(Face), Damageable->GetFaceCharge(Face));
+		}
+
+		// Surviving over built-with, and still counted once the survivors no longer build: a ship
+		// shot down to two corners reads "12/24 NOT built", which says what happened to it, where
+		// "NOT built" alone would read the same as a ship that never had an asset.
+		FString ThrusterText = TEXT("thrusters NOT built");
+		if (Thrusters && Thrusters->ShipData)
+		{
+			ThrusterText = FString::Printf(TEXT("thrusters %d/%d%s"),
+				Thrusters->GetLiveThrusterCount(), Thrusters->GetThrusterCount(),
+				Thrusters->IsReady() ? TEXT("") : TEXT(" NOT built"));
+		}
+
+		UE_LOG(LogStarForge, Log, TEXT("Combat: [%s] shields%s, hull %.1f/%.1f, %s, %s."),
+			*GetName(), *ShieldText, Damageable->GetHullStrength(), Damageable->GetHullCapacity(),
+			*ThrusterText, Damageable->IsPoweredDown() ? TEXT("powered down") : TEXT("powered up"));
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Combat: [%s] no damageable component -- nothing on this hull can be hurt."), *GetName());
+	}
+
+	// Only where the pursuit operator can hold a seat, so neither existing rig gains a line. Before
+	// the thruster check for the turret's reason, and read from the two transforms rather than
+	// from the last intent: a powered-down or declining pirate is asked for nothing, and its
+	// distance is exactly what those two cases are judged on. The game time is in the line because
+	// the frame counter in the log prefix wraps at a thousand, and 400 fps passes that in 2.5 s.
+	if (Crewing == ESFShipCrewing::Automated && PursuitOperator)
+	{
+		double DistanceMetres = 0.0;
+		StarForge::Turret::FTurretAim Bearing;
+		if (PursuitOperator->MeasureTarget(DistanceMetres, Bearing))
+		{
+			UE_LOG(LogStarForge, Log,
+				TEXT("Pursuit: [%s] t %.2f s | target %s at %.1f m, bearing yaw %.1f pitch %.1f deg | hold %.0f m%s"),
+				*GetName(), GetWorld()->GetTimeSeconds(), *GetNameSafe(PursuitOperator->GetTargetActor()),
+				DistanceMetres, FMath::RadiansToDegrees(Bearing.YawRad), FMath::RadiansToDegrees(Bearing.PitchRad),
+				PursuitOperator->HoldDistanceMetres,
+				PursuitOperator->IsDeclining() ? TEXT(" | declining (sf.PirateAI 0)") : TEXT(""));
+		}
+		else
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Pursuit: [%s] t %.2f s | no target or no frame -- nothing to chase, and the post is declined."),
+				*GetName(), GetWorld()->GetTimeSeconds());
+		}
 	}
 
 	// The log is now written in both modes, so it can be reached before the array has
@@ -675,7 +839,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	if (!Thrusters || !Thrusters->IsReady())
 	{
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Flight: thruster array NOT built -- no flight numbers to report."));
+			TEXT("Flight: [%s] thruster array NOT built -- no flight numbers to report."), *GetName());
 		return;
 	}
 
@@ -700,7 +864,7 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	else
 	{
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Flight: no pilot station -- the intent below is nobody's."));
+			TEXT("Flight: [%s] no pilot station -- the intent below is nobody's."), *GetName());
 	}
 
 	const StarForge::FRigidBodyState State = Thrusters->ReadState();
@@ -733,11 +897,12 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 	// Naming the order in the line matters: a ship that rolls when asked to pitch is
 	// what confusing it produces, and this log is where that would show.
 	UE_LOG(LogStarForge, Log,
-		TEXT("Flight: flown by %s | intent lin (%.2f %.2f %.2f) ang (%.2f %.2f %.2f) assist %d | ")
+		TEXT("Flight: [%s] flown by %s | intent lin (%.2f %.2f %.2f) ang (%.2f %.2f %.2f) assist %d | ")
 		TEXT("speed %.1f m/s, accel %.1f m/s2, ang roll/pitch/yaw (%.1f %.1f %.1f) deg/s | ")
 		TEXT("force want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) N | ")
 		TEXT("torque want (%.0f %.0f %.0f) got (%.0f %.0f %.0f) Nm | ")
 		TEXT("throttles %d of %d commanded, %d spooled"),
+		*GetName(),
 		*FlyingBy,
 		Intent.LinearAxis.X, Intent.LinearAxis.Y, Intent.LinearAxis.Z,
 		Intent.AngularAxis.X, Intent.AngularAxis.Y, Intent.AngularAxis.Z,

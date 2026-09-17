@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "FlightController.h"
+#include "ShipDamage.h"
 #include "ThrusterDef.h"
 #include "SFShipDataAsset.generated.h"
 
@@ -83,6 +84,98 @@ public:
 	double AngularGain = 3.0;
 
 	/**
+	 * Metres per second along the barrel, added to the carrier's own velocity. Not set in
+	 * the spec; this figure is the stage-4 plan's.
+	 *
+	 * 2.5 times spec 7's 400 m/s boost ceiling, so a ship cannot overtake its own shot. And
+	 * at 60 fps a shot covers 1000 / 60 = 16.67 m a frame, twice the length of the eight-metre
+	 * hull, which is what makes sf.ProjectileSweep 0 a control that can fail rather than one
+	 * that passes by being too slow to tunnel.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Weapon")
+	double MuzzleSpeedMetresPerSec = 1000.0;
+
+	/**
+	 * Seconds between shots. Not set in the spec; this figure is the stage-4 plan's.
+	 *
+	 * Five shots a second: twelve frames apart at 60 fps and eighty at 400, so shots are told
+	 * apart in the log at both rates, and the count over a window has to agree between them --
+	 * which is the check that the cadence is written in seconds and not in frames.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Weapon")
+	double SecondsBetweenShots = 0.2;
+
+	/**
+	 * A shot's life in seconds. Not set in the spec; this figure is the stage-4 plan's.
+	 *
+	 * 1000 m/s x 5.0 s = 5000 m, five times the combat rig's one-kilometre separation, so a
+	 * miss expires far outside the scene rather than hanging in it.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Weapon")
+	double ProjectileLifeSeconds = 5.0;
+
+	/**
+	 * What one hit carries. Not set in the spec; this figure is the stage-4 plan's.
+	 *
+	 * A round hundred, so events can be counted in shots without a calculator: a wrong
+	 * multiplier shows up as a wrong count rather than as a plausible-looking number.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Weapon")
+	double ProjectileDamage = 100.0;
+
+	/**
+	 * What one shield face holds. Not set in the spec; this figure is the stage-4 plan's. Spec 9
+	 * names hull and shield strength among what this asset describes, so it lives here and not
+	 * in the ship's constructor.
+	 *
+	 * Exactly ten hits of ProjectileDamage take a face down, which is 2.0 s of a held trigger at
+	 * SecondsBetweenShots: a face that falls in nine or eleven is a wrong count, not a plausible
+	 * number.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Damage")
+	double ShieldFaceCapacity = 1000.0;
+
+	/**
+	 * Charge a face regains per second once its delay has run. Not set in the spec; this figure
+	 * is the stage-4 plan's. A face taken all the way down is full again 1000 / 50 = 20 s later.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Damage")
+	double ShieldRegenPerSecond = 50.0;
+
+	/**
+	 * Seconds since the last hit on THAT face before it starts to regenerate. Not set in the spec;
+	 * this figure is the stage-4 plan's. In seconds, and that is load-bearing rather than style:
+	 * a delay counted in frames would be a shield that comes back sooner on a faster machine.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Damage")
+	double ShieldRegenDelaySeconds = 3.0;
+
+	/**
+	 * The hull's strength. Not set in the spec; this figure is the stage-4 plan's. Twenty more hits
+	 * after a face is down, 4.0 s at the weapon's cadence; a whole face and the hull together are
+	 * 6.0 s of unbroken hits on one place. At zero the ship powers down rather than being destroyed.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Damage")
+	double HullStrength = 2000.0;
+
+	/**
+	 * How far from a hull hit, in METRES, a thruster is destroyed by it (spec 5: a hit near a
+	 * thruster destroys it). Not set in the spec; this figure is the stage-4 plan's.
+	 *
+	 * Metres because it is compared with FThrusterDef::Location, which is. On the standard layout
+	 * the nearest point of the outer skin to any thruster is 2.1 m: a thruster at (2, 2, 0) and
+	 * the +X face at 4.1, so 4.1 - 2.0. Below 2.1 no hit on the skin could ever reach one, and the
+	 * mechanism would be dead code that looks alive. 2.5 clears that by 0.4 m and stays under
+	 * 4.1 -- the distance from every thruster to the deck and the ceiling, since all twenty-four
+	 * lie on z = 0 -- so a shot into the roof can never destroy one. That is a negative control
+	 * the geometry gives for free, and a radius above 4.1 would throw it away. On the +X face the
+	 * window around each corner is |y -+ 2| <= sqrt(2.5^2 - 2.1^2) = 1.356 m; the centre of the
+	 * face, 2.90 m from both corners, destroys nothing.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Damage")
+	double ThrusterKillRadiusMetres = 2.5;
+
+	/**
 	 * Replaces Thrusters with the standard symmetric test layout: four corners, six
 	 * thrusters each, one along every signed axis. Twenty-four records of four fields.
 	 *
@@ -111,4 +204,7 @@ public:
 
 	/** The flight envelope in the form the control loop wants: SI, radians. */
 	StarForge::FFlightLimits BuildLimits() const;
+
+	/** The three shield figures in the form the shield maths wants: the same for every face. */
+	StarForge::Damage::FShieldLimits BuildShieldLimits() const;
 };

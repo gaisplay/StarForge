@@ -418,10 +418,15 @@ void ASFCharacter::PollBindFrameCommand()
 	USFShipFrameComponent* Frame = nullptr;
 	if (Command.Equals(TEXT("ship"), ESearchCase::IgnoreCase))
 	{
+		// The player's ship, not the first one found: with a pirate in the level, iteration order
+		// would pick which hull the control binds him to.
 		for (TActorIterator<ASFTestShip> It(GetWorld()); It; ++It)
 		{
-			Frame = It->GetFrameComponent();
-			break;
+			if (It->GetCrewing() == ESFShipCrewing::PlayerShip)
+			{
+				Frame = It->GetFrameComponent();
+				break;
+			}
 		}
 	}
 	else if (Command.Equals(TEXT("station"), ESearchCase::IgnoreCase))

@@ -21,8 +21,9 @@ bool USFShipStationComponent::TryOccupy(TScriptInterface<ISFStationOperator> New
 		// Loudly, because the alternative is two operators each believing they are
 		// flying and the last one asked each frame winning without anyone knowing.
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Station '%s' is already held by %s; refusing %s."),
+			TEXT("Station '%s' on [%s] is already held by %s; refusing %s."),
 			*StationName,
+			*GetNameSafe(GetOwner()),
 			*Operator->GetOperatorName(),
 			*NewOperator->GetOperatorName());
 		return false;
@@ -30,8 +31,8 @@ bool USFShipStationComponent::TryOccupy(TScriptInterface<ISFStationOperator> New
 
 	Operator = NewOperator;
 
-	UE_LOG(LogStarForge, Display, TEXT("Station '%s' taken by %s."),
-		*StationName, *Operator->GetOperatorName());
+	UE_LOG(LogStarForge, Display, TEXT("Station '%s' on [%s] taken by %s."),
+		*StationName, *GetNameSafe(GetOwner()), *Operator->GetOperatorName());
 
 	return true;
 }
@@ -40,8 +41,8 @@ void USFShipStationComponent::Vacate()
 {
 	if (IsOccupied())
 	{
-		UE_LOG(LogStarForge, Display, TEXT("Station '%s' left by %s."),
-			*StationName, *Operator->GetOperatorName());
+		UE_LOG(LogStarForge, Display, TEXT("Station '%s' on [%s] left by %s."),
+			*StationName, *GetNameSafe(GetOwner()), *Operator->GetOperatorName());
 	}
 
 	Operator = nullptr;
