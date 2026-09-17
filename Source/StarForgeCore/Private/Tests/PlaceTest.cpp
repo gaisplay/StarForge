@@ -316,3 +316,42 @@ bool FPlaceTheMeasurementSurvivesARefusalTest::RunTest(const FString& Parameters
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlaceTheDefaultLimitsAreTheSpecsNumbersTest,
+	"StarForge.Core.Place.TheDefaultLimitsAreTheSpecsNumbers",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FPlaceTheDefaultLimitsAreTheSpecsNumbersTest::RunTest(const FString& Parameters)
+{
+	// Every other test in this file spells its own limits through MakeLimits(), and does so on
+	// purpose: a test that reads the same defaults the code reads asserts only that the code
+	// agrees with itself.
+	//
+	// That leaves the defaults asserted by nobody -- and the defaults are what the game uses.
+	// Measured rather than argued: changing EngineRadiusMetres in the header from e10 to e12,
+	// which is the centimetre ceiling written where the metre one belongs, failed not one of
+	// the other eight tests. The border of the world would sit a hundred times too far out,
+	// every place would fit, and hulls would go back to vanishing the frame they start
+	// simulating, with a clean log -- the exact failure this whole stage exists to make
+	// impossible.
+	//
+	// So the defaults get one test of their own, and it is the only place in the file where
+	// reading them is correct.
+	const StarForge::Place::FPlaceLimits Defaults;
+
+	TestTrue(TEXT("the engine ceiling is 2^42 cm carried into metres"),
+		FMath::IsNearlyEqual(Defaults.EngineRadiusMetres, EngineRadiusMetres, 1e-6));
+	TestTrue(TEXT("the slowest hull's speed is the speed of light"),
+		FMath::IsNearlyEqual(Defaults.SlowestHullSpeedMetresPerSec, SlowestHullSpeed, 1e-6));
+	TestTrue(TEXT("the crossing budget is the owner's ninety seconds"),
+		FMath::IsNearlyEqual(Defaults.CrossingBudgetSeconds, CrossingBudget, 1e-9));
+
+	// Spelled again as a bare comparison, because IsNearlyEqual with a tolerance of 1e-6 on a
+	// figure of 4.4e10 would pass a ceiling wrong by four kilometres. The factor-of-a-hundred
+	// mistake this test exists for is caught either way; a smaller one would not be.
+	TestEqual(TEXT("and the engine ceiling is that number exactly"),
+		Defaults.EngineRadiusMetres, 4398046511104.0 / 100.0);
+
+	return true;
+}

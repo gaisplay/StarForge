@@ -371,7 +371,7 @@ MSG
 
 **Единицы.** Метры везде, и каждое поле несёт `Metres` в имени. Это не стиль: потолок движка измерен в **сантиметрах** (2⁴² см), и множитель сто, применённый дважды или ни разу, здесь не падает и не логируется — он делает границу мира в сто раз ближе или в сто раз дальше, и в первом случае всё отказывается собираться, а во втором корабль исчезает молча, как и до этого этапа.
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 `Source/StarForgeCore/Private/Tests/PlaceTest.cpp`:
 
@@ -694,9 +694,48 @@ bool FPlaceTheMeasurementSurvivesARefusalTest::RunTest(const FString& Parameters
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlaceTheDefaultLimitsAreTheSpecsNumbersTest,
+	"StarForge.Core.Place.TheDefaultLimitsAreTheSpecsNumbers",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FPlaceTheDefaultLimitsAreTheSpecsNumbersTest::RunTest(const FString& Parameters)
+{
+	// Every other test in this file spells its own limits through MakeLimits(), and does so on
+	// purpose: a test that reads the same defaults the code reads asserts only that the code
+	// agrees with itself.
+	//
+	// That leaves the defaults asserted by nobody -- and the defaults are what the game uses.
+	// Measured rather than argued: changing EngineRadiusMetres in the header from e10 to e12,
+	// which is the centimetre ceiling written where the metre one belongs, failed not one of
+	// the other eight tests. The border of the world would sit a hundred times too far out,
+	// every place would fit, and hulls would go back to vanishing the frame they start
+	// simulating, with a clean log -- the exact failure this whole stage exists to make
+	// impossible.
+	//
+	// So the defaults get one test of their own, and it is the only place in the file where
+	// reading them is correct.
+	const StarForge::Place::FPlaceLimits Defaults;
+
+	TestTrue(TEXT("the engine ceiling is 2^42 cm carried into metres"),
+		FMath::IsNearlyEqual(Defaults.EngineRadiusMetres, EngineRadiusMetres, 1e-6));
+	TestTrue(TEXT("the slowest hull's speed is the speed of light"),
+		FMath::IsNearlyEqual(Defaults.SlowestHullSpeedMetresPerSec, SlowestHullSpeed, 1e-6));
+	TestTrue(TEXT("the crossing budget is the owner's ninety seconds"),
+		FMath::IsNearlyEqual(Defaults.CrossingBudgetSeconds, CrossingBudget, 1e-9));
+
+	// Spelled again as a bare comparison, because IsNearlyEqual with a tolerance of 1e-6 on a
+	// figure of 4.4e10 would pass a ceiling wrong by four kilometres. The factor-of-a-hundred
+	// mistake this test exists for is caught either way; a smaller one would not be.
+	TestEqual(TEXT("and the engine ceiling is that number exactly"),
+		Defaults.EngineRadiusMetres, 4398046511104.0 / 100.0);
+
+	return true;
+}
 ```
 
-- [ ] **Step 2: Прогнать и убедиться, что падает**
+- [x] **Step 2: Прогнать и убедиться, что падает**
 
 Красный шаг здесь — **настоящая сборка с ожидаемой ошибкой**: `Place.h` ещё нет.
 
@@ -706,7 +745,7 @@ bool FPlaceTheMeasurementSurvivesARefusalTest::RunTest(const FString& Parameters
 
 Ожидается `Cannot open include file: 'Place.h'`. Любая другая ошибка — стоп: тест написан не так, как задуман.
 
-- [ ] **Step 3: Написать заголовок**
+- [x] **Step 3: Написать заголовок**
 
 `Source/StarForgeCore/Public/Place.h`:
 
@@ -887,7 +926,7 @@ namespace StarForge::Place
 }
 ```
 
-- [ ] **Step 4: Написать реализацию**
+- [x] **Step 4: Написать реализацию**
 
 `Source/StarForgeCore/Private/Place.cpp`:
 
@@ -986,7 +1025,7 @@ namespace StarForge::Place
 
 **Заметьте `< 0.0`, а не `<= 0.0`, на обоих потолках.** Место, чей край лежит ровно на границе, помещается: граница измерена как последняя работающая точка, а не как первая сломанная, и тест `ReachIsTheOriginPlusTheRadius` держит это равенством.
 
-- [ ] **Step 5: Собрать и прогнать — должно пройти**
+- [x] **Step 5: Собрать и прогнать — должно пройти**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -995,16 +1034,16 @@ grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log
 grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log
 ```
 
-Ожидается **96 / 0**.
+Ожидается **97 / 0**.
 
-- [ ] **Step 6: Убить каждую проверку мутантом**
+- [x] **Step 6: Убить каждую проверку мутантом**
 
-**Девять мутантов, по одному на каждый из восьми тестов и два на восьмой.** Каждый вносится в `Place.cpp` **по одному**, прогоняется подветка `StarForge.Core.Place`, записывается, какие тесты упали, и правка **откатывается** (`git checkout -- Source/StarForgeCore/Private/Place.cpp`). Мутант, который никого не убил, — это проверка, которую никто не проверяет.
+**Девять мутантов на девять тестов.** Каждый вносится в `Place.cpp` **по одному**, прогоняется подветка `StarForge.Core.Place`, записывается, какие тесты упали, и правка **откатывается** (`git checkout -- Source/StarForgeCore/Private/Place.cpp`). Мутант, который никого не убил, — это проверка, которую никто не проверяет.
 
 | № | Мутант | Что написать вместо | Кто обязан упасть |
 |---|---|---|---|
 | M1 | Радиус выброшен из достижения | `Fit.ReachMetres = OriginFromWorldOriginMetres.Size();` | `ReachIsTheOriginPlusTheRadius` (случай «край на метр за границей») |
-| M2 | Потолок движка спутан с сантиметровым | `FPlaceLimits::EngineRadiusMetres = 4.398046511104e12` **в заголовке**, и тест переписать на умолчания нельзя — вместо этого подать `MakeLimits()` с этим значением в одноразовом черновом тесте | `ReachIsTheOriginPlusTheRadius` (4.50·10¹⁰ м пройдёт). **Если не падает — тесты читают умолчания вместо своих чисел, и это находка о тестах** |
+| M2 | Потолок движка спутан с сантиметровым | `FPlaceLimits::EngineRadiusMetres = 4.398046511104e12` **в заголовке** — то есть сантиметровый потолок написан там, где стоит метровый | `TheDefaultLimitsAreTheSpecsNumbers`, и **только он**. Остальные восемь обязаны устоять: они подают свои числа через `MakeLimits()` и умолчаний не читают. Упавший девятый — находка о тестах: значит кто-то стал читать умолчания |
 | M3 | Диаметр спутан с радиусом | `Fit.DiameterMetres = RadiusMetres;` | `AtTheOriginFitsWithBothMarginsReported`, `ACrossingLongerThanTheBudgetIsRefused`, `TheTighterCeilingIsTheOneThatBinds` |
 | M4 | Причина всегда одна | заменить `EPlaceRefusal::CrossingTime` на `EPlaceRefusal::EngineReach` во второй проверке | `ACrossingLongerThanTheBudgetIsRefused`, `TheTighterCeilingIsTheOneThatBinds` |
 | M5 | Страж конечности снят | убрать блок `if (!IsFiniteVector(...) …)` | `ANonFinitePlaceIsRefusedAsNotFinite` — и упадёт он именно на **причине**: NaN даст `EngineReach` |
@@ -1019,9 +1058,35 @@ grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log
 
 Ставка у M9 выше, чем кажется у опечатки. `RefusalName` печатается строкой размера места (задача 3), а стоп-ворота контролей задачи 4 и точки проверки 8 ищут в журнале дословное `Reason: engine reach.`. Уехавшее на символ имя не роняет ничего: оно тихо превращает каждый отрицательный контроль этапа в «выполнено», не проверившее ничего.
 
+**Девятый тест появился из прогона M2, а не из замысла.** Первая редакция плана ждала, что M2 уронит `ReachIsTheOriginPlusTheRadius`, и приписывала: «если не падает — тесты читают умолчания вместо своих чисел». Это перевёрнуто. Тесты подают свои константы через `MakeLimits()` и умолчаний не читают **намеренно** — тест, читающий те же умолчания, что и код, проверяет лишь согласие кода с самим собой. Поэтому смена умолчания им не видна, и «не упало» доказывает ровно обратное написанному.
+
+Прогнано, а не выведено: с `e12` в заголовке **ни один** из восьми тестов не упал. То есть ошибку на сто в потолке — ту самую, ради которой M2 и придуман, и ту самую, о которой предупреждает раздел «Единицы» этой задачи, — не ловил никто. Написал бы кто-нибудь `e12` вместо `e10`, набор остался бы зелёным, граница мира уехала бы в сто раз дальше, всякое место проходило бы проверку, и корпуса снова начали бы исчезать в кадре запуска физики с чистым журналом. Ровно тот отказ, ради невозможности которого написан весь этап.
+
+Дыру закрывает `TheDefaultLimitsAreTheSpecsNumbers` — единственное место в файле, где читать умолчания правильно. С ним M2 убивает его одного и не трогает остальные восемь, что и проверено отдельным прогоном.
+
 Результат шага — таблица с колонкой «какие тесты упали на самом деле», и она должна совпасть с ожиданием. Расхождение — находка, а не повод переписать ожидание.
 
-- [ ] **Step 7: Вернуть дерево в зелёное и перепроверить**
+### Что упало на самом деле — прогнано 2026-09-18, дважды
+
+Первый прогон сделал исполнитель задачи, второй — контроллер, независимым скриптом и с откатом через `git checkout` (у исполнителя файлы были ещё неотслеженными, и он восстанавливал их копиями). **Обе таблицы совпали строка в строку**, включая три строки, где реальность оказалась шире ожидания.
+
+| № | Ожидалось | Упало на самом деле |
+|---|---|---|
+| M1 | `ReachIsTheOriginPlusTheRadius` | он же **+ `AtTheOriginFitsWithBothMarginsReported`, `TheMeasurementSurvivesARefusal`** — 3 |
+| M2 | *(после правки)* `TheDefaultLimitsAreTheSpecsNumbers` | **до девятого теста — никто**, 0 из 8; с ним — он один, 1 из 9 |
+| M3 | `AtTheOriginFits…`, `ACrossingLonger…`, `TheTighterCeiling…` | те три **+ `TheMeasurementSurvivesARefusal`** — 4 |
+| M4 | `ACrossingLonger…`, `TheTighterCeiling…` | ровно они — 2 |
+| M5 | `ANonFinitePlaceIsRefusedAsNotFinite` | ровно он — 1 |
+| M6 | `ARadiusOfZeroIsNotAPlace` | ровно он — 1 |
+| M7 | `LimitsThatCannotBeUsedAreRefused` | ровно он — 1 |
+| M8 | `TheMeasurementSurvivesARefusal` | он **+ `TheTighterCeilingIsTheOneThatBinds`** — 2 |
+| M9 | `TheMeasurementSurvivesARefusal` | ровно он — 1 |
+
+**Три превышения ожидания (M1, M3, M8) — не находки.** Ожидание называло тест, который обязан упасть, а не список всех, кто может. Находкой был бы недолёт: тест из колонки «обязан», оставшийся зелёным. Таких нет.
+
+**Единственный настоящий недолёт был у M2, и он закрыт девятым тестом** — разбор выше. Эта таблица переносится в бланк точки проверки 8 (задача 6) как есть.
+
+- [x] **Step 7: Вернуть дерево в зелёное и перепроверить**
 
 ```bash
 git checkout -- Source/StarForgeCore/Private/Place.cpp Source/StarForgeCore/Public/Place.h
@@ -1029,7 +1094,7 @@ git checkout -- Source/StarForgeCore/Private/Place.cpp Source/StarForgeCore/Publ
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "F:/UEProject/StarForge/StarForge.uproject" -ExecCmds="Automation RunTests StarForge.Core;Quit" -unattended -nopause -nullrhi -nosplash -log
 ```
 
-**96 / 0.** Затем убедиться, что границы модулей не поехали:
+**97 / 0.** Затем убедиться, что границы модулей не поехали:
 
 ```bash
 grep -n "Engine" Source/StarForgeCore/StarForgeCore.Build.cs
@@ -1037,7 +1102,7 @@ grep -n "Engine" Source/StarForgeCore/StarForgeCore.Build.cs
 
 Ожидается только строка комментария «Intentionally no "Engine" dependency».
 
-- [ ] **Step 8: Коммит**
+- [x] **Step 8: Коммит**
 
 ```bash
 git status --short
@@ -1944,7 +2009,7 @@ grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log
 grep -n "Engine" Source/StarForgeCore/StarForgeCore.Build.cs
 ```
 
-**96 / 0**, и в `Build.cs` — только строка комментария.
+**97 / 0**, и в `Build.cs` — только строка комментария.
 
 - [ ] **Step 5: Коммит**
 
@@ -2084,7 +2149,7 @@ diff <(grep "Place size:" docs/superpowers/notes/evidence/2026-09-18-place-defau
 `docs/superpowers/notes/2026-09-18-checkpoint-8-results.md`, пустой, с графами под цифры, по образцу `2026-09-14-checkpoint-7-results.md`. Разделы:
 
 1. **Шапка:** дата, сборка, ветка и коммит, карты, частота кадров в окне.
-2. **«Что уже проверено без рук (headless, 60 и 400 fps)»** — таблица с двумя колонками частот, **без прочерков**: головные тесты **96 / 0**; границы модулей (`Engine` в `StarForgeCore` нет); семь мутантов и какие тесты каждый убил; строка размера стендового места со всеми шестью числами; строка носителя; совпадение с петлёй по люку, уводу, скорости и крену; контроли П1–П4.
+2. **«Что уже проверено без рук (headless, 60 и 400 fps)»** — таблица с двумя колонками частот, **без прочерков**: головные тесты **97 / 0**; границы модулей (`Engine` в `StarForgeCore` нет); девять мутантов и какие тесты каждый убил; строка размера стендового места со всеми шестью числами; строка носителя; совпадение с петлёй по люку, уводу, скорости и крену; контроли П1–П4.
 3. **«Сначала — действителен ли прогон»** — журналы в `evidence/`, `Log file closed`, число `LogStarForge: Error` (0 в обычных прогонах, 2 в B2 и B3), `skipped carries` = 0, `measured` ≥ 55 с.
 4. **Запуск A** — место руками: каюта, люк, станция, отстыковка, полёт, возвращение. Колонки «ожидание» и «факт».
 5. **Запуск B** — шесть контролей B1–B6, у каждого графа **«строка стоп-ворот, дословно»**.
