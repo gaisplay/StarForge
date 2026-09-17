@@ -264,7 +264,7 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 ## Current state
 
 **The vertical slice is finished. Stage 4 — combat and the pirate — is merged: `main` is at
-merge commit `a256a02`, fifty-one commits over the branch point.** 88 headless tests, a build
+merge commit `a256a02`, fifty-one commits over the branch point; `main` now stands five commits past it, at `1e208f9`.** 88 headless tests, a build
 from nothing with no warnings, and all three rigs green at 60 and 400 fps on the merged result.
 Spec §13 ends at "Точка проверки 4. Срез готов." — there is no stage the spec names after this
 one, and **the next step is a spec, not a plan.** Start from
@@ -283,9 +283,10 @@ stage 2's gunner automation in the other. There is no AI ship. The rig is `ASFCo
 `docs/superpowers/notes/2026-09-14-checkpoint-7-results.md`, filled from eleven logs in
 `notes/evidence/`: six controls counted, `skipped carries 0` in every line of every log, no carry
 that stopped, no handover without a refusal, two hulls colliding with momentum conserved to the
-last digit at both rates. Eight of nine by-eye rows are still empty and go forward as open
-observations; the one that is filled says the cabin is a blind cube — a hit on the hull is felt by
-nothing inside it.
+last digit at both rates. Six of the ten by-eye rows are answered and four go forward as open
+observations. Two of the answers are findings in their own right: the cabin is a blind cube — «буквально
+бой я не вижу, только по панели» — and the collision reads as getting stuck, «как будто застрял
+прижатым к потолку», where in truth the man is knocked down and carried throughout.
 
 **The main risk of §12 is closed.** Motion decomposition survived four manual checkpoints (1, 4/5,
 6, 7); plans B and C were never needed. What the slice carried forward is not in the mechanism but
