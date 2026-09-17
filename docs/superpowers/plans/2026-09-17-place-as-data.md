@@ -1161,7 +1161,7 @@ MSG
   - `ASFPlaceGameMode` — четвёртый режим, `/Script/StarForge.SFPlaceGameMode`
   - консольные переменные `sf.PlaceOffsetM` и `sf.PlaceRadiusM` (строковые, читаются один раз в `StartPlay`)
 
-- [ ] **Step 1: Описание места**
+- [x] **Step 1: Описание места**
 
 `Source/StarForge/Public/World/SFPlaceDataAsset.h`:
 
@@ -1344,7 +1344,7 @@ const TCHAR* USFPlaceDataAsset::KindName(ESFPlaceKind InKind)
 }
 ```
 
-- [ ] **Step 2: Заголовок режима**
+- [x] **Step 2: Заголовок режима**
 
 `Source/StarForge/Public/SFPlaceGameMode.h`:
 
@@ -1404,7 +1404,7 @@ private:
 };
 ```
 
-- [ ] **Step 3: Реализация режима**
+- [x] **Step 3: Реализация режима**
 
 `Source/StarForge/Private/SFPlaceGameMode.cpp`. Ниже — несущие куски целиком; остальное собирается по образцу `SFLoopGameMode.cpp`, включая запись `sf.ShipProfile 0` с чтением обратно и громким промахом.
 
@@ -1766,7 +1766,7 @@ Place rig: scripted profile off; place 'OpenSpace' read from DA_Place_OpenSpace 
 Place rig: place 'OpenSpace' REFUSED (engine reach) -- NOTHING WAS ASSEMBLED. No carriers, no ship, and no pawn: DefaultPawnClass was nulled before Super::StartPlay so that nobody stands in an empty world measuring a place that does not exist.
 ```
 
-- [ ] **Step 4: Собрать и прогнать стенд по URL на двух частотах**
+- [x] **Step 4: Собрать и прогнать стенд по URL на двух частотах**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge/StarForge.uproject" -WaitMutex
@@ -1779,14 +1779,14 @@ grep -E "Place size:|Place carrier:|Place rig:|Shipboard drift|Frame handover|Lo
 
 | Что | Ожидание, 60 и 400 fps |
 |---|---|
-| `Place size:` | ровно одна строка, уровня `Display`, `-- fits`; `reach 1.800000e+04`, `margin 4.398045e+10`, `diameter 3.600000e+04`, `margin 2.698196e+10`, `crosses it in 1.200800e-04 s` |
+| `Place size:` | ровно одна строка, уровня `Display`, `-- fits`; `reach 1.800000e+04`, `margin 4.398045e+10`, `diameter 3.600000e+04`, `margin 2.698196e+10`, `crosses it in 1.200801e-04 s` |
 | `Place carrier:` | ровно одна строка, `Station` класса `SFTestStation`, `frame present`, `motionless (open space)` |
 | `Place rig:` | уровня `Warning` (ассета ещё нет) и со словами «a place written in code»; **ни одного слова в верхнем регистре** |
 | `Frame handover` при переносе пешки в каюту | `Station -> Ship`, `0.000 cm` |
 | Увод стоя | `0.000 cm`, `skipped carries 0`, `footing intact` |
 | `LogStarForge: Error` | 0 |
 
-- [ ] **Step 5: Сверить с петлёй — это и есть приёмка**
+- [x] **Step 5: Сверить с петлёй — это и есть приёмка**
 
 ```bash
 MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Loop -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log < /dev/null
@@ -1808,7 +1808,7 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 
 **Любое расхождение — находка о пути данных, и задача не закрыта.** Смысл задачи в том, что данные собирают тот же мир.
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git status --short
