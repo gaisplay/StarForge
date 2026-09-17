@@ -20,3 +20,8 @@ Automation_*.slnx
 
 # graphify knowledge graph (derived; rebuild with: python -m graphify update .)
 graphify-out/
+
+# SDD execution workspace: task briefs, reports, review packages and the run logs they cite.
+# Working notes for one stage, not a record the repo keeps -- what survives a stage is copied
+# into docs/superpowers/ before the merge.
+.superpowers/
