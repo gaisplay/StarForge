@@ -1847,13 +1847,13 @@ MSG
 
 **Files:**
 - Edit: `Source/StarForge/Private/SFPlaceGameMode.cpp` — только если прогоны найдут в нём дефект
-- Create: `docs/superpowers/notes/evidence/2026-09-18-place-*.log` (журналы шести прогонов)
+- Create: `docs/superpowers/notes/evidence/2026-09-18-place-*.log` — **десять журналов**: четыре контроля на двух частотах плюс прогон при умолчаниях на двух частотах. В первой редакции здесь стояло «шесть», а сообщение коммита ниже говорило «четыре прогона на двух частотах» — второе верно, и П4 тоже нуждается в журнале: контроль без записи это контроль без доказательства
 
 **Interfaces:**
 - Потребляет из задачи 3: `sf.PlaceOffsetM`, `sf.PlaceRadiusM`, строку `Place size:`, строку `Place rig:`.
-- Отдаёт задаче 6: шесть журналов и дословные строки стоп-ворот для бланка.
+- Отдаёт задаче 6: десять журналов и дословные строки стоп-ворот для бланка.
 
-- [ ] **Step 1: Контроль П1 — место у самой границы собирается и летит**
+- [x] **Step 1: Контроль П1 — место у самой границы собирается и летит**
 
 4.30·10¹⁰ м — точка, которую спайк измерил как работающую.
 
@@ -1876,7 +1876,7 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-18-place-nea
 
 **Это положительный контроль, и он обязателен.** Без него отказ на 4.50·10¹⁰ м доказывает только то, что предикат отказывает; он не доказывает, что предикат отказывает **там, где надо**.
 
-- [ ] **Step 2: Контроль П2 — место за границей не собирается**
+- [x] **Step 2: Контроль П2 — место за границей не собирается**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFPlaceGameMode" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=25 "-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=45000000000" -ExecCmds="sf.FlightLog 1" -log < /dev/null
@@ -1895,7 +1895,7 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-18-place-ove
 
 **Стоп-ворота контроля:** строка `Place size:` переписана в бланк дословно. Без неё контроль не засчитан.
 
-- [ ] **Step 3: Контроль П3 — второй потолок жив, и причины различимы**
+- [x] **Step 3: Контроль П3 — второй потолок жив, и причины различимы**
 
 Габарит 2.0·10¹⁰ м при начале координат в нуле: движок проходит, время — нет.
 
@@ -1916,7 +1916,7 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-18-place-slo
 
 **Если причина названа `engine reach` — находка:** значит предикат сложил габарит с удалением и сравнил сумму с меньшим потолком, то есть свернул две проверки в одну, и отказ показывает не то, что сломано.
 
-- [ ] **Step 4: Контроль П4 — переменная с мусором не проходит молча**
+- [x] **Step 4: Контроль П4 — переменная с мусором не проходит молча**
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFPlaceGameMode" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=25 "-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=nonsense" -ExecCmds="sf.FlightLog 1" -log < /dev/null
@@ -1926,7 +1926,13 @@ cp Saved/Logs/StarForge.log docs/superpowers/notes/evidence/2026-09-18-place-slo
 
 **И здесь же проверяется то, что таблица «Что обязательно проверить» отдельной строкой требует:** приходит ли `-ini` для строковой переменной раньше `StartPlay`. Признак провала — прогон П2 собирает место у начала координат и печатает `-- fits`.
 
-- [ ] **Step 5: Коммит**
+**Прогнано 2026-09-18, и контроль сделал ровно то, ради чего написан: нашёл дефект.** Первая редакция `ParseMetres` разбирала значение через `FCString::Atod`, а `Atod` не умеет не справиться: на строке без числа он отвечает `0.0`, и отличить это от настоящего нуля нечем. Поэтому `sf.PlaceOffsetM=nonsense` проходил **успешной** веткой: предупреждение не печаталось, место сдвигалось на ноль метров, а стенд сообщал `the console changed the place before it was measured. sf.PlaceOffsetM moved it +0.000000e+00 m along +X` — то есть контроль докладывал о действии, которого не совершал. Это хуже молчания: молчание хотя бы не лжёт.
+
+Исправлено на `FDefaultValueHelper::ParseDouble`, который проверяет **всю строку** через `IsStringValidFloat` прежде, чем преобразовывать (`Runtime/Core/Private/Misc/DefaultValueHelper.cpp`). Отвергаются и `nonsense`, и `43abc`; принимаются `4.3e10` и `-1.5`. Проверка на конечность оставлена: `1e999` — правильно построенное число, дающее бесконечность. После правки П4 печатает `Place rig: sf.PlaceOffsetM='nonsense' is not a finite number of metres; the authored origin stands.`, строки про изменение места нет вовсе, место собрано по авторским числам и `-- fits`.
+
+Попутно этот же прогон закрыл вопрос про `-ini` для строковой переменной **измерением, а не чтением исходников**: П1 и П2 читают свои значения и расходятся в поведении, значит ключ доходит до `StartPlay`.
+
+- [x] **Step 5: Коммит**
 
 ```bash
 git status --short

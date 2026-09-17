@@ -4,6 +4,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/DefaultValueHelper.h"
 #include "Place.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
@@ -83,7 +84,28 @@ namespace
 				return false;
 			}
 
-			const double Parsed = FCString::Atod(*Raw);
+			// ParseDouble rather than Atod, and the difference is the whole point of this
+			// function. Atod cannot fail: it answers 0.0 for a string with no number in it at
+			// all and offers no way to tell that apart from a genuine zero, so the first form
+			// of this rig accepted sf.PlaceOffsetM=nonsense, moved the place by zero metres,
+			// and announced "the console changed the place" over a place the console had not
+			// touched. That is worse than passing in silence -- it is a control reporting that
+			// it did the thing it did not do.
+			//
+			// ParseDouble validates the entire string through IsStringValidFloat before
+			// converting (DefaultValueHelper.cpp), so "nonsense" and "43abc" are both refused
+			// while "4.3e10" and "-1.5" are taken. Measured on this rig: the junk control now
+			// warns and builds the authored place, where before it warned about nothing.
+			double Parsed = 0.0;
+			if (!FDefaultValueHelper::ParseDouble(Raw, Parsed))
+			{
+				return false;
+			}
+
+			// Still needed after a shape check: "1e999" is a perfectly well-formed number that
+			// converts to infinity. One guard covers infinity and NaN both -- FMath::IsFinite
+			// tests that the exponent is not all ones (GenericPlatformMath.h 587), and a NaN's
+			// is.
 			if (!FMath::IsFinite(Parsed))
 			{
 				return false;
