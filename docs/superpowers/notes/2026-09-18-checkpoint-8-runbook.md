@@ -122,6 +122,8 @@ File → Save Current Level As → папка Maps, имя L_Place
 
 ### Ворота шага 0: пока эти четыре команды не дали ожидаемого, шаг A запускать нельзя
 
+> **Выполнено 2026-09-19.** Ворота открылись на обеих частотах (`Bringing World` — 1, `Failed to load package` — 0), приёмка ассета прошла: строка размера от `DA_Place_OpenSpace` совпала со строкой от места из кода посимвольно. Журналы: `evidence/2026-09-19-checkpoint-8-asset-{60,400}.log`. Одна поправка по дороге: ассет был сохранён до нажатия `PopulateOpenSpaceWithOneStation` и лежал на диске с пустым `Carriers` — **после кнопки обязательно Ctrl+S**, звёздочка на вкладке должна исчезнуть. Проверить без редактора: файл больше 1.5 КБ и содержит слово `Carriers`.
+
 ```bash
 ls -la Content/Maps/L_Place.umap Content/Places/DA_Place_OpenSpace.uasset
 MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Place -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=5 -log < /dev/null

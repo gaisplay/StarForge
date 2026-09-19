@@ -1,13 +1,13 @@
 # Точка проверки 8: результаты (место как данные)
 
-**Дата прогона:**
+**Дата прогона:** ворота и приёмка ассета — 2026-09-19, headless, контроллер; ручной прогон A/B — 
 **Сборка:** StarForgeEditor Win64 Development, UE 5.8.2
-**Ветка / коммит:** `feat/place-as-data` /
+**Ветка / коммит:** `feat/place-as-data` / `eb9a88d` для ворот и приёмки; ручной прогон — 
 **Карты:** `L_Place` по карте / подмена режима по URL на `L_FrameSpike` (нужное отметить)
-**Строка `Bringing World` из журнала ворот шага 0:**
-**`grep -c "Bringing World /Game/Maps/L_Place"`:** (обязано быть 1)
-**`grep -c "Failed to load package"`:** (обязано быть 0)
-**Ассет `Content/Places/DA_Place_OpenSpace.uasset` создан:** да / нет; `SystemId` на момент прогона:
+**Строка `Bringing World` из журнала ворот шага 0:** `LogWorld: Bringing World /Game/Maps/L_Place.L_Place up for play (max tick rate 0) at 2026.09.19-16.49.11`
+**`grep -c "Bringing World /Game/Maps/L_Place"`:** **1** на 60 и **1** на 400 (обязано быть 1)
+**`grep -c "Failed to load package"`:** **0** на 60 и **0** на 400 (обязано быть 0)
+**Ассет `Content/Places/DA_Place_OpenSpace.uasset` создан:** **да**, 2026-09-19, 1784 байта, `Carriers` = 1 (`Station` класса `SFTestStation`); `SystemId` на момент прогона: **пусто** (по плану — заполняется в B5)
 **Частота кадров в окне:** (`dt` из строк `Drift debug`, `sf.DriftDebug 1`)
 
 Порядок действий описан в [runbook](2026-09-18-checkpoint-8-runbook.md). Числа берутся из журналов
@@ -15,8 +15,8 @@
 
 | Запуск | Журнал |
 |---|---|
-| Ворота шага 0 — карта загружается | `evidence/<дата>-checkpoint-8-map-gate.log` |
-| Шаг 0б — приёмка ассета, 60 и 400 | `evidence/<дата>-checkpoint-8-asset-{60,400}.log` |
+| Ворота шага 0 — карта загружается | те же журналы, что у приёмки ассета: `evidence/2026-09-19-checkpoint-8-asset-{60,400}.log` — ворота и приёмка снимаются одним прогоном по карте |
+| Шаг 0б — приёмка ассета, 60 и 400 | `evidence/2026-09-19-checkpoint-8-asset-60.log`, `evidence/2026-09-19-checkpoint-8-asset-400.log` |
 | A — место руками | `evidence/<дата>-checkpoint-8-A-place-by-hand.log` |
 | B1 — место у границы работает | `evidence/<дата>-checkpoint-8-B1-near-the-border.log` |
 | B2 — место за границей | `evidence/<дата>-checkpoint-8-B2-over-the-border.log` |
@@ -33,9 +33,11 @@
 `notes/evidence/`. **Прочерков здесь нет: это измерения, а не ожидания.** Ниже `evidence/`
 означает `docs/superpowers/notes/evidence/`, то есть папку рядом с этим файлом.
 
-Одна строка таблицы ниже помечена как **не снятая** — крен после отстыковки на четвёртом стенде.
-Задача 3 его требовала и шаг отмечен выполненным, но журнала этого прогона в `evidence/` нет, и
-цифра из улик не воспроизводится. Она снимается в B6.
+Крен после отстыковки на четвёртом стенде в первой редакции стоял как «не снят»: задача 3 его
+требовала, шаг был отмечен, а журнала в `evidence/` не было — прогон сделали и сверили, но файл
+остался во временной папке. Переснят 2026-09-18 и положен рядом (`2026-09-18-place-roll-400.log`),
+вместе с тягой на обеих частотах (`2026-09-18-place-thrust-{60,400}.log`). Сравнение, которое
+нельзя повторить, — утверждение, а не измерение.
 
 | Проверка | 60 fps | 400 fps |
 |---|---|---|
@@ -45,11 +47,15 @@
 | Этап не изменил ни одного существующего файла | `git diff --diff-filter=MDR main -- Source/ Config/ Content/` — пусто; **семь новых файлов** и ничего больше | То же |
 | Строка размера стендового места, все шесть чисел | `reach 1.800000e+04`, ceiling `4.398047e+10`, margin `4.398045e+10`; `diameter 3.600000e+04`, ceiling `2.698200e+10`, margin `2.698196e+10`; `crosses it in 1.200801e-04 s -- fits`, уровень `Display` (`evidence/2026-09-18-place-default-60.log`) | **Те же шесть чисел, посимвольно** (`evidence/2026-09-18-place-default-400.log`) |
 | Строка носителя | ровно одна: `Place carrier: 'Station' of class SFTestStation in place 'OpenSpace' at place-local (0.0 0.0 0.0) m, world (0.000000e+00 0.000000e+00 0.000000e+00) cm, frame present -- motionless (open space).` | Та же строка слово в слово |
-| Строка стенда при умолчаниях | `Place rig: scripted profile off; place 'OpenSpace' read from a place written in code and assembled with 1 carrier; the ship spawns docked; the man stands in the cabin and is bound to its frame.` — уровнем `Warning`, **потому что ассета на момент задачи 3 не было**; ни одного слова в верхнем регистре | То же |
+| Строка стенда при умолчаниях, по URL, до ассета | `Place rig: scripted profile off; place 'OpenSpace' read from a place written in code and assembled with 1 carrier; the ship spawns docked; the man stands in the cabin and is bound to its frame.` — уровнем `Warning`, **потому что ассета на момент задачи 3 не было**; ни одного слова в верхнем регистре (`evidence/2026-09-18-place-default-60.log`) | То же (`…-400.log`) |
+| Строка стенда по карте, с ассетом (шаг 0б) | `Place rig: scripted profile off; place 'OpenSpace' read from DA_Place_OpenSpace and assembled with 1 carrier; the ship spawns docked; the man stands in the cabin and is bound to its frame.` — уровнем **`Display`**; предупреждений в журнале **0** (`evidence/2026-09-19-checkpoint-8-asset-60.log`) | Та же строка, `Display`, предупреждений 0 (`…-400.log`) |
+| Карта против URL | Все семейства строк, кроме `Place rig:`, совпали дословно — 294 строки; `Place rig:` отличается ровно источником места и уровнем: ассет/`Display` против код/`Warning`. Больше ничем | То же, 290 строк |
+| Четвёртый стенд по карте против `L_Loop` | 292 строки в тринадцати семействах, дословно (`checkpoint-8-asset-60.log` против `2026-09-18-baseline-loop-60.log`) | 288 строк, дословно |
+| `L_Combat.umap` создана в ту же сессию редактора и сошлась с URL-формой | `Bringing World /Game/Maps/L_Combat` — 1; все четырнадцать семейств строк против `2026-09-18-baseline-combat-60.log` — 370 строк, дословно (`evidence/2026-09-19-combat-map-60.log`) | 361 строка, дословно (`…-400.log`) |
 | Совпадение с петлёй: переход через люк | `Frame handover: Station -> Ship, first carry moved him 0.000 cm over 5 frame(s), gravity turned 0.0 deg` — **та же строка, что даёт `L_Loop`** | `… over 27 frame(s) …` — так же, как на петле |
 | Совпадение с петлёй: увод стоя | `0.000 cm`, пик `0.000 cm`, дрожь `0.000 cm/tick`, `skipped carries 0`, `knocked down 0.0 s`, `footing intact`, до `60.0 s settled` | То же |
-| Совпадение с петлёй: скорость на тяге | `200.0 m/s` на установившемся режиме, насыщение `force want (18520740 0 0) got (800000 0 0) N` на разгоне, `accel 16.0 m/s2` (`evidence/2026-09-18-place-near-60.log`) | То же (`evidence/2026-09-18-place-near-400.log`) |
-| Совпадение с петлёй: крен после отстыковки | **Не снято.** Задача 3, шаг 5 требовал `180.0 deg/s` и отмечен выполненным, но журнала нет в `evidence/`. Снимается в B6 | **Не снято**, там же |
+| Совпадение с петлёй: скорость на тяге | `200.0 m/s` на установившемся режиме, насыщение `got (800000 0 0) N` на всём разгоне, `accel 16.0 m/s2`, ряд `15.1 → 31.1 → … → 191.1` — тот же, что у спайка (`evidence/2026-09-18-place-thrust-60.log`) | `200.0 m/s`, `got (800000 0 0) N`, ряд `15.2 → 31.3 → … → 191.7` (`evidence/2026-09-18-place-thrust-400.log`). **`force want` на насыщении между частотами не сравнивается**: это запрос контроллера за шаг и он зависит от `dt`; сравнивается `got` |
+| Совпадение с петлёй: крен после отстыковки | Снимается только на 400 — там, где сонный счётчик Chaos ронял крен до этапа 3 | `154.8 → 179.4 → 180.0`, дальше `ang roll/pitch/yaw (180.0 0.0 0.0) deg/s` до конца прогона — **тот же ряд, что у `L_Loop`** (`evidence/2026-09-18-place-roll-400.log` против `2026-09-18-baseline-loop-roll-400.log`) |
 | П1. Место у границы работает (`sf.PlaceOffsetM=43000000000`) | `sf.PlaceOffsetM moved it +4.300000e+10 m along +X.`; `reach 4.300002e+10 m`, `margin 9.804471e+08 m`, `-- fits.`; `Dock: [Ship] undocked.` и **после неё** `Frame [Ship]: angular velocity read from the simulating body.`; `speed 200.0 m/s`; увод `0.000 cm`, `skipped carries 0`; `LogStarForge: Error` — **0** (`evidence/2026-09-18-place-near-60.log`) | Всё то же, цифры строки размера посимвольно те же (`evidence/2026-09-18-place-near-400.log`) |
 | П2. Место за границей (`sf.PlaceOffsetM=45000000000`) | `margin -1.019553e+09 m`, `-- REFUSED. Reason: engine reach.` уровнем `Error`; `Place rig: place 'OpenSpace' REFUSED (engine reach) -- NOTHING WAS ASSEMBLED. …` уровнем `Error`; **ноль** строк `Dock:`, `Place carrier:`, `Shipboard drift`, `Frame [` во всём журнале; `LogStarForge: Error` — ровно **2**, обе ожидаемые (`evidence/2026-09-18-place-over-60.log`) | То же, все четыре счётчика нули (`evidence/2026-09-18-place-over-400.log`) |
 | П3. Место, которое не пересечь (`sf.PlaceRadiusM=20000000000`) | `margin 2.398047e+10 m` **положительный** по движку, `margin -1.301800e+10 m` **отрицательный** по времени, `crosses it in 1.334223e+02 s` против бюджета 90.0 с, `-- REFUSED. Reason: crossing time.`; ничего не собрано (`evidence/2026-09-18-place-slow-60.log`) | То же (`evidence/2026-09-18-place-slow-400.log`) |
@@ -102,8 +108,8 @@
 
 | Условие | Требование | Факт |
 |---|---|---|
-| Ворота шага 0 открылись | `Bringing World /Game/Maps/L_Place` — 1, `Failed to load package` — 0 | |
-| Ассет принят: строка размера совпала посимвольно с местом из кода | `diff` пуст на 60 и на 400 | |
+| Ворота шага 0 открылись | `Bringing World /Game/Maps/L_Place` — 1, `Failed to load package` — 0 | **Да**, 2026-09-19: 1 и 0 на обеих частотах |
+| Ассет принят: строка размера совпала посимвольно с местом из кода | `diff` пуст на 60 и на 400 | **Да**, 2026-09-19: `Place size:` из `checkpoint-8-asset-{60,400}.log` равна строке из `2026-09-18-place-default-{60,400}.log` символ в символ |
 | Строки `Place rig: … a place written in code` нет ни в одном прогоне после шага 0 | ни одной | |
 | Журналы скопированы в `evidence/` до следующего запуска | все запуски из таблицы в шапке | |
 | Журналы заканчиваются `Log file closed` | да, каждый | |

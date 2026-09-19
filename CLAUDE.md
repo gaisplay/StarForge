@@ -331,9 +331,9 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 ## Current state
 
 **The vertical slice is finished and the second phase has begun. Stage 5 — the place as data —
-is written and measured on `feat/place-as-data`, waiting on one hand-made map and asset before
-checkpoint 8 can be taken.** 97 headless tests, a clean rebuild with no warnings, and all four
-rigs green at 60 and 400 fps.
+is written and measured on `feat/place-as-data`, its map and asset are made and accepted, and
+checkpoint 8 is ready to be taken by hand.** 97 headless tests, a clean rebuild with no warnings,
+and all four rigs green at 60 and 400 fps — the fourth now by its own map as well as by URL.
 
 **Stage 5 changed no existing file.** Seven files added, none modified, none removed — and the
 three old rigs were re-run afterwards and compared against a baseline taken before any of it was
@@ -349,10 +349,14 @@ boolean, and refuses before anything is assembled; the fourth rig, `ASFPlaceGame
 compared against it line for line; and four negative controls on the size, run at both frame
 rates.
 
-**What is left of stage 5.** `Content/Maps/L_Place.umap` and
-`Content/Places/DA_Place_OpenSpace.uasset` are created by hand in the editor — step 0 of
-checkpoint 8's runbook — and until they exist the rig assembles a place written in code and says
-so in a `Warning`. Then checkpoint 8 is taken by hand.
+**What is left of stage 5.** Checkpoint 8, by hand, from
+`docs/superpowers/notes/2026-09-18-checkpoint-8-runbook.md`. Step 0 of it — `L_Place.umap`,
+`DA_Place_OpenSpace.uasset` and, by the owner's decision, the `L_Combat.umap` this guide had
+described for a stage and a half without its existing — was done on 2026-09-19. The asset's
+acceptance is that its size line equals the code-written place's size line character for
+character, and it does, at both rates. The asset was first saved with `Carriers` empty, before the
+populate button was pressed; a `UDataAsset` serialises nothing that equals its class defaults, so
+an empty array leaves a 1.2 KB file that looks finished. **After the button, save.**
 
 **Read `docs/superpowers/specs/2026-09-17-world-as-a-graph-of-places.md` before anything
 structural in the second phase**, and note that its §10.4 folds two ceilings into one comparison
