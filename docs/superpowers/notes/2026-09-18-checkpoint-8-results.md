@@ -23,7 +23,7 @@
 | B3 — место, которое не пересечь | `evidence/<дата>-checkpoint-8-B3-crossing-time.log` |
 | B4 — одно число в ассете | `evidence/<дата>-checkpoint-8-B4-one-number-in-the-asset.log` |
 | B5 — имя системы | `evidence/<дата>-checkpoint-8-B5-system-name.log` |
-| B6 — частота кадров | `evidence/<дата>-checkpoint-8-B6-*-400.log` |
+| B6 — частота кадров | все контроли уже сняты на 400 (`evidence/2026-09-18-place-*-400.log`, `2026-09-19-checkpoint-8-asset-400.log`); крен **по карте**, командой B6: `evidence/2026-09-19-checkpoint-8-B6-roll-400.log` — ряд `154.8 → 179.4 → 180.0`, дальше `(180.0 0.0 0.0)` до конца, **дословно ряд `L_Loop`** |
 
 ---
 
