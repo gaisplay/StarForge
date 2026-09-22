@@ -125,13 +125,167 @@ ASFPlaceGameMode::ASFPlaceGameMode()
 	// By path and guarded, exactly as ASFTestShip resolves DA_TestShip, and for the same two
 	// reasons: the map is empty so there is no placed actor to author this on, and the asset
 	// does not exist the first time this file compiles. An unresolved finder leaves PlaceData
-	// null, which StartPlay reports in a warning and answers with a place written in code.
+	// null, which InitGame reports in a warning and answers with a place written in code.
 	static ConstructorHelpers::FObjectFinder<USFPlaceDataAsset> PlaceAsset(PlaceRig::AssetPath);
 
 	if (PlaceAsset.Succeeded())
 	{
 		PlaceData = PlaceAsset.Object;
 	}
+}
+
+void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+	Super::InitGame(MapName, Options, ErrorMessage);
+
+	// The measurement lives here rather than in StartPlay because of the order the engine runs a
+	// standalone -game session in. UEngine::LoadMap calls InitializeActorsForPlay, which calls
+	// InitGame (World.cpp 6034); then LoadMap logs the local player in through SpawnPlayActor
+	// (UnrealEngine.cpp 16647) -- PostLogin, HandleStartingNewPlayer, RestartPlayer, and the pawn
+	// is spawned -- and only then does it call World->BeginPlay, which calls StartPlay
+	// (World.cpp 6174). The first form of this rig measured in StartPlay and nulled
+	// DefaultPawnClass there, which was already too late: every refused run carried an ASFCharacter
+	// and its warning about standing in world space, under a line claiming no pawn existed.
+	// InitGame is the only hook ahead of the login. Measured after the move: the size line is
+	// written two lines before FindPlayerStart in the log, at both frame rates, and no character
+	// exists on a refused place.
+	PlaceName = PlaceRig::FallbackPlaceName;
+	PlaceKind = ESFPlaceKind::OpenSpace;
+	PlaceSystemId = NAME_None;
+	PlaceOriginMetres = FVector::ZeroVector;
+	PlaceRadiusMetres = PlaceRig::FallbackRadiusMetres;
+	PlaceCarriers.Reset();
+
+	bPlaceFromAsset = (PlaceData != nullptr);
+	if (bPlaceFromAsset)
+	{
+		PlaceName = PlaceData->PlaceName;
+		PlaceKind = PlaceData->Kind;
+		PlaceSystemId = PlaceData->SystemId;
+		PlaceOriginMetres = PlaceData->OriginFromWorldOriginMetres;
+		PlaceRadiusMetres = PlaceData->RadiusMetres;
+		PlaceCarriers = PlaceData->Carriers;
+	}
+	else
+	{
+		// Not a stub: the same place, described by the same fields, measured by the same
+		// predicate. Said out loud because a rig that quietly builds something other than what
+		// the data says is a rig whose every figure belongs to an unknown world.
+		FSFPlaceCarrier Station;
+		Station.CarrierClass = ASFTestStation::StaticClass();
+		Station.CarrierName = PlaceRig::StationName;
+		PlaceCarriers.Add(Station);
+
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Place rig: no place asset at /Game/Places/DA_Place_OpenSpace, so a place written ")
+			TEXT("in code was used instead. Its figures are the asset's; the size line below is what ")
+			TEXT("the two have to agree on."));
+	}
+
+	FString OverrideText;
+
+	double OffsetM = 0.0;
+	const FString OffsetRaw = CVarPlaceOffsetM.GetValueOnGameThread();
+	if (!OffsetRaw.IsEmpty())
+	{
+		if (PlaceRig::ParseMetres(OffsetRaw, OffsetM))
+		{
+			PlaceOriginMetres.X += OffsetM;
+			OverrideText += FString::Printf(
+				TEXT(" sf.PlaceOffsetM moved it %+.6e m along +X."), OffsetM);
+		}
+		else
+		{
+			// Loud, because a control performed with a typo in it counts as a control that
+			// found nothing -- and looks exactly like one that found nothing.
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Place rig: sf.PlaceOffsetM='%s' is not a finite number of metres; the ")
+				TEXT("authored origin stands."), *OffsetRaw);
+		}
+	}
+
+	double OverrideRadiusM = 0.0;
+	const FString RadiusRaw = CVarPlaceRadiusM.GetValueOnGameThread();
+	if (!RadiusRaw.IsEmpty())
+	{
+		if (PlaceRig::ParseMetres(RadiusRaw, OverrideRadiusM))
+		{
+			// Replaces rather than adds, because the authored radius is what a control needs to
+			// be rid of: one that could only grow it could never ask for a smaller place.
+			PlaceRadiusMetres = OverrideRadiusM;
+			OverrideText += FString::Printf(
+				TEXT(" sf.PlaceRadiusM replaced the radius with %+.6e m."), OverrideRadiusM);
+		}
+		else
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Place rig: sf.PlaceRadiusM='%s' is not a finite number of metres; the ")
+				TEXT("authored radius stands."), *RadiusRaw);
+		}
+	}
+
+	if (!OverrideText.IsEmpty())
+	{
+		// Printed back rather than trusted: the size line below measures what these left behind,
+		// and a control whose input nobody read is a control that proves nothing.
+		UE_LOG(LogStarForge, Display,
+			TEXT("Place rig: the console changed the place before it was measured.%s"), *OverrideText);
+	}
+
+	// The limits are the engine's and the owner's, not this place's. See FPlaceLimits.
+	const StarForge::Place::FPlaceLimits Limits;
+	PlaceFit = StarForge::Place::MeasurePlace(PlaceOriginMetres, PlaceRadiusMetres, Limits);
+
+	bPlaceFits = (PlaceFit.Refusal == StarForge::Place::EPlaceRefusal::None);
+	bPlaceMeasured = true;
+
+	// One line per place, fitting or not. Spec 10.4: a line that appears only in trouble cannot
+	// be told apart from an instrument that never ran.
+	const FString SizeLine = FString::Printf(
+		TEXT("Place size: '%s' (%s, system '%s') origin (%.6e %.6e %.6e) m, radius %.6e m; ")
+		TEXT("reach %.6e m of the %.6e m engine ceiling, margin %.6e m; ")
+		TEXT("diameter %.6e m of the %.6e m crossing ceiling (%.1f s at %.6e m/s), margin %.6e m; ")
+		TEXT("the slowest hull crosses it in %.6e s -- %s.%s"),
+		*PlaceName.ToString(),
+		USFPlaceDataAsset::KindName(PlaceKind),
+		PlaceSystemId.IsNone() ? TEXT("unnamed") : *PlaceSystemId.ToString(),
+		PlaceOriginMetres.X, PlaceOriginMetres.Y, PlaceOriginMetres.Z,
+		PlaceRadiusMetres,
+		PlaceFit.ReachMetres, PlaceFit.EngineCeilingMetres, PlaceFit.EngineMarginMetres,
+		PlaceFit.DiameterMetres, PlaceFit.CrossingCeilingMetres,
+		Limits.CrossingBudgetSeconds, Limits.SlowestHullSpeedMetresPerSec,
+		PlaceFit.CrossingMarginMetres,
+		PlaceFit.CrossingSeconds,
+		bPlaceFits ? TEXT("fits") : TEXT("REFUSED"),
+		bPlaceFits ? TEXT("") : *FString::Printf(TEXT(" Reason: %s."),
+			StarForge::Place::RefusalName(PlaceFit.Refusal)));
+
+	if (bPlaceFits)
+	{
+		UE_LOG(LogStarForge, Display, TEXT("%s"), *SizeLine);
+	}
+	else
+	{
+		// An Error, and deliberately so: spec 13 asks that a place beyond the border refuse to
+		// assemble with a NAMED ERROR before anything undocks. The control run therefore carries
+		// one, and the runbook lists it as legitimately red with the condition under which it
+		// becomes a finding again -- the same treatment L_Combat's three red lines get.
+		UE_LOG(LogStarForge, Error, TEXT("%s"), *SizeLine);
+	}
+}
+
+UClass* ASFPlaceGameMode::GetDefaultPawnClassForController_Implementation(AController* InController)
+{
+	// The engine's guard is real -- RestartPlayerAtPlayerStart spawns a default pawn only when
+	// this hook answers a class (GameModeBase.cpp 1291) -- but it is asked at LOGIN, so the class
+	// has to be gone by then. Withdrawing it here rather than assigning DefaultPawnClass keeps the
+	// constructor's class untouched: on a place that fits, this answers exactly what it always did.
+	if (bPlaceMeasured && !bPlaceFits)
+	{
+		return nullptr;
+	}
+
+	return Super::GetDefaultPawnClassForController_Implementation(InController);
 }
 
 void ASFPlaceGameMode::StartPlay()
@@ -165,141 +319,11 @@ void ASFPlaceGameMode::StartPlay()
 
 	UWorld* World = GetWorld();
 
-	FName PlaceName = PlaceRig::FallbackPlaceName;
-	ESFPlaceKind Kind = ESFPlaceKind::OpenSpace;
-	FName SystemId = NAME_None;
-	FVector OriginMetres = FVector::ZeroVector;
-	double RadiusMetres = PlaceRig::FallbackRadiusMetres;
-	TArray<FSFPlaceCarrier> Carriers;
-
-	const bool bFromAsset = (PlaceData != nullptr);
-	if (bFromAsset)
+	// The place was measured in InitGame, before the local player logged in, and its size line is
+	// already in the log by the time this runs. What is left here is the assembly.
+	if (bPlaceFits)
 	{
-		PlaceName = PlaceData->PlaceName;
-		Kind = PlaceData->Kind;
-		SystemId = PlaceData->SystemId;
-		OriginMetres = PlaceData->OriginFromWorldOriginMetres;
-		RadiusMetres = PlaceData->RadiusMetres;
-		Carriers = PlaceData->Carriers;
-	}
-	else
-	{
-		// Not a stub: the same place, described by the same fields, measured by the same
-		// predicate. Said out loud because a rig that quietly builds something other than what
-		// the data says is a rig whose every figure belongs to an unknown world.
-		FSFPlaceCarrier Station;
-		Station.CarrierClass = ASFTestStation::StaticClass();
-		Station.CarrierName = PlaceRig::StationName;
-		Carriers.Add(Station);
-
-		UE_LOG(LogStarForge, Warning,
-			TEXT("Place rig: no place asset at /Game/Places/DA_Place_OpenSpace, so a place written ")
-			TEXT("in code was used instead. Its figures are the asset's; the size line below is what ")
-			TEXT("the two have to agree on."));
-	}
-
-	FString OverrideText;
-
-	double OffsetM = 0.0;
-	const FString OffsetRaw = CVarPlaceOffsetM.GetValueOnGameThread();
-	if (!OffsetRaw.IsEmpty())
-	{
-		if (PlaceRig::ParseMetres(OffsetRaw, OffsetM))
-		{
-			OriginMetres.X += OffsetM;
-			OverrideText += FString::Printf(
-				TEXT(" sf.PlaceOffsetM moved it %+.6e m along +X."), OffsetM);
-		}
-		else
-		{
-			// Loud, because a control performed with a typo in it counts as a control that
-			// found nothing -- and looks exactly like one that found nothing.
-			UE_LOG(LogStarForge, Warning,
-				TEXT("Place rig: sf.PlaceOffsetM='%s' is not a finite number of metres; the ")
-				TEXT("authored origin stands."), *OffsetRaw);
-		}
-	}
-
-	double OverrideRadiusM = 0.0;
-	const FString RadiusRaw = CVarPlaceRadiusM.GetValueOnGameThread();
-	if (!RadiusRaw.IsEmpty())
-	{
-		if (PlaceRig::ParseMetres(RadiusRaw, OverrideRadiusM))
-		{
-			// Replaces rather than adds, because the authored radius is what a control needs to
-			// be rid of: one that could only grow it could never ask for a smaller place.
-			RadiusMetres = OverrideRadiusM;
-			OverrideText += FString::Printf(
-				TEXT(" sf.PlaceRadiusM replaced the radius with %+.6e m."), OverrideRadiusM);
-		}
-		else
-		{
-			UE_LOG(LogStarForge, Warning,
-				TEXT("Place rig: sf.PlaceRadiusM='%s' is not a finite number of metres; the ")
-				TEXT("authored radius stands."), *RadiusRaw);
-		}
-	}
-
-	if (!OverrideText.IsEmpty())
-	{
-		// Printed back rather than trusted: the size line below measures what these left behind,
-		// and a control whose input nobody read is a control that proves nothing.
-		UE_LOG(LogStarForge, Display,
-			TEXT("Place rig: the console changed the place before it was measured.%s"), *OverrideText);
-	}
-
-	// The limits are the engine's and the owner's, not this place's. See FPlaceLimits.
-	const StarForge::Place::FPlaceLimits Limits;
-	const StarForge::Place::FPlaceFit Fit =
-		StarForge::Place::MeasurePlace(OriginMetres, RadiusMetres, Limits);
-
-	const bool bFits = (Fit.Refusal == StarForge::Place::EPlaceRefusal::None);
-
-	// One line per place, fitting or not. Spec 10.4: a line that appears only in trouble cannot
-	// be told apart from an instrument that never ran.
-	const FString SizeLine = FString::Printf(
-		TEXT("Place size: '%s' (%s, system '%s') origin (%.6e %.6e %.6e) m, radius %.6e m; ")
-		TEXT("reach %.6e m of the %.6e m engine ceiling, margin %.6e m; ")
-		TEXT("diameter %.6e m of the %.6e m crossing ceiling (%.1f s at %.6e m/s), margin %.6e m; ")
-		TEXT("the slowest hull crosses it in %.6e s -- %s.%s"),
-		*PlaceName.ToString(),
-		USFPlaceDataAsset::KindName(Kind),
-		SystemId.IsNone() ? TEXT("unnamed") : *SystemId.ToString(),
-		OriginMetres.X, OriginMetres.Y, OriginMetres.Z,
-		RadiusMetres,
-		Fit.ReachMetres, Fit.EngineCeilingMetres, Fit.EngineMarginMetres,
-		Fit.DiameterMetres, Fit.CrossingCeilingMetres,
-		Limits.CrossingBudgetSeconds, Limits.SlowestHullSpeedMetresPerSec,
-		Fit.CrossingMarginMetres,
-		Fit.CrossingSeconds,
-		bFits ? TEXT("fits") : TEXT("REFUSED"),
-		bFits ? TEXT("") : *FString::Printf(TEXT(" Reason: %s."),
-			StarForge::Place::RefusalName(Fit.Refusal)));
-
-	if (bFits)
-	{
-		UE_LOG(LogStarForge, Display, TEXT("%s"), *SizeLine);
-	}
-	else
-	{
-		// An Error, and deliberately so: spec 13 asks that a place beyond the border refuse to
-		// assemble with a NAMED ERROR before anything undocks. The control run therefore carries
-		// one, and the runbook lists it as legitimately red with the condition under which it
-		// becomes a finding again -- the same treatment L_Combat's three red lines get.
-		UE_LOG(LogStarForge, Error, TEXT("%s"), *SizeLine);
-	}
-
-	if (!bFits)
-	{
-		// Nothing is built. No carriers, no ship, and no pawn: with DefaultPawnClass nulled
-		// before Super, there is nobody standing in an empty world whose instruments would
-		// print figures about a place that does not exist.
-		DefaultPawnClass = nullptr;
-	}
-
-	if (bFits)
-	{
-		for (const FSFPlaceCarrier& Carrier : Carriers)
+		for (const FSFPlaceCarrier& Carrier : PlaceCarriers)
 		{
 			if (!Carrier.CarrierClass)
 			{
@@ -313,19 +337,19 @@ void ASFPlaceGameMode::StartPlay()
 			// place is enough. A carrier authored outside the radius breaks that sentence, and
 			// with it the meaning of the size line above.
 			const double FromPlaceOrigin = Carrier.LocationInPlaceMetres.Size();
-			if (FromPlaceOrigin > RadiusMetres)
+			if (FromPlaceOrigin > PlaceRadiusMetres)
 			{
 				UE_LOG(LogStarForge, Warning,
 					TEXT("Place carrier: '%s' stands %.6e m from the origin of place '%s', which is ")
 					TEXT("outside its %.6e m radius. The size line above does not cover it."),
 					*Carrier.CarrierName.ToString(), FromPlaceOrigin,
-					*PlaceName.ToString(), RadiusMetres);
+					*PlaceName.ToString(), PlaceRadiusMetres);
 			}
 
 			const FVector WorldCm(
-				StarForge::Units::MetresToCm(OriginMetres.X + Carrier.LocationInPlaceMetres.X),
-				StarForge::Units::MetresToCm(OriginMetres.Y + Carrier.LocationInPlaceMetres.Y),
-				StarForge::Units::MetresToCm(OriginMetres.Z + Carrier.LocationInPlaceMetres.Z));
+				StarForge::Units::MetresToCm(PlaceOriginMetres.X + Carrier.LocationInPlaceMetres.X),
+				StarForge::Units::MetresToCm(PlaceOriginMetres.Y + Carrier.LocationInPlaceMetres.Y),
+				StarForge::Units::MetresToCm(PlaceOriginMetres.Z + Carrier.LocationInPlaceMetres.Z));
 
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -369,12 +393,12 @@ void ASFPlaceGameMode::StartPlay()
 				Carrier.LocationInPlaceMetres.X, Carrier.LocationInPlaceMetres.Y, Carrier.LocationInPlaceMetres.Z,
 				WorldCm.X, WorldCm.Y, WorldCm.Z,
 				bHasFrame ? TEXT("present") : TEXT("MISSING"),
-				USFPlaceDataAsset::KindName(Kind));
+				USFPlaceDataAsset::KindName(PlaceKind));
 		}
 	}
 
 	bool bDocked = false;
-	if (bFits)
+	if (bPlaceFits)
 	{
 		FActorSpawnParameters ShipParams;
 		ShipParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -386,9 +410,9 @@ void ASFPlaceGameMode::StartPlay()
 		// so moving a wall or a port moves the docked ship with it, and a constant would
 		// silently stop tracking them.
 		const FVector PlaceOriginCm(
-			StarForge::Units::MetresToCm(OriginMetres.X),
-			StarForge::Units::MetresToCm(OriginMetres.Y),
-			StarForge::Units::MetresToCm(OriginMetres.Z));
+			StarForge::Units::MetresToCm(PlaceOriginMetres.X),
+			StarForge::Units::MetresToCm(PlaceOriginMetres.Y),
+			StarForge::Units::MetresToCm(PlaceOriginMetres.Z));
 
 		Ship = World->SpawnActor<ASFTestShip>(
 			ASFTestShip::StaticClass(), FTransform(PlaceOriginCm), ShipParams);
@@ -420,19 +444,36 @@ void ASFPlaceGameMode::StartPlay()
 
 	Super::StartPlay();
 
-	if (!bFits)
+	if (!bPlaceFits)
 	{
 		// One line, and it does not borrow the healthy line's three states. "The ship is ADRIFT",
 		// "the man is NOT in the cabin" and "NOT BOUND to its frame" describe things that were
 		// built and then broke; here they were never built, and saying them would read as four
 		// findings where there is one. The engine says nothing at all about a pawn it did not
-		// spawn -- the branch is closed by a guard on the empty class (GameModeBase.cpp 1264) --
-		// so the absence of the man can only be stated here.
+		// spawn, so the absence of the man can only be stated here.
+		//
+		// READ BACK, never asserted. The line used to claim "no pawn" on the strength of having
+		// asked for one, and it was wrong in every refused run ever recorded: the login runs
+		// before StartPlay, so the pawn was already standing in the empty world while the line
+		// said it was not. A rig that states what it asked for instead of what it got is not an
+		// instrument, and this is the one line a reader has to be able to trust on a refusal.
+		const APlayerController* PC = World->GetFirstPlayerController();
+		const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+
+		const FString PawnText = Pawn
+			? FString::Printf(
+				TEXT("a PAWN STANDS in the empty world: %s was spawned despite the refusal, and its ")
+				TEXT("instruments are reporting figures about a place that does not exist"),
+				*GetNameSafe(Pawn))
+			: FString(
+				TEXT("no pawn: the pawn class was withdrawn before the local player logged in, so ")
+				TEXT("the engine had none to spawn and nobody stands in an empty world measuring a ")
+				TEXT("place that does not exist"));
+
 		UE_LOG(LogStarForge, Error,
 			TEXT("Place rig: place '%s' REFUSED (%s) -- NOTHING WAS ASSEMBLED. No carriers, no ship, ")
-			TEXT("and no pawn: DefaultPawnClass was nulled before Super::StartPlay so that nobody ")
-			TEXT("stands in an empty world measuring a place that does not exist."),
-			*PlaceName.ToString(), StarForge::Place::RefusalName(Fit.Refusal));
+			TEXT("and %s."),
+			*PlaceName.ToString(), StarForge::Place::RefusalName(PlaceFit.Refusal), *PawnText);
 		return;
 	}
 
@@ -488,11 +529,11 @@ void ASFPlaceGameMode::StartPlay()
 	// Counted from what stands in the world rather than from what the data asked for: the two
 	// differing is itself the finding, and a line reading the asset back to itself is not one.
 	FString CarriersText;
-	const bool bCarriersShort = (SpawnedCarriers.Num() != Carriers.Num());
+	const bool bCarriersShort = (SpawnedCarriers.Num() != PlaceCarriers.Num());
 	if (bCarriersShort)
 	{
 		CarriersText = FString::Printf(TEXT("assembled with %d of %d carriers -- %d MISSING"),
-			SpawnedCarriers.Num(), Carriers.Num(), Carriers.Num() - SpawnedCarriers.Num());
+			SpawnedCarriers.Num(), PlaceCarriers.Num(), PlaceCarriers.Num() - SpawnedCarriers.Num());
 	}
 	else
 	{
@@ -511,7 +552,7 @@ void ASFPlaceGameMode::StartPlay()
 		TEXT("Place rig: scripted profile %s; place '%s' read from %s and %s; the ship %s; the man %s."),
 		bProfileOff ? TEXT("off") : TEXT("STILL ON"),
 		*PlaceName.ToString(),
-		bFromAsset ? *PlaceData->GetName() : TEXT("a place written in code"),
+		bPlaceFromAsset ? *PlaceData->GetName() : TEXT("a place written in code"),
 		*CarriersText,
 		bDocked ? TEXT("spawns docked") : TEXT("is ADRIFT"),
 		*ManText);
@@ -520,7 +561,7 @@ void ASFPlaceGameMode::StartPlay()
 	{
 		UE_LOG(LogStarForge, Error, TEXT("%s"), *Report);
 	}
-	else if (!bFromAsset)
+	else if (!bPlaceFromAsset)
 	{
 		// Asked for by circumstance rather than broken, the way sf.Pirate 0 is on the combat rig:
 		// the world is the one the data describes, but the data is not yet an asset anyone edited.

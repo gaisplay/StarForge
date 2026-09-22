@@ -376,7 +376,8 @@ in the seat; every approach to a physical station touches, so this goes to which
 hardens what a person feels. And **F2**: a pawn does spawn on a refused place, because the local
 player logs in and is restarted **before** `StartPlay`, so nulling `DefaultPawnClass` there is too late
 — and the rig's refusal line said `no pawn` without reading it. Present in every refused run since
-stage 5's task 3; the fix moves the measurement to `InitGame` and makes the line read the pawn back.
+stage 5's task 3; fixed the same day — the measurement moved to `InitGame` and the line reads the pawn
+back. The entry below on `InitGame` says why that hook and no other.
 
 **Read `docs/superpowers/specs/2026-09-17-world-as-a-graph-of-places.md` before anything
 structural in the second phase**, and note that its §10.4 folds two ceilings into one comparison
@@ -740,6 +741,22 @@ Things in the code that look like mistakes and are not:
   What holds it: the test `TheTighterCeilingIsTheOneThatBinds` in `StarForgeCore`, and
   checkpoint 8's control П3, which asks for a 2·10¹⁰ m radius at the origin and requires
   `Reason: crossing time.` — where `Reason: engine reach.` would be the finding.
+
+- **`ASFPlaceGameMode` measures the place in `InitGame` and assembles it in `StartPlay`.** The split
+  looks like tidiness; it is the order a standalone `-game` session runs in. `UEngine::LoadMap` calls
+  `InitializeActorsForPlay`, which calls the mode's `InitGame` (`World.cpp` 6034); then it logs the
+  local player in through `SpawnPlayActor` (`UnrealEngine.cpp` 16647) — `PostLogin`,
+  `HandleStartingNewPlayer`, `RestartPlayer`, and the pawn is spawned — and only then calls
+  `World->BeginPlay`, which calls `StartPlay` (`World.cpp` 6174). Stage 5's first form measured in
+  `StartPlay` and nulled `DefaultPawnClass` there to keep a refused place empty; that was already too
+  late, every refused run carried an `ASFCharacter` warning about standing in world space under a rig
+  line that said `no pawn`, and it was found by hand at checkpoint 8 (F2). The engine's guard that
+  skips the spawn on a null class (`GameModeBase.cpp` 1291) works only if the class is null at login,
+  so the mode measures in `InitGame` and answers `GetDefaultPawnClassForController` with `nullptr`
+  while the place stands refused. The rig line reads the pawn back rather than asserting it: `no pawn:
+  the pawn class was withdrawn before the local player logged in` is the norm and `a PAWN STANDS in
+  the empty world` is a finding. Measured: `Place size:` is written two log lines before
+  `FindPlayerStart` at both rates, and the accepted place's lines are unchanged to the character.
 
 - **2⁴² cm is held as measured, not as quoted.** The world-size ceiling in `Place.h` reads
   `4.398046511104e10` metres with a comment saying no constant of that name was found in the

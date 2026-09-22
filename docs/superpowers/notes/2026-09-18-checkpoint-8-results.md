@@ -358,9 +358,38 @@ DefaultPawnClass was nulled before Super::StartPlay …`. **Пешка созд�
 drift` (все нули — пешка без фрейма их не печатает) и число `Error` (два, ожидаемые), а число `Warning` — нет.
 Строка, которую надо было считать, была на одну выше.
 
-**Починка в работе:** измерение переносится в `InitGame` (единственный хук до логина),
-`GetDefaultPawnClassForController` возвращает `nullptr` при отказе, итоговая строка **читает пешку обратно** и при
-её наличии говорит это словом в верхнем регистре. Строки принятого места не меняются ни на символ.
+### F2 закрыт — 2026-09-22
+
+Измерение перенесено в `InitGame` — единственный хук до логина: `UEngine::LoadMap` зовёт
+`InitializeActorsForPlay` → `InitGame` (`World.cpp:6034`), затем `SpawnPlayActor` (`UnrealEngine.cpp:16647`) —
+логин и спавн пешки, — затем `BeginPlay` → `StartPlay` (`World.cpp:6174`). `GetDefaultPawnClassForController`
+возвращает `nullptr`, пока место стоит отвергнутым, и охрана движка (`GameModeBase.cpp:1291`) пешку не
+спавнит. Сборка мира осталась в `StartPlay`. Итоговая строка **читает пешку обратно**: при её отсутствии —
+
+```
+Place rig: place 'OpenSpace' REFUSED (engine reach) -- NOTHING WAS ASSEMBLED. No carriers, no ship, and no pawn: the pawn class was withdrawn before the local player logged in, so the engine had none to spawn and nobody stands in an empty world measuring a place that does not exist.
+```
+
+а при наличии — `a PAWN STANDS in the empty world: …`, уровнем `Error`. Фраза «DefaultPawnClass was nulled
+before Super::StartPlay» из кода и строки убрана — она была неверной.
+
+**Измерено** (`evidence/2026-09-22-f2fix-*.log`), пересборка **0 предупреждений**, тесты **97 / 0**:
+
+| Отвергнутое место | до, 60 / 400 | после, 60 / 400 |
+|---|---|---|
+| `SFCharacter` в журнале | 1 / 1 | **0 / 0** |
+| `found no USFShipFrameComponent` | 1 / 1 | **0 / 0** |
+| `LogStarForge: Warning` | 1 / 1 | **0 / 0** |
+| `LogStarForge: Error` | 2 / 2 | 2 / 2 — строка размера и строка стенда |
+| `Dock:`, `Place carrier:`, `Shipboard drift`, `Frame [` | 0 | 0 |
+| порядок в журнале | `FindPlayerStart` **раньше** `Place size` | `Place size` (стр. 1557) **раньше** `FindPlayerStart` (1559) |
+
+**Принятое место не изменилось ни на символ:** прогон по карте на 60 против `2026-09-22-checkpoint-8-B5-system-name.log`
+(та же команда, старый код, ассет с `Sol`) — все четырнадцать семейств строк дословно; на 400 против
+`2026-09-19-checkpoint-8-asset-400.log` — дословно при нормализации одного поля `system` (`unnamed` → `Sol`, это
+правка владельца в B5, не кода). F1 по карте на 60 — по-прежнему стена: нули везде, увод `0.000 cm`.
+
+**Контроль на будущее:** отвергнутый прогон обязан иметь `Warning` — **0** и ни одной строки `SFCharacter`; строка `Place size:` обязана стоять в журнале **выше** `FindPlayerStart`. Оба условия вписаны в ранбук B2.
 
 **Примечание к B5 — журнал был не тот.** Владелец запустил B5 при ещё открытом редакторе; движок, найдя
 `Saved/Logs/StarForge.log` занятым, писал в **`StarForge_2.log`**, а в улики был скопирован журнал редактора
