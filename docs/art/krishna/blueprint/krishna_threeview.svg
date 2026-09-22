@@ -1,0 +1,226 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="1320" viewBox="0 0 1560 1320" font-family="Segoe UI, Arial, sans-serif">
+<defs><marker id="ar" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,2 L6,5 L0,8 z" fill="#1d4ed8"/></marker></defs>
+<style>
+ .bg{fill:#fbfbf8} .grid{stroke:#dde3ea;stroke-width:0.6} .axis{stroke:#9aa5b1;stroke-width:0.8;stroke-dasharray:6 4}
+ .hull{fill:#eef1f4;stroke:#1f2937;stroke-width:1.6;stroke-linejoin:round} .hull2{fill:#e1e6eb;stroke:#1f2937;stroke-width:1.4}
+ .hull3{fill:#d3d9df;stroke:#1f2937;stroke-width:1.2} .blue{fill:#5b6f8a;stroke:#1f2937;stroke-width:1} .cyan{fill:#67d8e0;stroke:#1f2937;stroke-width:0.8}
+ .hid{fill:none;stroke:#1f2937;stroke-width:1;stroke-dasharray:5 3} .spike{stroke:#1f2937;stroke-width:2.2;stroke-linecap:round}
+ .thin{fill:none;stroke:#4b5563;stroke-width:0.9} .cab{fill:rgba(220,38,38,0.08);stroke:#dc2626;stroke-width:1.6;stroke-dasharray:7 4}
+ .cabl{stroke:#dc2626;stroke-width:1.2;stroke-dasharray:3 3} .thr{stroke:#dc2626;stroke-width:1.4} .hatch{fill:#dc2626;stroke:none}
+ .dim{stroke:#1d4ed8;stroke-width:1} .dimt{fill:#1d4ed8;font-size:12px;font-weight:600} .lbl{fill:#374151;font-size:12px}
+ .title{fill:#111827;font-size:20px;font-weight:700} .sub{fill:#4b5563;font-size:12.5px} .vt{fill:#111827;font-size:14px;font-weight:700}
+ .note{fill:#991b1b;font-size:11.5px;font-weight:600}
+</style>
+<rect class="bg" width="1560" height="1320"/>
+<text class="title" x="40" y="42">ASX-08 «Кришна» — чертёж в трёх проекциях, третий проход по официальному арту</text>
+<text class="sub" x="40" y="64">Полная длина 48.9 м — официальный сайт аниме-адаптации saikyosoubi.com: «小型艦 クリシュナ 全長 48.9ｍ». Шипы-антенны в 48.9 не входят (принятое допущение). Купол 12.5 м — решение владельца от 2026-09-22.</text>
+<text class="sub" x="40" y="82">Сетка 5 м. Красным — кабина текущего тестового корабля (куб 8 м), её хатч 2×2.5 м в правом борту и четыре угла двигателей физики на ±2 м.</text>
+<line class="grid" x1="90.0" y1="588.0" x2="90.0" y2="132.0"/>
+<line class="grid" x1="150.0" y1="588.0" x2="150.0" y2="132.0"/>
+<line class="grid" x1="210.0" y1="588.0" x2="210.0" y2="132.0"/>
+<line class="grid" x1="270.0" y1="588.0" x2="270.0" y2="132.0"/>
+<line class="grid" x1="330.0" y1="588.0" x2="330.0" y2="132.0"/>
+<line class="grid" x1="390.0" y1="588.0" x2="390.0" y2="132.0"/>
+<line class="grid" x1="450.0" y1="588.0" x2="450.0" y2="132.0"/>
+<line class="grid" x1="510.0" y1="588.0" x2="510.0" y2="132.0"/>
+<line class="grid" x1="570.0" y1="588.0" x2="570.0" y2="132.0"/>
+<line class="grid" x1="630.0" y1="588.0" x2="630.0" y2="132.0"/>
+<line class="grid" x1="690.0" y1="588.0" x2="690.0" y2="132.0"/>
+<line class="grid" x1="750.0" y1="588.0" x2="750.0" y2="132.0"/>
+<line class="grid" x1="810.0" y1="588.0" x2="810.0" y2="132.0"/>
+<line class="grid" x1="870.0" y1="588.0" x2="870.0" y2="132.0"/>
+<line class="grid" x1="126.0" y1="600.0" x2="918.0" y2="600.0"/>
+<line class="grid" x1="126.0" y1="540.0" x2="918.0" y2="540.0"/>
+<line class="grid" x1="126.0" y1="480.0" x2="918.0" y2="480.0"/>
+<line class="grid" x1="126.0" y1="420.0" x2="918.0" y2="420.0"/>
+<line class="grid" x1="126.0" y1="360.0" x2="918.0" y2="360.0"/>
+<line class="grid" x1="126.0" y1="300.0" x2="918.0" y2="300.0"/>
+<line class="grid" x1="126.0" y1="240.0" x2="918.0" y2="240.0"/>
+<line class="grid" x1="126.0" y1="180.0" x2="918.0" y2="180.0"/>
+<line class="axis" x1="126.0" y1="360.0" x2="918.0" y2="360.0"/>
+<text class="vt" x="40" y="120">ВИД СВЕРХУ</text>
+<text class="lbl" x="150.0" y="141.6" text-anchor="start">правый борт (+Y), сторона хатча</text>
+<polygon class="hull3" points="516.0,271.2 618.0,211.2 736.8,196.8 708.0,247.2 678.0,268.8"/>
+<rect class="hull3" x="246.0" y="280.8" width="264.0" height="38.4" rx="16.8"/>
+<polygon class="hull3" points="516.0,448.8 618.0,508.8 736.8,523.2 708.0,472.8 678.0,451.2"/>
+<rect class="hull3" x="246.0" y="400.8" width="264.0" height="38.4" rx="16.8"/>
+<polygon class="hull" points="150.0,348.0 186.0,333.6 246.0,312.0 318.0,292.8 390.0,278.4 462.0,268.8 534.0,264.0 606.0,264.0 666.0,271.2 696.0,283.2 696.0,360.0 696.0,436.8 666.0,448.8 606.0,456.0 534.0,456.0 462.0,451.2 390.0,441.6 318.0,427.2 246.0,408.0 186.0,386.4"/>
+<line class="thin" x1="150.0" y1="360.0" x2="696.0" y2="360.0"/>
+<rect class="hid" x="246.0" y="280.8" width="264.0" height="38.4" rx="16.8"/>
+<polygon class="hull2" points="522.0,268.8 522.0,225.6 690.0,216.0 690.0,273.6"/>
+<rect class="blue" x="518.4" y="231.6" width="10.8" height="31.2" rx="0.0"/>
+<rect class="hull2" x="294.0" y="283.2" width="180.0" height="40.8" rx="20.4"/>
+<rect class="hid" x="246.0" y="400.8" width="264.0" height="38.4" rx="16.8"/>
+<polygon class="hull2" points="522.0,451.2 522.0,494.4 690.0,504.0 690.0,446.4"/>
+<rect class="blue" x="518.4" y="457.2" width="10.8" height="31.2" rx="0.0"/>
+<rect class="hull2" x="294.0" y="396.0" width="180.0" height="40.8" rx="20.4"/>
+<polygon class="hull2" points="186.0,367.2 222.0,379.2 426.0,379.2 426.0,340.8 222.0,340.8 186.0,352.8"/>
+<rect class="hull2" x="414.0" y="328.8" width="54.0" height="62.4" rx="3.6"/>
+<rect class="cyan" x="414.0" y="335.0" width="4.8" height="49.9" rx="0.0"/>
+<circle class="hull2" cx="516.0" cy="360.0" r="75.0"/>
+<circle class="thin" cx="516.0" cy="360.0" r="38.4"/>
+<polygon class="hull2" points="444.0,364.2 634.8,360.6 634.8,359.4 444.0,355.8"/>
+<polygon class="hull2" points="600.0,364.2 840.0,360.6 840.0,359.4 600.0,355.8"/>
+<line class="spike" x1="702.0" y1="220.8" x2="846.0" y2="201.6"/>
+<line class="spike" x1="252.0" y1="300.0" x2="168.0" y2="295.2"/>
+<line class="spike" x1="702.0" y1="499.2" x2="846.0" y2="518.4"/>
+<line class="spike" x1="252.0" y1="420.0" x2="168.0" y2="424.8"/>
+<rect class="cab" x="468.0" y="312.0" width="96.0" height="96.0" rx="0.0"/>
+<line class="thr" x1="486.0" y1="384.0" x2="498.0" y2="384.0"/>
+<line class="thr" x1="492.0" y1="390.0" x2="492.0" y2="378.0"/>
+<line class="thr" x1="534.0" y1="384.0" x2="546.0" y2="384.0"/>
+<line class="thr" x1="540.0" y1="390.0" x2="540.0" y2="378.0"/>
+<line class="thr" x1="486.0" y1="336.0" x2="498.0" y2="336.0"/>
+<line class="thr" x1="492.0" y1="342.0" x2="492.0" y2="330.0"/>
+<line class="thr" x1="534.0" y1="336.0" x2="546.0" y2="336.0"/>
+<line class="thr" x1="540.0" y1="342.0" x2="540.0" y2="330.0"/>
+<rect class="hatch" x="504.0" y="310.2" width="24.0" height="3.6" rx="0.0"/>
+<text class="note" x="568.8" y="292.8" text-anchor="start">хатч, 4 м до обшивки</text>
+<line class="dim" x1="150.0" y1="564.0" x2="736.8" y2="564.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="443.4" y="560.0" text-anchor="middle">48.9 м — нос до кормы нижних крыльев</text>
+<line class="dim" x1="150.0" y1="537.6" x2="696.0" y2="537.6" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="423.0" y="533.6" text-anchor="middle">45.5 м корпус</text>
+<line class="dim" x1="96.0" y1="456.0" x2="96.0" y2="264.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" transform="rotate(-90 91.0 360.0)" x="91.0" y="360.0" text-anchor="middle">корпус 16 м</text>
+<line class="dim" x1="42.0" y1="523.2" x2="42.0" y2="196.8" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" transform="rotate(-90 37.0 360.0)" x="37.0" y="360.0" text-anchor="middle">размах 27.2 м</text>
+<line class="dim" x1="441.0" y1="180.0" x2="591.0" y2="180.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="516.0" y="176.0" text-anchor="middle">купол 12.5 м</text>
+<line class="dim" x1="294.0" y1="264.0" x2="474.0" y2="264.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="384.0" y="260.0" text-anchor="middle">турельные капли 15 м</text>
+<line class="dim" x1="246.0" y1="482.4" x2="510.0" y2="482.4" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="378.0" y="478.4" text-anchor="middle">нижние обтекатели 22 м</text>
+<text class="lbl" x="384.0" y="304.8" text-anchor="middle">турель (верх)</text>
+<text class="lbl" x="306.0" y="364.0" text-anchor="middle">хребет</text>
+<text class="lbl" x="440.4" y="366.4" text-anchor="middle">окно</text>
+<text class="lbl" x="606.0" y="248.4" text-anchor="middle">верхняя гондола</text>
+<text class="lbl" x="630.0" y="205.2" text-anchor="middle">нижнее крыло</text>
+<text class="lbl" x="366.0" y="452.4" text-anchor="middle">обтекатель (низ)</text>
+<text class="lbl" x="834.0" y="196.8" text-anchor="start">шипы</text>
+<text class="lbl" x="750.0" y="345.6" text-anchor="start">кили-лезвия (с ребра)</text>
+<line class="grid" x1="90.0" y1="1079.0" x2="90.0" y2="731.0"/>
+<line class="grid" x1="150.0" y1="1079.0" x2="150.0" y2="731.0"/>
+<line class="grid" x1="210.0" y1="1079.0" x2="210.0" y2="731.0"/>
+<line class="grid" x1="270.0" y1="1079.0" x2="270.0" y2="731.0"/>
+<line class="grid" x1="330.0" y1="1079.0" x2="330.0" y2="731.0"/>
+<line class="grid" x1="390.0" y1="1079.0" x2="390.0" y2="731.0"/>
+<line class="grid" x1="450.0" y1="1079.0" x2="450.0" y2="731.0"/>
+<line class="grid" x1="510.0" y1="1079.0" x2="510.0" y2="731.0"/>
+<line class="grid" x1="570.0" y1="1079.0" x2="570.0" y2="731.0"/>
+<line class="grid" x1="630.0" y1="1079.0" x2="630.0" y2="731.0"/>
+<line class="grid" x1="690.0" y1="1079.0" x2="690.0" y2="731.0"/>
+<line class="grid" x1="750.0" y1="1079.0" x2="750.0" y2="731.0"/>
+<line class="grid" x1="810.0" y1="1079.0" x2="810.0" y2="731.0"/>
+<line class="grid" x1="870.0" y1="1079.0" x2="870.0" y2="731.0"/>
+<line class="grid" x1="126.0" y1="1115.0" x2="918.0" y2="1115.0"/>
+<line class="grid" x1="126.0" y1="1055.0" x2="918.0" y2="1055.0"/>
+<line class="grid" x1="126.0" y1="995.0" x2="918.0" y2="995.0"/>
+<line class="grid" x1="126.0" y1="935.0" x2="918.0" y2="935.0"/>
+<line class="grid" x1="126.0" y1="875.0" x2="918.0" y2="875.0"/>
+<line class="grid" x1="126.0" y1="815.0" x2="918.0" y2="815.0"/>
+<line class="grid" x1="126.0" y1="755.0" x2="918.0" y2="755.0"/>
+<line class="axis" x1="126.0" y1="935.0" x2="918.0" y2="935.0"/>
+<text class="vt" x="40" y="700">ВИД СБОКУ (левый борт)</text>
+<polygon class="hull" points="150.0,930.8 222.0,920.6 294.0,912.2 366.0,905.0 438.0,900.2 510.0,899.0 606.0,899.0 666.0,900.2 696.0,903.8 696.0,965.0 666.0,969.8 606.0,974.6 462.0,974.6 438.0,971.0 366.0,965.0 294.0,957.8 222.0,948.2 150.0,939.2"/>
+<polyline class="thin" points="150.0,935.0 294.0,935.0 510.0,936.8 696.0,935.0"/>
+<polygon class="hull2" points="186.0,925.7 222.0,911.0 426.0,891.4 426.0,901.0"/>
+<rect class="hull2" x="414.0" y="885.8" width="54.0" height="15.6" rx="0.0"/>
+<rect class="cyan" x="414.0" y="890.6" width="4.8" height="4.8" rx="0.0"/>
+<rect class="hull2" x="441.0" y="884.6" width="150.0" height="14.4" rx="0.0"/>
+<path class="hull2" d="M441.0,884.6 A75.0,39.6 0 0 1 591.0,884.6 Z"/>
+<rect class="thin" x="444.6" y="888.8" width="142.8" height="6.0" rx="0.0"/>
+<rect class="hull2" x="477.6" y="844.4" width="76.8" height="4.8" rx="0.0"/>
+<polygon class="hull2" points="294.0,914.6 324.0,895.4 438.0,881.6 474.0,900.8"/>
+<polygon class="hull2" points="246.0,945.4 276.0,964.6 474.0,987.8 510.0,968.6"/>
+<polygon class="hull3" points="516.0,950.6 736.8,956.3 736.8,959.3 678.0,965.0"/>
+<polygon class="hull2" points="536.4,884.6 690.0,884.6 690.0,932.6 536.4,932.6 522.0,918.2 522.0,899.0"/>
+<rect class="blue" x="518.4" y="891.8" width="10.8" height="33.6" rx="0.0"/>
+<polygon class="hull2" points="444.0,888.2 483.6,888.2 634.8,761.0 625.2,752.6"/>
+<polygon class="hull2" points="600.0,891.8 660.0,891.8 840.0,803.0 828.0,793.4"/>
+<line class="spike" x1="702.0" y1="962.6" x2="846.0" y2="1055.0"/>
+<line class="spike" x1="252.0" y1="978.2" x2="168.0" y2="1002.2"/>
+<rect class="cab" x="468.0" y="875.0" width="96.0" height="96.0" rx="0.0"/>
+<line class="cabl" x1="468.0" y1="935.0" x2="564.0" y2="935.0"/>
+<rect class="hid" x="504.0" y="939.8" width="24.0" height="30.0" rx="0.0"/>
+<text class="note" x="516.0" y="957.8" text-anchor="middle">хатч</text>
+<text class="note" x="462.0" y="843.8" text-anchor="end">потолок кабины +2.0 м над палубой,</text>
+<text class="note" x="462.0" y="855.8" text-anchor="end">до купола в углу 0.33 м</text>
+<line class="dim" x1="96.0" y1="974.6" x2="96.0" y2="899.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" transform="rotate(-90 91.0 936.8)" x="91.0" y="936.8" text-anchor="middle">корпус 6.3 м</text>
+<line class="dim" x1="42.0" y1="974.6" x2="42.0" y2="845.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" transform="rotate(-90 37.0 909.8)" x="37.0" y="909.8" text-anchor="middle">с куполом 10.8 м</text>
+<line class="dim" x1="924.0" y1="1055.0" x2="924.0" y2="752.6" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="929.0" y="907.8" text-anchor="start">с килями и шипами 25 м</text>
+<line class="dim" x1="441.0" y1="833.0" x2="591.0" y2="833.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="516.0" y="829.0" text-anchor="middle">купол 12.5 м</text>
+<line class="dim" x1="600.6" y1="899.0" x2="600.6" y2="884.6" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="605.6" y="895.8" text-anchor="start">бортик 1.2 м</text>
+<line class="dim" x1="150.0" y1="1031.0" x2="736.8" y2="1031.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="443.4" y="1027.0" text-anchor="middle">48.9 м</text>
+<line class="dim" x1="522.0" y1="875.0" x2="690.0" y2="875.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="606.0" y="871.0" text-anchor="middle">гондола 14 м</text>
+<text class="lbl" x="378.0" y="872.6" text-anchor="middle">турель</text>
+<text class="lbl" x="606.0" y="908.6" text-anchor="middle">верхняя гондола</text>
+<text class="lbl" x="630.0" y="957.8" text-anchor="middle">нижнее крыло</text>
+<text class="lbl" x="378.0" y="1005.8" text-anchor="middle">обтекатель</text>
+<text class="lbl" x="306.0" y="891.8" text-anchor="middle">хребет</text>
+<text class="lbl" x="440.4" y="875.0" text-anchor="middle">окно</text>
+<line class="grid" x1="1480.0" y1="1079.0" x2="1480.0" y2="731.0"/>
+<line class="grid" x1="1420.0" y1="1079.0" x2="1420.0" y2="731.0"/>
+<line class="grid" x1="1360.0" y1="1079.0" x2="1360.0" y2="731.0"/>
+<line class="grid" x1="1300.0" y1="1079.0" x2="1300.0" y2="731.0"/>
+<line class="grid" x1="1240.0" y1="1079.0" x2="1240.0" y2="731.0"/>
+<line class="grid" x1="1180.0" y1="1079.0" x2="1180.0" y2="731.0"/>
+<line class="grid" x1="1120.0" y1="1079.0" x2="1120.0" y2="731.0"/>
+<line class="grid" x1="1480.0" y1="1115.0" x2="1120.0" y2="1115.0"/>
+<line class="grid" x1="1480.0" y1="1055.0" x2="1120.0" y2="1055.0"/>
+<line class="grid" x1="1480.0" y1="995.0" x2="1120.0" y2="995.0"/>
+<line class="grid" x1="1480.0" y1="935.0" x2="1120.0" y2="935.0"/>
+<line class="grid" x1="1480.0" y1="875.0" x2="1120.0" y2="875.0"/>
+<line class="grid" x1="1480.0" y1="815.0" x2="1120.0" y2="815.0"/>
+<line class="grid" x1="1480.0" y1="755.0" x2="1120.0" y2="755.0"/>
+<line class="axis" x1="1480.0" y1="935.0" x2="1120.0" y2="935.0"/>
+<line class="axis" x1="1300.0" y1="1079.0" x2="1300.0" y2="731.0"/>
+<text class="vt" x="1130" y="700">ВИД СПЕРЕДИ</text>
+<text class="lbl" x="1126.0" y="740.6" text-anchor="start">правый борт</text>
+<polygon class="hull3" points="1211.2,950.6 1136.8,956.3 1136.8,959.3 1211.2,965.0"/>
+<rect class="hull2" x="1156.0" y="884.6" width="52.8" height="48.0" rx="6.0"/>
+<rect class="blue" x="1171.6" y="891.8" width="31.2" height="33.6" rx="14.4"/>
+<polygon class="hull3" points="1388.8,950.6 1463.2,956.3 1463.2,959.3 1388.8,965.0"/>
+<rect class="hull2" x="1391.2" y="884.6" width="52.8" height="48.0" rx="6.0"/>
+<rect class="blue" x="1397.2" y="891.8" width="31.2" height="33.6" rx="14.4"/>
+<rect class="hull2" x="1225.0" y="884.6" width="150.0" height="14.4" rx="0.0"/>
+<path class="hull2" d="M1375.0,884.6 A75.0,39.6 0 0 1 1225.0,884.6 Z"/>
+<rect class="thin" x="1228.6" y="888.8" width="142.8" height="6.0" rx="0.0"/>
+<rect class="hull2" x="1261.6" y="844.4" width="76.8" height="4.8" rx="0.0"/>
+<rect class="hull2" x="1268.8" y="885.8" width="62.4" height="15.6" rx="0.0"/>
+<rect class="cyan" x="1275.0" y="890.6" width="49.9" height="4.8" rx="0.0"/>
+<polygon class="hull" points="1396.0,936.8 1376.8,899.0 1223.2,899.0 1204.0,936.8 1223.2,974.6 1376.8,974.6"/>
+<polygon class="hull2" points="1319.2,899.0 1280.8,899.0 1291.4,889.4 1308.6,889.4"/>
+<rect class="hull2" x="1223.2" y="882.2" width="40.8" height="20.4" rx="9.6"/>
+<rect class="hull2" x="1220.8" y="968.6" width="38.4" height="19.2" rx="8.4"/>
+<rect class="hull2" x="1336.0" y="882.2" width="40.8" height="20.4" rx="9.6"/>
+<rect class="hull2" x="1340.8" y="968.6" width="38.4" height="19.2" rx="8.4"/>
+<polygon class="hull2" points="1304.2,891.8 1295.8,891.8 1299.4,793.4 1300.6,793.4"/>
+<polygon class="hull2" points="1304.2,888.2 1295.8,888.2 1299.4,752.6 1300.6,752.6"/>
+<line class="spike" x1="1160.8" y1="962.6" x2="1141.6" y2="1055.0"/>
+<line class="spike" x1="1240.0" y1="978.2" x2="1235.2" y2="1002.2"/>
+<line class="spike" x1="1439.2" y1="962.6" x2="1458.4" y2="1055.0"/>
+<line class="spike" x1="1360.0" y1="978.2" x2="1364.8" y2="1002.2"/>
+<rect class="cab" x="1252.0" y="875.0" width="96.0" height="96.0" rx="0.0"/>
+<rect class="hatch" x="1250.2" y="939.8" width="3.6" height="30.0" rx="0.0"/>
+<text class="note" x="1244.8" y="957.8" text-anchor="end">хатч</text>
+<line class="dim" x1="1463.2" y1="1046.6" x2="1136.8" y2="1046.6" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="1300.0" y="1042.6" text-anchor="middle">размах 27.2 м</text>
+<line class="dim" x1="1396.0" y1="1019.0" x2="1204.0" y2="1019.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="1300.0" y="1015.0" text-anchor="middle">корпус 16 м</text>
+<line class="dim" x1="1498.0" y1="974.6" x2="1498.0" y2="845.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" x="1503.0" y="913.8" text-anchor="start">10.8 м</text>
+<line class="dim" x1="1168.0" y1="971.0" x2="1168.0" y2="875.0" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<text class="dimt" transform="rotate(-90 1163.0 923.0)" x="1163.0" y="923.0" text-anchor="middle">кабина 8 м</text>
+<text class="vt" x="40" y="1185">Открытые вопросы к владельцу (после решения по куполу):</text>
+<text class="sub" x="40" y="1207">1. Хатч. Стыковочный порт куба стоит на его стенке +Y (4 м от оси), а обшивка на этой станции — на 8 м. Между ними 4 м корпуса: нужен тамбур-тоннель, либо порт переезжает на обшивку и стыковка требует правки.</text>
+<text class="sub" x="40" y="1229">2. Длина. 48.9 м принята как нос — корма нижних крыльев; шипы-антенны (до 60 м по X, 15 м вверх) в неё не входят. Если 全長 у дизайнера включал шипы, корпус ужимается примерно до 38 м, и кабина не помещается вовсе.</text>
+<text class="sub" x="40" y="1251">3. Двигатели физики (±2 м, четыре угла на плоскости Z=0) — точки приложения силы, не сопла. Видимые сопла на модели — синие круги гондол и транец; их положение на физику не влияет.</text>
+<text class="sub" x="40" y="1273">4. Что такое купол. У новеллы кокпит впереди, жилой отсек за ним; на арте перед куполом стоит блок с окном-полосой. Купол читается как надстройка над жилым отсеком, окно — как кокпит. На компоновку интерьера это влияет, на модель корпуса — нет.</text>
+</svg>
