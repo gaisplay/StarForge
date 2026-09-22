@@ -368,6 +368,16 @@ for now and are recorded in the form: refusing to hand over a seated occupant, a
 target carrier's floor under him -- the second would move the hatch-crossing figures and needs
 a stage of its own.
 
+**Run A was then taken in full on 2026-09-22 and passes**, including a real docking through the 3.0 m
+window and the hand twin of F1 — the hull stops at the station's wall. It surfaced two more things.
+Bumping the station on the docking approach at 1–1.4 m/s knocked the seated pilot down five times at
+~345 fps, `felt 1044.44 m/s2` at the worst — the frame-rate shape of contact resolution, now with a man
+in the seat; every approach to a physical station touches, so this goes to whichever stage next
+hardens what a person feels. And **F2**: a pawn does spawn on a refused place, because the local
+player logs in and is restarted **before** `StartPlay`, so nulling `DefaultPawnClass` there is too late
+— and the rig's refusal line said `no pawn` without reading it. Present in every refused run since
+stage 5's task 3; the fix moves the measurement to `InitGame` and makes the line read the pawn back.
+
 **Read `docs/superpowers/specs/2026-09-17-world-as-a-graph-of-places.md` before anything
 structural in the second phase**, and note that its §10.4 folds two ceilings into one comparison
 where §5 derives them as bounds on different lengths; the entry below on the two ceilings says
