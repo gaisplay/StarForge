@@ -158,12 +158,22 @@ ASFTestShip::ASFTestShip()
 	// contact still presses one hull some centimetres into the other (see the CCD note below), and
 	// the man is protected by the handover guard, not by this line.
 	//
-	// Only ECC_WorldDynamic, which is what a hull is. Every other physics-colliding thing in these
-	// rigs answers something else or has no body: the station's panels are query-only and it has
-	// no physics body, the drone has no collision, a projectile is a query, and the character's
-	// capsule is ECC_Pawn, which this box still only overlaps. A lone ship therefore meets nothing
-	// it did not meet before, docked or free.
+	// ECC_WorldDynamic, which is what a hull is, and ECC_WorldStatic, which is what a station's
+	// panels are. The second was added on 2026-09-22 for finding F1 of checkpoint 8, and until
+	// then this line blocked hulls alone on the argument that the station's panels were query
+	// only and it had no physics body, so a lone ship met nothing it did not meet before. It
+	// met the inside of the station. The owner flew into one by hand at under five metres a
+	// second, the station's interior volume covered the pilot in his seat, the handover guard
+	// let him through once the two carriers were within a metre a second of each other, and
+	// he was left in space when his ship flew on without him. SFTestStation.cpp carries the
+	// account; with its panels now query-and-physics and this response in place, a hull stops
+	// at a station's wall and no station volume can reach into a cabin.
+	//
+	// Still nothing else: the drone has no collision, a projectile is a query, the interior
+	// volumes are query-only and answer pawns alone, and the character's capsule is ECC_Pawn,
+	// which this box still only overlaps.
 	Hull->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+	Hull->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 
 	// Continuous detection, with its thresholds set in Config/DefaultEngine.ini under
 	// [ConsoleVariables]: a step is swept only when the pair moves more than 8 cm in it, and a swept

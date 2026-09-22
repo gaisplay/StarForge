@@ -199,9 +199,29 @@ UStaticMeshComponent* ASFTestStation::AddBoxPanel(
 	Panel->SetCollisionObjectType(ECC_WorldStatic);
 	Panel->SetCollisionResponseToAllChannels(ECR_Block);
 
-	// Query only, as on the ship. These panels hold a person up and nothing else; there
-	// is no physics body anywhere on this actor for them to be welded into.
-	Panel->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	// Query AND physics, unlike the ship's panels, and the difference is finding F1 of
+	// checkpoint 8 (2026-09-20). These panels used to be query only: they held a person up
+	// and nothing else, and a hull met nothing of the station. So a hull could be flown
+	// straight into the station -- the owner did it by hand, nose-first and off the docking
+	// axis at under five metres a second -- and once inside, the station's interior volume
+	// covered the pilot in his seat and handed him to the station the moment the two
+	// carriers had slowed to within a metre a second of each other. He was then carried by a
+	// motionless station while his own ship flew away under him, and the hatch passed over
+	// the body he had left behind. Reproduced headless at 60 and 400 fps with nothing but an
+	// undock and 0.8 m/s toward the station: nine metres of drift, pushed through the station
+	// by his own cabin wall (evidence/2026-09-22-checkpoint-8-F1-slow-intrusion-*.log).
+	//
+	// With physics on, the hull meets these panels and stops at the wall, so no hull can be
+	// inside a station and no station volume can reach into a cabin. Spec 5 wants exactly
+	// that -- a real physical body "so that collisions and hits work normally" -- and the
+	// station is the one thing in these rigs a ship could pass through.
+	//
+	// Safe to switch on for the same reason it used to be off: there is no simulating body
+	// anywhere on this actor for the panels to be welded into. Each panel is therefore its
+	// own kinematic collider, which is what a wall is. The hull blocks ECC_WorldStatic to
+	// meet them (SFTestShip.cpp); the interior volume is query only and ignores everything
+	// but pawns, so it stays a volume and does not become a second, invisible hull.
+	Panel->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
 	if (CubeMesh.Succeeded())
 	{

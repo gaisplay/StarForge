@@ -358,6 +358,16 @@ character, and it does, at both rates. The asset was first saved with `Carriers`
 populate button was pressed; a `UDataAsset` serialises nothing that equals its class defaults, so
 an empty array leaves a 1.2 KB file that looks finished. **After the button, save.**
 
+**Checkpoint 8 opened by hand on 2026-09-20 and found F1 before its first re-docking:** a ship
+flown slowly into a station hands its pilot to the station and leaves him in space. Fixed on
+2026-09-22 at the root, by the owner's choice of three options -- the station is now a physical
+body and a hull cannot be inside one. The entry on the hull's collision channels below carries
+the account, the two measured consequences, and the evidence. Run A is not yet counted: it
+stopped at A5, and A6–A9 and B2 in a window remain the owner's. Two smaller fixes were declined
+for now and are recorded in the form: refusing to hand over a seated occupant, and requiring the
+target carrier's floor under him -- the second would move the hatch-crossing figures and needs
+a stage of its own.
+
 **Read `docs/superpowers/specs/2026-09-17-world-as-a-graph-of-places.md` before anything
 structural in the second phase**, and note that its §10.4 folds two ceilings into one comparison
 where §5 derives them as bounds on different lengths; the entry below on the two ceilings says
@@ -541,8 +551,9 @@ Things in the code that look like mistakes and are not:
   form gives 350 both ways. Measured in C++, the two agree to 4.4e-12, and the test holds them
   to 1e-9. The simple form was run as a mutant and fails three tests:
   `RegenIsFrameRateIndependent`, `RegenWaitsForTheDelay` and `AHitResetsOnlyItsOwnFaceTimer`.
-- **The hull box blocks `ECC_WorldDynamic`.** It is one `SetCollisionResponseToChannel` in
-  `ASFTestShip`'s constructor, and it looks unrelated to people. Without it two hulls overlap
+- **The hull box blocks `ECC_WorldDynamic` and, since 2026-09-22, `ECC_WorldStatic`.** Two
+  `SetCollisionResponseToChannel` lines in `ASFTestShip`'s constructor, and they look unrelated
+  to people. Without it two hulls overlap
   and pass through each other. On the first combat run a powered-down pirate coasting at
   106 m/s flew through the player's cabin, and its interior volume bound the man
   (`Frame handover: Ship -> Pirate`). How he was lost was not even repeatable. At 60 fps he fell
@@ -551,8 +562,41 @@ Things in the code that look like mistakes and are not:
   Blocking, the hulls collide the way §5 says a real physical body should. Contact comes at
   15.07 s (60) and 14.88 s (400); the pirate goes 79.6 → 28.5 m/s and the player's ship
   0 → 51.1 m/s at 60 fps, 81.2 → 23.5 and 0 → 57.7 at 400, so momentum is conserved to the last
-  digit at both rates. No handover, 0 skipped carries. Nothing else physical in the project
-  answers that channel, and both old rigs are line-for-line identical.
+  digit at both rates. No handover, 0 skipped carries.
+
+  **The `ECC_WorldStatic` block and the station's query-and-physics panels are finding F1 of
+  checkpoint 8.** Until 2026-09-22 the station's panels were query only and the hull blocked
+  other hulls alone, on the argument that a lone ship met nothing else. It met the inside of the
+  station. The owner flew into one by hand, nose-first and off the docking axis at under 5 m/s;
+  the station's interior volume covered the pilot in his seat, `TryHandover` -- which asks one
+  question, relative speed against 1.0 m/s, and asks neither `IsSeated()` nor whose floor is
+  under him -- handed him to the station once the carriers were within the limit, and when he
+  flew off the hatch passed over the body he had left behind (`Carry NOT RUNNING … He has come
+  off the ship`, 15 times). Reproduced headless at 60 and 400 with `sf.Dock 0, sf.Intent.Y
+  0.004`: handover accepted on the first frame inside, nine metres of drift, the man pushed
+  through the station by his own cabin wall
+  (`notes/evidence/2026-09-22-checkpoint-8-F1-slow-intrusion-*.log`).
+
+  With the station physical, the same command stops the hull at the wall: 0 handovers, 0
+  cross-check warnings, `0.000 cm` of drift at 60 fps
+  (`notes/evidence/2026-09-22-physics-F1-slow-intrusion-*.log`). Each panel is its own
+  kinematic collider, safe because the station has no simulating body to weld them into; the
+  interior volumes stay query-only and answer pawns alone, so they do not become hulls. The
+  docking capture is untouched -- `sf.Dock 2` reads `undocked f1 → capturing 0.0 m, 0.0 m/s →
+  docked` at both rates exactly as before -- and the spike, loop, combat and place rigs at their
+  defaults are line-for-line identical. **Two things changed, both physically honest.**
+  - The roll-after-undock control on the loop rig: the hull's port face lies in the plane of the
+    tunnel's end faces when docked, and rolling about X swings that face into them. The first
+    three seconds are a contact that pushes the hull clear at about 1 m/s -- `41.2 → 167.6 →
+    179.7` at 400 fps, `36.9 → 163.2 → 179.6` at 60 -- and from the fourth second it is exactly
+    `180.0 0.0 0.0` to the end at both rates, `0.000 cm` of drift. The control still proves what
+    it was written for. Its old figures, `154.8 → 179.4 → 180.0`, described a hull rolling inside
+    the plane of its dock, which is not a state a hull can be in.
+  - Bumping the station at 0.8 m/s knocks a standing man down at 400 fps and not at 60:
+    `Footing LOST … felt 38.39 m/s2 over the 19.62 limit`, 0.5 s down, carry intact, 0.777 cm of
+    drift. The stop resolves over fewer, shorter steps at the higher rate, and the felt figure is
+    a second difference of position. Same class as the tumble below; an open observation, not a
+    red line -- none of the run's red lines fired.
 
   **What the collision does not do is repeat itself across frame rates, and that is not a
   defect.** Two boxes meeting at 30 m/s resolve on a contact manifold the step size decides, so
