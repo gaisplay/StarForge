@@ -19,13 +19,16 @@ DOME_X, DOME_R, SKIRT, CAP, DECK = 30.5, 6.25, 1.2, 3.3, 3.0   # 12.5 m dome, ow
 DOME_TOP = dict(r=3.2, h=0.3)                     # the small flat disc on the dome's crown
 
 TUR_TOP = dict(x0=12, x1=27, y0=3.0, y1=6.4, h=1.7)    # upper turret pods: teardrops on the shoulders
-FAIRING = dict(x0=8, x1=30, y0=3.4, y1=6.6, h=1.6)     # long lower fairings; the lower turret arms live here
+FAIRING = dict(x0=8, x1=28.5, y0=3.4, y1=6.6, h=1.6)   # long lower fairings; end ahead of the hatch station
 
-NAC_UP  = dict(x0=31, x1=45, yi0=7.6, yi1=7.2, yo0=11.2, yo1=12.0, z0=0.2, z1=4.2)    # upper nacelles, blue round front
+# Upper nacelles start at 33, not 31: the hatch socket on the starboard skin spans stations 29.5-31.5 and a
+# docking tunnel entering it needs the skin clear there (owner's decision 2026-09-22: vestibule, port on the cube).
+NAC_UP  = dict(x0=33, x1=45.5, yi0=7.6, yi1=7.2, yo0=11.2, yo1=12.0, z0=0.2, z1=4.2)  # upper nacelles, blue round front
 
 # Lower wings: a tapered plate per side. Plan polygon (x, y) for the starboard wing, root on the hull skin,
 # swept outer edge, sharp aft tip at L. Thickness tapers from the root to the tip.
-WING = dict(plan=[(30.5, 7.4), (39.0, 12.4), (L, 13.6), (46.5, 9.4), (44.0, 7.6)],
+# The root starts at 33, aft of the hatch socket (29.5-31.5), for the same reason as the nacelles.
+WING = dict(plan=[(33.0, 7.4), (40.0, 12.4), (L, 13.6), (46.5, 9.4), (44.0, 7.6)],
             zc=-1.9, t_root=1.2, t_tip=0.25, y_root=7.4, y_tip=13.6)
 
 # Fins: flat blades on the centreline, polygon in (x, z), thickness in y tapering to the tip.
@@ -37,6 +40,10 @@ NOSE_SPIKE = ((8.5, 5.0, -3.6), (1.5, 5.4, -5.6))        # spike ahead of each l
 
 CAB = dict(cx=30.5, half=4.0, z0=-3.0, z1=5.0)   # the rig's 8 m cabin, floor at the belly skin
 HATCH = dict(w=2.0, h=2.5)
+# The vestibule: a hatch-sized through-socket from the starboard skin to the cabin's +Y wall, with a 0.3 m frame.
+# Its inner end lands at the wall's inner face (3.9 m), where the rig's own jambs and lintel take over.
+VESTIBULE = dict(x0=CAB['cx']-HATCH['w']/2-0.3, x1=CAB['cx']+HATCH['w']/2+0.3, y0=3.9, y1=9.5,
+                 z0=CAB['z0']+0.1-0.3, z1=CAB['z0']+0.1+HATCH['h']+0.3)
 
 def thruster_corners():
     return [(CAB['cx']-2, -2), (CAB['cx']+2, -2), (CAB['cx']-2, 2), (CAB['cx']+2, 2)]
