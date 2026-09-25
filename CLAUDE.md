@@ -237,7 +237,8 @@ Console variables the rig understands:
 | `sf.DriftDebug` | 0 | 1 logs carry calls per frame, movement mode, base and ship-local position |
 | `sf.TargetDrone` | 1 | 0 withdraws the rig's target drone; the turret must then report no target rather than aim at the origin |
 | `sf.AutomationOperator` | 1 | 1 the ship's automation holds the gunner's seat; 0 leaves it free. The gunner's post is what tests spec §4's claim that the ship cannot tell who holds a post, so it is held by something that is not a person by default |
-| `sf.Dock` | -1 | Docking from the console, the headless twin of the `F` key. `1` docks if the approach is inside the window, `0` undocks, `-1` is no command. Acted on when the value **changes**, not on its level. `2` is the headless cycle — undock now and dock again one capture later — and it exists because `-ExecCmds` applies its whole list at startup, so `sf.Dock 0, sf.Dock 1` leaves only the last value and "docked → free → docked" cannot be asked for in one run at all |
+| `sf.Dock` | -1 | Docking from the console, the headless twin of the `F` key. `1` docks if the approach is inside the window, `0` undocks, `-1` is no command. Acted on when the value **changes**, not on its level. `2` is the headless cycle — undock now and dock again one capture after the release ends — and it exists because `-ExecCmds` applies its whole list at startup, so `sf.Dock 0, sf.Dock 1` leaves only the last value and "docked → free → docked" cannot be asked for in one run at all. Since 2026-09-25 undocking is a one-second **release** (F3's fix, below): `releasing, 2.93 m …` at the command, `undocked.` a second later |
+| `sf.DockRelease` | 1 | 1: undocking eases the hull 2.93 m out along the port's axis over `CaptureSeconds` before it simulates, the fix for checkpoint 8's F3. 0: let go at the docked pose, as before 2026-09-25 — the negative control, and a sideways undock under it reproduces F3's evidence line for line (122 of 122 lines at 60 fps, 118 of 118 at 400). Read at the undock command |
 | `sf.BindFrame` | *(empty)* | `ship` or `station`: binds the occupant to that carrier's frame **wherever he is standing**. The negative control for the handover, and the same trick as `sf.ShipGravity 0` for the carry. Docked, it is a legitimate handover and everything stays quiet; undocked and under thrust it is knowingly wrong, and the cross-check must warn within ten frames and the carry must stop about a second later; bound the other way round — to the moving ship from the station's floor — the `Frame handover` line must show one frame of the ship's travel, never zero |
 | `sf.Fire` | -1 | The player's trigger, as a latch rather than a held key. `-1`: the trigger is whatever the gunner post's operator asks for, on a weapons-free hull. `0`: hold fire. `1`: hold the trigger down. It replaces the operator's trigger, never the operator, so an empty or locked gunner's post does not fire under it (0 shots measured with `sf.AutomationOperator 0`). Every ship on the spike and loop rigs, and the player's ship on the combat rig, is weapons-hold (`bWeaponsFree = false`), so nothing fires until `sf.Fire 1`. Ignored by an automated hull |
 | `sf.WeaponDebug` | 0 | 1 logs one line per shot: `Weapon: [Ship] shot N at t … s from muzzle …, turret <state> …`. Hits are logged whatever it says, because a hit is an event, not a stream. Counting shots needs it. Acts on every hull, and each line names the ship that fired |
@@ -332,7 +333,7 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 **The vertical slice is finished and the second phase has begun. Stage 5 — the place as data —
 is written and measured on `feat/place-as-data`, its map and asset are made and accepted, and
-checkpoint 8 is ready to be taken by hand.** 97 headless tests, a clean rebuild with no warnings,
+checkpoint 8 is ready to be taken by hand.** 105 headless tests (97 until F3's fix added eight), a clean rebuild with no warnings,
 and all four rigs green at 60 and 400 fps — the fourth now by its own map as well as by URL.
 
 **Stage 5 itself changed no existing file** — seven files added, none modified, none removed.
@@ -383,6 +384,14 @@ player logs in and is restarted **before** `StartPlay`, so nulling `DefaultPawnC
 — and the rig's refusal line said `no pawn` without reading it. Present in every refused run since
 stage 5's task 3; fixed the same day — the measurement moved to `InitGame` and the line reads the pawn
 back. The entry below on `InitGame` says why that hook and no other.
+
+**F3 was found on 2026-09-23, by replaying every headless log in `notes/evidence` with
+`scripts/regress_evidence.py`, and fixed on 2026-09-25.** Fix (c) of F1 had made the tunnel's end
+faces physical, and a sideways undock dragged the flush hull across them: a standing man knocked
+down at both rates, and B1 failing. Of four fixes the owner chose an automatic release along the
+port axis; spec §8 carries the amendment, and the entry below on `ReleaseStandoff` the derivation.
+B1, taken again headless on the fixed build at 60 and 400 fps, passes every gate
+(`notes/evidence/2026-09-25-f3fix-*.log`).
 
 **Read `docs/superpowers/specs/2026-09-17-world-as-a-graph-of-places.md` before anything
 structural in the second phase**, and note that its §10.4 folds two ceilings into one comparison
@@ -622,8 +631,19 @@ Things in the code that look like mistakes and are not:
     (`4.965 cm` of drift). Backing straight off the port, `sf.Intent.Y -1`, touches nothing:
     `0.000 cm`, `footing intact`, at both rates. The sweep above had no sideways undock in it --
     its only undocks under thrust were the roll, run with `sf.Knockdown 0` so no knockdown could
-    show, and F1's 0.004 push into the station -- which is why it said two. The fix is the owner's
-    choice and is recorded in the form.
+    show, and F1's 0.004 push into the station -- which is why it said two.
+
+    **F3 was fixed on 2026-09-25 by the owner's choice: undocking became a release.** The entry
+    below on `ReleaseStandoff` says what it does and why each number is derived. With it the
+    sideways, vertical and straight undocks are clean at both rates -- `footing intact`, `0.000
+    cm`, `fwd 0.0 deg, up 0.0 deg` -- B1 passes again, and two figures this entry quotes above
+    moved, both back towards what a hull clear of its dock should do. `sf.Dock 2` now reads
+    `releasing f1 → undocked f60/f401 → capturing 2.9 m, 0.0 m/s → docked`. Roll after undock
+    starts 2.93 m out and touches nothing: `155.1 → 179.4 → 180.0` at 400 fps with pitch and yaw
+    at `0.0`, the pre-(c) series. The F1 slow-intrusion control now begins 2.93 m out and flies
+    back into the tunnel at 0.8 m/s: the hull still stops at the wall with no handover to the
+    station, and the bump knocks a standing man down (0.5 s at 60 fps, 1.4 s at 400), which is
+    O2's class and protocol, not a gate.
 
   **What the collision does not do is repeat itself across frame rates, and that is not a
   defect.** Two boxes meeting at 30 m/s resolve on a contact manifold the step size decides, so
@@ -793,6 +813,35 @@ Things in the code that look like mistakes and are not:
   `TheDefaultLimitsAreTheSpecsNumbers`, which exists because every other test in that file
   spells its own limits and the default was therefore checked by nobody: written as `e12`
   instead of `e10`, all other tests stayed green.
+
+- **Undocking is a one-second release to a standoff measured on the two bodies,
+  `StarForge::Docking::ReleaseStandoff`, not a let-go at the docked pose.** It looks like a
+  manoeuvre bolted onto what used to be one line. It is finding F3's fix, chosen by the owner.
+  Docked, the hull's physics face lies flush on the tunnel's end faces. Chaos gives the
+  dynamic hull a collision margin of `min(2 * 400 * 0.05, 10)` = 10 cm, which rounds its
+  edges, and when a panel's end face passes the rounded trailing edge during a sideways slide
+  it reports a false edge-edge penetration of up to 2.26 cm and pushes the hull out in one
+  step. Measured, not only argued: with `p.Chaos.Collision.MarginMax=2` the knockdown moved
+  from frame 261 to 264 exactly as predicted, a docked gap of 2.0 cm still knocked the man
+  down and 2.5 cm did not, against a derived bound of 2.07 cm
+  (`notes/evidence/2026-09-25-f3-mechanism-*-BEFORE-FIX.log`).
+  - **A sphere, not the box**, round the hull's physics box, so the answer does not depend on
+    which way the pilot turns first. That is why roll after undock is contact-free again.
+  - **The station's physics colliders, boxed in the station's own frame.** World bounds grow
+    with the station's yaw, and a place can yaw it: three degrees asked 3.26 m where 2.93 is
+    enough, outside the window. The interior volumes are query only and do not count.
+  - **Over `CaptureSeconds`, with no constant of its own**: the release is the capture played
+    backwards. Its peak, 6d/T² = 17.6 m/s², is under the 19.62 ceiling, and the line
+    `Dock: [Ship] releasing, 2.93 m along the port axis over 1.0 s, peak 17.6 m/s2.` prints it.
+    A standoff outside the docking window or a peak at the ceiling is a `Warning`.
+  - **2.93 m is inside the 3.0 m window**, so a released ship can dock again without flying
+    anywhere, which spec §8 and `sf.Dock 2` rely on.
+  - `sf.DockRelease 0` lets go at the docked pose, and a sideways undock with it reproduces
+    `2026-09-23-review-undock-sideways-*.log` line for line. Two paths skip a run on purpose:
+    that control, and `DockImmediately`.
+  - A side effect worth knowing: a headless undock happens on the first frame, before the pawn
+    has landed after spawning, and a downward thrust used to outrun his fall so that he never
+    found the floor. The release gives him that second.
 
 When reading the checkpoint HUD: **check the measured-time line before the drift
 figure.** A drift of zero is what both a perfect minute and a dead instrument look

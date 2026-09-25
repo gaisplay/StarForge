@@ -59,6 +59,7 @@ NOT_A_BASELINE = ("BROKEN", "BEFORE-FIX", "MISSING", "unidentified")
 # Command lines that cannot be replayed: they name a console variable that no longer exists.
 UNREPLAYABLE = {
     "sf.SpikeOriginOffsetM": "the world-size spike's throwaway variable, rolled back on 2026-09-17",
+    "sf.SpikeDockGapCm": "F3's throwaway docked-gap variable, measured in a scratch worktree on 2026-09-25",
 }
 
 # Red counters: judged on every run, whatever the verdict.
