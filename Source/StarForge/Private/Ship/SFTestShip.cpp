@@ -706,6 +706,10 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 			DockText = FString::Printf(TEXT("capturing %.1f of %.1f s"),
 				Docking->GetCaptureElapsedSeconds(), Docking->GetCaptureSeconds());
 			break;
+		case ESFDockingState::Releasing:
+			DockText = FString::Printf(TEXT("releasing %.1f of %.1f s"),
+				Docking->GetCaptureElapsedSeconds(), Docking->GetCaptureSeconds());
+			break;
 		default:
 			if (!Docking->HasStation())
 			{

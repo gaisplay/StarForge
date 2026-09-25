@@ -343,6 +343,11 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 				Docking->GetCaptureElapsedSeconds(), Docking->GetCaptureSeconds()),
 				Y, FLinearColor(1.0f, 0.45f, 0.0f));
 			break;
+		case ESFDockingState::Releasing:
+			DrawLine(FString::Printf(TEXT("dock    releasing %.1f of %.1f s"),
+				Docking->GetCaptureElapsedSeconds(), Docking->GetCaptureSeconds()),
+				Y, FLinearColor::White);
+			break;
 		default:
 		{
 			const StarForge::Docking::FDockingApproach Approach = Docking->GetLastApproach();

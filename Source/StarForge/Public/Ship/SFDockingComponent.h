@@ -11,15 +11,28 @@ class USFShipFrameComponent;
 class USFThrusterArrayComponent;
 
 /**
- * Three states and one step between each pair. Free to Docked always goes through
- * Capturing; Docked to Free is one step, because undocking is letting go.
+ * Four states, and every change between Free and Docked goes through a run of its own:
+ * Free -> Capturing -> Docked on the way in, Docked -> Releasing -> Free on the way out.
+ *
+ * Undocking used to be letting go where the ship lay, and that is finding F3 of checkpoint
+ * 8: docked, the hull's port face lies flush on the tunnel's end faces, and a hull let go
+ * there and thrust sideways drags that face across them until Chaos resolves a false
+ * edge-edge penetration in one step and knocks a standing man down. The release eases the
+ * hull straight out along the port's axis until it is clear, and only then lets go.
+ * Releasing is appended rather than placed beside Capturing so the existing values keep
+ * their numbers.
+ *
+ * Two paths skip a run on purpose, and anything that waits for a run to finish must know
+ * them: sf.DockRelease 0, the negative control, goes Docked -> Free inside one call, and
+ * DockImmediately goes through Capturing to Docked inside one call with no run-in.
  */
 UENUM()
 enum class ESFDockingState : uint8
 {
 	Free,
 	Capturing,
-	Docked
+	Docked,
+	Releasing
 };
 
 /**
@@ -41,6 +54,15 @@ enum class ESFDockingState : uint8
  * requires of the airlock handover, rather than an approximation of zero. A physics
  * constraint was rejected for exactly that: its solver jitters, the residual velocity is
  * never zero, and "visually unnoticeable" stops being true.
+ *
+ * Undocking is the capture played backwards. The hull is detached but stays kinematic and
+ * locked, so the pilot's post stands aside exactly as it does during a capture, and it is
+ * eased out along the station port's outward axis by the standoff that puts a sphere round
+ * the hull clear of the station's physical panels -- over CaptureSeconds, with no constant
+ * of its own. Only then does it simulate, from rest, and the pilot gets the stick. The
+ * standoff is derived from the two bodies' geometry, not authored: 2.93 m on the rig,
+ * inside the 3.0 m window, so the ship can dock again without flying anywhere.
+ * sf.DockRelease 0 lets go at the docked pose, as before -- the negative control for F3.
  */
 UCLASS(ClassGroup = (StarForge), meta = (BlueprintSpawnableComponent))
 class STARFORGE_API USFDockingComponent : public UActorComponent
@@ -70,7 +92,9 @@ public:
 	double UpAngleDeg = 10.0;
 
 	/**
-	 * How long the run-in takes, in seconds.
+	 * How long the run-in takes, in seconds. The release takes the same time, being the
+	 * run-in played backwards; unlike the run-in it moves in a straight line with no turn,
+	 * and its peak 6d/T^2 is logged and checked against the grav-plate ceiling when it starts.
 	 *
 	 * The run-in is eased, so its peak acceleration is 6d/T^2 -- an order of magnitude
 	 * below a linear run-in, which would step the velocity from zero to full inside one
@@ -106,10 +130,14 @@ public:
 	/** Starts a capture if the approach is inside the window. False, with a reason logged, if not. */
 	bool RequestDock();
 
-	/** Lets go: detach, simulate, zero the velocities, unlock. False if not docked. */
+	/**
+	 * Starts the release: detach, ease out along the port's axis, and only then simulate,
+	 * zero the velocities and unlock. With sf.DockRelease 0, lets go at once instead. False
+	 * if not docked.
+	 */
 	bool RequestUndock();
 
-	/** What the F key does: dock if free, undock if docked, ignore during a capture. */
+	/** What the F key does: dock if free, undock if docked, ignore during a capture or release. */
 	void Toggle();
 
 	/**
@@ -181,6 +209,18 @@ private:
 
 	void AdvanceCapture(double DeltaSeconds);
 
+	/** Eases the hull from ReleaseStart to ReleaseTarget, and lets go on arrival. */
+	void AdvanceRelease(double DeltaSeconds);
+
+	/**
+	 * Simulate, zero both velocities, rebuild and unlock the array, and say "undocked".
+	 *
+	 * One function for both ways out of Docked -- the end of a release and sf.DockRelease 0's
+	 * instant let-go -- so the negative control cannot drift away from the thing it controls.
+	 * The hull must already be detached.
+	 */
+	void LetGo();
+
 	/** Acts on a CHANGE of sf.Dock, and runs the debug cycle's timer. */
 	void PollConsoleCommand(double DeltaSeconds);
 
@@ -229,11 +269,26 @@ private:
 
 	FTransform CaptureStart = FTransform::Identity;
 	FTransform CaptureTarget = FTransform::Identity;
+
+	/**
+	 * Times whichever run is in progress, the capture or the release: both last
+	 * CaptureSeconds, and the readouts print either through GetCaptureElapsedSeconds.
+	 */
 	double CaptureElapsedSeconds = 0.0;
+
+	FTransform ReleaseStart = FTransform::Identity;
+	FTransform ReleaseTarget = FTransform::Identity;
 
 	/** Last value read from sf.Dock, so the command acts on an edge and not on a level. */
 	int32 LastDockCommand = -1;
 
 	/** Countdown for sf.Dock 2's re-dock; negative when no cycle is running. */
 	double SecondsUntilAutoDock = -1.0;
+
+	/**
+	 * sf.Dock 2 asked for a re-dock and the ship is still releasing. The countdown starts
+	 * when it is free, not at the command: counted from the command, a one-second release
+	 * and a one-second countdown would ask for the dock on the release's last frame.
+	 */
+	bool bAutoDockAfterRelease = false;
 };
