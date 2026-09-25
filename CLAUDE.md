@@ -24,9 +24,9 @@ Design docs are in Russian under `docs/superpowers/`; code, comments and commit 
   novel again**, deliberately and by the owner's decision. The order still stands: novel →
   spec → plan → code. Nothing is built from the novel directly, and no plan cites it.
 
-  **The five deliberate departures in its own §9.2 stay departures**, and one of them carries a
+  **The six deliberate departures in its own §9.2 stay departures**, and one of them carries a
   number worth knowing before reading anything else: the source's combat speeds are 1–5 km/s
-  against §7's 200/400 m/s. That is not a sixth disagreement — it is the arithmetic of the
+  against §7's 200/400 m/s. That is not a seventh disagreement — it is the arithmetic of the
   third, which records that nobody walks the ship during combat in the source. Walking is this
   project's own idea, and 200/400 is what walking costs. Section §10 of the digest lists what
   was thrown out on purpose; do not bring it back.
@@ -163,23 +163,23 @@ line. With it, none of the next 23 did.
 The mode reads it in `StartPlay`, before `-ExecCmds` applies. Use one `-ini` switch per variable:
 two variables joined by a comma in one switch were not taken.
 
-**Two lines that are red on the other rigs are correct here.** Checkpoint 7's runbook lists
+**Three lines that are red on the other rigs are correct here.** Checkpoint 7's runbook lists
 them with the condition under which each becomes a finding again:
 
+- `dock    free -- NO STATION in this level` **on the panel** — there is no station. Drawn red by
+  `SFFrameDriftHUD.cpp:332` whenever the player's ship has no station, on the spike rig as well;
 - `Frame handover REFUSED` when the hulls touch;
 - `thruster array NOT built` with its `Error`, once hits have left the survivors on two corners.
   The `Error` repeats on every later destruction.
 
-**This list said three until 2026-09-18, and the third was never a line this project prints.**
-It was written as `dock free -- NO STATION in this level` and called red. Measured on the
-merged tree: forty seconds of the combat rig produce **zero** `LogStarForge` lines at `Warning`
-or `Error`. What the rig actually prints about having no station is two lines, in lower case
-and neither of them red — `Docking: [Ship] no station in this level, window 3.0 m, …` once at
-`Display`, and `Dock: [Ship] free -- no station` once a second at `Log`. The only red line with
-those words is `Dock: [%s] refused -- no station` (`SFDockingComponent.cpp:388`), a `Warning`
-that needs somebody to actually **ask** to dock, which nothing does in an ordinary run. A
-runbook sending an operator to look for words in a case the code never emits sends him to find
-nothing and call it a pass.
+**The first line is a panel line, not a log line, and on 2026-09-18 it was struck off this list
+by mistake.** The check that struck it read the log alone: forty seconds of the combat rig produce
+zero `LogStarForge` lines at `Warning` or `Error`, and what the log says about having no station is
+two lower-case lines — `Docking: [Ship] no station in this level, …` once at `Display` and `Dock:
+[Ship] free -- no station` once a second at `Log`. The panel draws the upper-case form in red, and
+has since 2026-09-11. Restored on 2026-09-23 when the whole-project review read the HUD source.
+"Red" in this guide means red on the panel or `Warning`/`Error` in the log; a check of one is not a
+check of the other.
 
 **The place rig is a fourth map, and none of the other three moved.** `ASFPlaceGameMode` on
 `Content/Maps/L_Place` — an empty level whose one setting is a `GameMode Override` of
@@ -247,7 +247,7 @@ Console variables the rig understands:
 | `sf.Pirate` | 1 | 0: the combat rig spawns no pirate. The player's automation has no target, and the rig line goes out as a `Warning`. **Read once in `StartPlay`, before `-ExecCmds` applies**, so it has to be set before the level starts: `"-ini:Engine:[ConsoleVariables]:sf.Pirate=0"` on the command line, or in the editor's console before Play. Typed mid-run, it does nothing until the level restarts |
 | `sf.PirateAI` | 1 | 0: the pursuit operator declines the pirate's pilot post. It returns `false`, not a zeroed intent, which with assist on would brake the ship. The pirate coasts, the distance does not change (1011.2 m for 40 s at 60 and 400 fps), and it keeps firing. Read live. **A named exception**: only automated hulls read it, because only they seat this operator |
 | `sf.KillThruster N [DelaySeconds]` | *(a command)* | Not a variable. Destroys thruster `N`, by its index in the ship data asset, on the player's ship (never an automated one), and rebuilds the array over the survivors. Runs once per entry, so twelve entries in one `-ExecCmds` list are twelve kills. The optional second argument delays the kill by that many seconds of game time, because every `-ExecCmds` entry runs on the first frame, before anything has spooled. Refuses with a `Warning` a thruster already destroyed, an index out of range, a malformed argument or a negative delay |
-| `sf.PlaceOffsetM` | *(empty)* | Metres the place rig moves its place along `+X`, on top of the authored origin. **A string variable, not a numeric one**: a `float` at 4.3e10 rounds in steps of about four kilometres, a quarter of the rig place's own extent. **Read once in `StartPlay`, before `-ExecCmds` applies**, so it has to arrive as `"-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=45000000000"`, one `-ini` switch per variable. A value that does not parse is a `Warning` and the authored origin stands -- parsed through `FDefaultValueHelper::ParseDouble`, which validates the whole string, and never through `Atod`, which answers zero for a string with no number in it and cannot say so |
+| `sf.PlaceOffsetM` | *(empty)* | Metres the place rig moves its place along `+X`, on top of the authored origin. **A string variable, not a numeric one**: a `float` at 4.3e10 rounds in steps of about four kilometres, a quarter of the rig place's own extent. **Read once in `InitGame`, before the local player logs in and before `-ExecCmds` applies**, so it has to arrive as `"-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=45000000000"`, one `-ini` switch per variable. A value that does not parse is a `Warning` and the authored origin stands -- parsed through `FDefaultValueHelper::ParseDouble`, which validates the whole string, and never through `Atod`, which answers zero for a string with no number in it and cannot say so |
 | `sf.PlaceRadiusM` | *(empty)* | Metres of extent, **replacing** the authored radius rather than adding to it, because a control that could only grow a place could never ask for a smaller one. A second variable is needed because the two ceilings break on different inputs: the engine's on distance and the crossing budget on extent, and a control able to break only one cannot tell the two refusals apart |
 
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
@@ -335,8 +335,9 @@ is written and measured on `feat/place-as-data`, its map and asset are made and 
 checkpoint 8 is ready to be taken by hand.** 97 headless tests, a clean rebuild with no warnings,
 and all four rigs green at 60 and 400 fps — the fourth now by its own map as well as by URL.
 
-**Stage 5 changed no existing file.** Seven files added, none modified, none removed — and the
-three old rigs were re-run afterwards and compared against a baseline taken before any of it was
+**Stage 5 itself changed no existing file** — seven files added, none modified, none removed.
+Checkpoint 8's two fixes then did: F1 changed `SFTestStation.cpp` and `SFTestShip.cpp`, F2 changed
+`SFPlaceGameMode` (a stage-5 file). Before those fixes the three old rigs were re-run and compared against a baseline taken before any of it was
 written: fourteen families of log line, 1625 lines, with the timestamp and frame number stripped
 and nothing else normalised. Nothing differs. Both records are in
 `docs/superpowers/notes/2026-09-18-stage-5-baseline.md`.
@@ -370,10 +371,14 @@ a stage of its own.
 
 **Run A was then taken in full on 2026-09-22 and passes**, including a real docking through the 3.0 m
 window and the hand twin of F1 — the hull stops at the station's wall. It surfaced two more things.
-Bumping the station on the docking approach at 1–1.4 m/s knocked the seated pilot down five times at
-~345 fps, `felt 1044.44 m/s2` at the worst — the frame-rate shape of contact resolution, now with a man
-in the seat; every approach to a physical station touches, so this goes to whichever stage next
-hardens what a person feels. And **F2**: a pawn does spawn on a refused place, because the local
+The station, bumped on the docking approach -- first at about 3.4 m/s, then at 0.6–1.5 m/s --
+knocked the owner down five times at ~345 fps, `felt 1044.44 m/s2` at the worst, on the first
+strike — the frame-rate shape of contact resolution. He was **standing**, not seated: each
+knockdown comes 0.4 to 3.4 seconds after `Station 'pilot' … left by player` (2.3 and 3.4 s in the
+first episode, 0.4, 1.6 and 3.1 s in the second), with the post reading `flown by unoccupied`, so
+the unpiloted ship coasted into the wall under him. (The spot he stands up on is the seat's own ship-local position, `(0 0 -300)`, which is
+how the first account of this run got it wrong.) Every approach to a physical station touches, so
+this goes to whichever stage next hardens what a person feels. And **F2**: a pawn does spawn on a refused place, because the local
 player logs in and is restarted **before** `StartPlay`, so nulling `DefaultPawnClass` there is too late
 — and the rig's refusal line said `no pawn` without reading it. Present in every refused run since
 stage 5's task 3; fixed the same day — the measurement moved to `InitGame` and the line reads the pawn
@@ -599,8 +604,9 @@ Things in the code that look like mistakes and are not:
   - The roll-after-undock control on the loop rig: the hull's port face lies in the plane of the
     tunnel's end faces when docked, and rolling about X swings that face into them. The first
     three seconds are a contact that pushes the hull clear at about 1 m/s -- `41.2 → 167.6 →
-    179.7` at 400 fps, `36.9 → 163.2 → 179.6` at 60 -- and from the fourth second it is exactly
-    `180.0 0.0 0.0` to the end at both rates, `0.000 cm` of drift. The control still proves what
+    179.7` at 400 fps, `36.9 → 163.2 → 179.6` at 60 -- and from the fourth second roll is
+    exactly `180.0` to the end at both rates, with pitch and yaw at `0.0` or `-0.0` (the sign of a
+    zero is left over from the contact and changes nothing), `0.000 cm` of drift. The control still proves what
     it was written for. Its old figures, `154.8 → 179.4 → 180.0`, described a hull rolling inside
     the plane of its dock, which is not a state a hull can be in.
   - Bumping the station at 0.8 m/s knocks a standing man down at 400 fps and not at 60:
@@ -608,6 +614,16 @@ Things in the code that look like mistakes and are not:
     drift. The stop resolves over fewer, shorter steps at the higher rate, and the felt figure is
     a second difference of position. Same class as the tumble below; an open observation, not a
     red line -- none of the run's red lines fired.
+  - **A third, found on 2026-09-23 by replaying the evidence (finding F3 of checkpoint 8), is not
+    benign.** The ship's docking port is on its +Y face, so `sf.Dock 0, sf.Intent.X 1` leaves
+    **sideways**, dragging the docked face across the tunnel's end faces, which are now physical.
+    A standing man is knocked down at both rates -- `felt 25.48 m/s2` at 60, `1285.82` at 400 --
+    the hull leaves `fwd 0.2 deg, up 0.1 deg` off axis, and checkpoint 8's B1 no longer passes
+    (`4.965 cm` of drift). Backing straight off the port, `sf.Intent.Y -1`, touches nothing:
+    `0.000 cm`, `footing intact`, at both rates. The sweep above had no sideways undock in it --
+    its only undocks under thrust were the roll, run with `sf.Knockdown 0` so no knockdown could
+    show, and F1's 0.004 push into the station -- which is why it said two. The fix is the owner's
+    choice and is recorded in the form.
 
   **What the collision does not do is repeat itself across frame rates, and that is not a
   defect.** Two boxes meeting at 30 m/s resolve on a contact manifold the step size decides, so
