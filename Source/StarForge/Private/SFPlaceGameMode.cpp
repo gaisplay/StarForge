@@ -26,8 +26,8 @@ namespace
 	 * A STRING holding a number, not a float. TAutoConsoleVariable<float> rounds to the nearest
 	 * representable float, and at 4.3e10 the gap between neighbouring floats is about 4 km --
 	 * a quarter of the rig place's own radius, in the one figure this whole stage turns on.
-	 * sf.BindFrame and sf.AimAt are the precedent for a string variable; FCString::Atod is the
-	 * parse, and what it parsed is printed back.
+	 * sf.BindFrame and sf.AimAt are the precedent for a string variable; ParseMetres below is the
+	 * parse (FDefaultValueHelper::ParseDouble, never Atod), and what it parsed is printed back.
 	 *
 	 * Read ONCE, when the rig assembles itself, which is before -ExecCmds is applied: set it
 	 * before the level starts, with "-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=..." on the
@@ -269,7 +269,7 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 		// An Error, and deliberately so: spec 13 asks that a place beyond the border refuse to
 		// assemble with a NAMED ERROR before anything undocks. The control run therefore carries
 		// one, and the runbook lists it as legitimately red with the condition under which it
-		// becomes a finding again -- the same treatment L_Combat's three red lines get.
+		// becomes a finding again -- the same treatment the combat rig's legitimately red lines get.
 		UE_LOG(LogStarForge, Error, TEXT("%s"), *SizeLine);
 	}
 }

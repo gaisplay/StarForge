@@ -347,9 +347,11 @@ bool FPlaceTheDefaultLimitsAreTheSpecsNumbersTest::RunTest(const FString& Parame
 	TestTrue(TEXT("the crossing budget is the owner's ninety seconds"),
 		FMath::IsNearlyEqual(Defaults.CrossingBudgetSeconds, CrossingBudget, 1e-9));
 
-	// Spelled again as a bare comparison, because IsNearlyEqual with a tolerance of 1e-6 on a
-	// figure of 4.4e10 would pass a ceiling wrong by four kilometres. The factor-of-a-hundred
-	// mistake this test exists for is caught either way; a smaller one would not be.
+	// Spelled again as an exact comparison, so the test states the figure itself rather than a
+	// neighbourhood of it. (The first form of this comment said IsNearlyEqual with 1e-6 "would
+	// pass a ceiling wrong by four kilometres". It would not: the tolerance is absolute, and 1e-6 m
+	// is tighter than a double's spacing at 4.4e10, which is about 7.6e-6 m. Both lines catch the
+	// factor-of-a-hundred mistake this test exists for.)
 	TestEqual(TEXT("and the engine ceiling is that number exactly"),
 		Defaults.EngineRadiusMetres, 4398046511104.0 / 100.0);
 
