@@ -9,17 +9,24 @@
  * assembly and no screen. It has two ceilings, and it has to clear both.
  *
  * THE ENGINE CEILING bounds how far from the world origin any point of the place may lie.
- * It is MEASURED, not quoted: the world-size spike of 2026-09-17 flew the loop rig out along
- * +X and found that a simulating hull works at 4.30e12 cm and is gone at 4.50e12 cm, with
- * 2^42 = 4.398046511104e12 cm sitting exactly between them. No constant of that name was
- * found in the engine's shipped source, so the figure is held as a measurement and its
- * evidence named: docs/superpowers/notes/evidence/2026-09-17-worldsize-*.log.
+ * It is 2^42 = 4.398046511104e12 cm, and it is both quoted and measured. It is the engine's
+ * HALF_WORLD_MAX (UE_LARGE_WORLD_MAX * 0.5, EngineDefines.h 41-57), which is written as a
+ * product, so a search for the literal never finds it. The world-size spike of 2026-09-17 flew
+ * the loop rig out along +X: a simulating hull worked at 4.30e12 cm and was gone at 4.50e12 cm,
+ * with 2^42 between them (docs/superpowers/notes/evidence/2026-09-17-worldsize-*.log).
  *
- * What makes it worth a whole file is HOW it fails. Past the border the ship simply stops
- * existing the frame its physics body comes on: the log ends after "Dock: [Ship] undocked.",
- * the station goes on printing, and LogStarForge: Error stays at zero. An instrument that
- * looks calm over a broken measurement is the one thing spec 2 forbids, and spec 10.4 turns
- * the finding into this predicate.
+ * The number is no longer where the engine deletes the hull. The deletion was
+ * AActor::CheckStillInWorld, and since 2026-09-26 the project runs with
+ * WorldBounds.DisableChecks=1 (spec 4). It is also what destroyed a hull silently 10.49 km
+ * BELOW the origin, at KillZ, which this predicate never knew about. So 2^42 is now the edge of
+ * MEASURED territory. Inside it the instruments read 0.000 cm at 60 and 400 fps; past it nothing
+ * deletes a hull and nothing has been measured. That is why the ceiling stays.
+ *
+ * What makes it worth a whole file is HOW the border failed: the project's own instruments said
+ * nothing. The engine wrote one LogActor warning, and LogStarForge wrote no error. An
+ * instrument that looks calm over a broken measurement is the one thing spec 2 forbids, and
+ * spec 10.4 turns the finding into this predicate. With the checks off, not even the engine
+ * speaks at the border, and this predicate is the only thing standing at it.
  *
  * THE CROSSING CEILING bounds the place's OWN SIZE: a place nobody can cross inside the
  * owner's budget is a place nobody flies through. Spec 5 derives it as D <= v*T, where D is
@@ -49,7 +56,8 @@ namespace StarForge::Place
 	struct STARFORGECORE_API FPlaceLimits
 	{
 		/**
-		 * 2^42 cm expressed in metres: 4398046511104 / 100. Measured; see the file comment.
+		 * 2^42 cm expressed in metres: 4398046511104 / 100. HALF_WORLD_MAX, quoted and measured;
+		 * see the file comment.
 		 */
 		double EngineRadiusMetres = 4.398046511104e10;
 

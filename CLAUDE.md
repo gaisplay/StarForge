@@ -250,6 +250,7 @@ Console variables the rig understands:
 | `sf.KillThruster N [DelaySeconds]` | *(a command)* | Not a variable. Destroys thruster `N`, by its index in the ship data asset, on the player's ship (never an automated one), and rebuilds the array over the survivors. Runs once per entry, so twelve entries in one `-ExecCmds` list are twelve kills. The optional second argument delays the kill by that many seconds of game time, because every `-ExecCmds` entry runs on the first frame, before anything has spooled. Refuses with a `Warning` a thruster already destroyed, an index out of range, a malformed argument or a negative delay |
 | `sf.PlaceOffsetM` | *(empty)* | Metres the place rig moves its place along `+X`, on top of the authored origin. **A string variable, not a numeric one**: a `float` at 4.3e10 rounds in steps of about four kilometres, a quarter of the rig place's own extent. **Read once in `InitGame`, before the local player logs in and before `-ExecCmds` applies**, so it has to arrive as `"-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=45000000000"`, one `-ini` switch per variable. A value that does not parse is a `Warning` and the authored origin stands -- parsed through `FDefaultValueHelper::ParseDouble`, which validates the whole string, and never through `Atod`, which answers zero for a string with no number in it and cannot say so |
 | `sf.PlaceRadiusM` | *(empty)* | Metres of extent, **replacing** the authored radius rather than adding to it, because a control that could only grow a place could never ask for a smaller one. A second variable is needed because the two ceilings break on different inputs: the engine's on distance and the crossing budget on extent, and a control able to break only one cannot tell the two refusals apart |
+| `WorldBounds.DisableChecks` | 1 *(set by the project in `DefaultEngine.ini`)* | **The engine's own variable, not an `sf.*` one.** 1: nothing is destroyed at `KillZ` (−10 485.75 m) or outside the ±2⁴² cm world box. 0: both are back, so a hull flown 10.49 km down is destroyed without a word, and the `World bounds:` line goes out as an `Error` with `checks ON`. Read live by the engine at every `CheckStillInWorld`, and the line reports each change, so it can be typed mid-run. The entry below on `WorldBounds.DisableChecks` says why it is off |
 
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
 
@@ -392,6 +393,19 @@ down at both rates, and B1 failing. Of four fixes the owner chose an automatic r
 port axis; spec §8 carries the amendment, and the entry below on `ReleaseStandoff` the derivation.
 B1, taken again headless on the fixed build at 60 and 400 fps, passes every gate
 (`notes/evidence/2026-09-25-f3fix-*.log`).
+
+**The world was found to have a floor on 2026-09-26, and the checks that enforce it were switched
+off the same day.** `KillZ` sits at −10.49 km by the engine's default. A simulating hull flown
+there is destroyed with no line from anyone, about 58.7 s into a full-thrust dive at 60 and
+400 fps. The owner turned the engine's world-bounds checks off globally with
+`WorldBounds.DisableChecks=1`, choosing that over lowering `KillZ` or teaching `MeasurePlace`
+about the floor. Spec §4, §12 and §13 carry the amendment, including a new risk due before
+checkpoint 9: superlight through a place reaches 2⁴² in 7–15 s, and past it nothing has been
+measured. The two entries below, on 2⁴² and on `WorldBounds.DisableChecks`, carry the account.
+**The same runs found something else, still open:** at 60 fps the man comes off the ship about
+6.3 s into a −Z flight at 16 m/s², below the knockdown limit. At 400 fps neither the drift gauge
+nor the carry watchdog says anything. The checks play no part in it: the runs behave the same
+with them on and off.
 
 **Read `docs/superpowers/specs/2026-09-17-world-as-a-graph-of-places.md` before anything
 structural in the second phase**, and note that its §10.4 folds two ceilings into one comparison
@@ -794,25 +808,70 @@ Things in the code that look like mistakes and are not:
   the empty world` is a finding. Measured: `Place size:` is written two log lines before
   `FindPlayerStart` at both rates, and the accepted place's lines are unchanged to the character.
 
-- **2⁴² cm is held as measured, not as quoted.** The world-size ceiling in `Place.h` reads
-  `4.398046511104e10` metres with a comment saying no constant of that name was found in the
-  shipped engine, and that looks like a citation somebody could not be bothered to chase down.
-  It was chased. `4398046511104` appears nowhere in `Runtime/Core/Public` or
-  `Runtime/Experimental/Chaos`; `WORLD_MAX` and `HALF_WORLD_MAX` survive in 5.8 only inside a
-  commented-out line of `LargeWorldRenderPosition.cpp`.
+- **2⁴² cm is both quoted and measured, and since 2026-09-26 it marks the edge of measured
+  territory, not a fuse.** The world-size ceiling in `Place.h` reads `4.398046511104e10` metres.
+  It is the engine's `HALF_WORLD_MAX`: `WORLD_MAX * 0.5`, where
+  `WORLD_MAX = UE_LARGE_WORLD_MAX = 8796093022208.0`
+  (`Engine/Source/Runtime/Engine/Public/EngineDefines.h:41-57`). An earlier version of this entry
+  said no such constant survives in 5.8. That search looked only in `Runtime/Core` and Chaos, and
+  for the literal `4398046511104`, which never appears because the half is written as a product.
 
-  The number stands between two measurements, and the logs are named:
-  `notes/evidence/2026-09-17-worldsize-*.log`. At 4.30·10¹² cm the loop rig flies — 200.0 m/s,
-  `0.000 cm` of drift, at 60 and 400 fps. At 4.50·10¹² cm the ship stops existing the frame its
-  physics body comes on: the log ends after `Dock: [Ship] undocked.`, the station keeps
-  printing, `LogStarForge: Error` is zero and the file closes cleanly. 2⁴² sits between them.
+  The ship vanished at 4.50·10¹² cm through `AActor::CheckStillInWorld` → `OutsideWorldBounds`
+  (`Actor.cpp:2333-2345`), and that was not silent. The BROKEN log carries
+  `LogActor: Warning: Ship is outside the world bounds!` at line 1683, and the same line about
+  the man at 1680; only `LogStarForge` said nothing. The docked run at 10¹⁴ cm kept its hull but
+  lost its man on the first frame (`SFCharacter_0 is outside the world bounds!`, line 1678).
+  Nothing checks a kinematic hull; CharacterMovement checks the person. The bracket stays valid
+  evidence and now agrees with the citation: the loop rig flies at 4.30·10¹² cm and is gone at
+  4.50·10¹². The logs are kept: `notes/evidence/2026-09-17-worldsize-*.log`.
 
-  Why the distinction earns a comment: a figure presented as an engine citation is a figure
-  nobody re-measures when the engine changes version. Presented as measured, with the runs
-  named, it is a figure the next person knows how to re-take. The default itself is asserted by
-  `TheDefaultLimitsAreTheSpecsNumbers`, which exists because every other test in that file
-  spells its own limits and the default was therefore checked by nobody: written as `e12`
-  instead of `e10`, all other tests stayed green.
+  With the world-bounds checks off (next entry), nothing destroys an actor at 2⁴², so the number
+  no longer marks where the engine acts. It marks how far the instruments are known to hold:
+  `0.000 cm` of drift inside it at 60 and 400 fps, and nothing measured beyond. `MeasurePlace`
+  still refuses past it, with the same reason, `engine reach`. Raising it needs a run beyond 2⁴²
+  with the checks off. The default is asserted by `TheDefaultLimitsAreTheSpecsNumbers`, which
+  exists because every other test in that file spells its own limits. Written as `e12` instead
+  of `e10`, the default left all the other tests green.
+
+- **`WorldBounds.DisableChecks=1` in `Config/DefaultEngine.ini`, and a `World bounds:` line from
+  `USFWorldBoundsSubsystem` in every game world.** It looks like switching off a safety net. What
+  it switches off is a trap door.
+  - `AWorldSettings` puts `KillZ` at `-UE_OLD_HALF_WORLD_MAX1` = −1 048 575 cm
+    (`WorldSettings.cpp:116`). This is a UE4 leftover that the engine itself marks
+    `LWC_TODO: HALF_WORLD_MAX1? Something else?`.
+  - `CheckStillInWorld` destroys any simulating body below it through `FellOutOfWorld`, which
+    logs nothing at all. Chaos calls the check after every physics sync of a simulating body, and
+    CharacterMovement calls it for people.
+  - Measured on 2026-09-26: the spike rig flown at full thrust along −Z loses its hull after the
+    58th `Flight:` line at 60 and 400 fps, 10 436 and 10 440 m down by the summed speeds, with no
+    line from the engine or the project. Along +Z it lives the full 80 s.
+  - None of the four maps overrides `KillZ`: the name is absent from every `.umap`, while
+    `DefaultGameMode` is present in exactly the three that carry a `GameMode Override`.
+
+  So the world was never a sphere of radius 2⁴² cm. It was a ±2⁴² cm cube with a floor 10.49 km
+  down, and `MeasurePlace` knew nothing of the floor.
+  - **Why a global variable, not the map flag and not `KillZ`.** `AreWorldBoundsChecksEnabled()`
+    is `bEnableWorldBoundsChecks && !GDisableWorldBoundsChecks` (`WorldSettings.cpp:55-59`,
+    `726-729`), so no map can switch the checks back on. The map flag is not `config` and lives
+    in every binary `.umap`. `KillZ` is `config`, but a map with an explicit value silently beats
+    an ini default. The owner chose this over lowering `KillZ` and over teaching `MeasurePlace`
+    the floor.
+  - **What it costs.** 2⁴² becomes the edge of measured territory and loses its one engine line
+    (entry above). Superlight through a place reaches it in 7–15 s: spec §12 has this as a risk
+    due before checkpoint 9.
+  - **The line reads the state back from the world rather than asserting it.** Today it reads
+    `World bounds: checks off (WorldBounds.DisableChecks 1, map flag on) -- nothing is destroyed at KillZ -10485.75 m or outside 2^42 cm in this world.`
+    It is written at begin-play and again on every change of the variable. With the checks on,
+    it goes out as an `Error` saying `checks ON`.
+  - **It is a world subsystem, not a game-mode line**, because the four rigs share no base class,
+    and a future map has to get the line without anyone remembering to add it.
+  - **Negative control.** `WorldBounds.DisableChecks 0` in the console, or headless
+    `-ExecCmds="WorldBounds.DisableChecks 0, sf.FlightLog 1, sf.ShipProfile 0, sf.Intent.Z -1"`
+    on the spike rig. It must produce the `Error` and lose the hull after about 58.7 s:
+    12.5 s and 1250 m to reach 200 m/s at 16 m/s², then 46.2 s at 200 m/s to 10 485.75 m.
+  - Evidence: `notes/evidence/2026-09-26-killz-fly-*.log` (the floor, its +Z control, and the
+    mechanism measured from the command line before the fix) and
+    `notes/evidence/2026-09-26-worldbounds-*.log` (the fixed build and its negative control).
 
 - **Undocking is a one-second release to a standoff measured on the two bodies,
   `StarForge::Docking::ReleaseStandoff`, not a let-go at the docked pose.** It looks like a
