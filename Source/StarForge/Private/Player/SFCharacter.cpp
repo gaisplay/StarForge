@@ -37,6 +37,21 @@ namespace
 		TEXT("ship|station: bind the occupant to that carrier's frame wherever he is standing. Empty: no command.\n")
 		TEXT("A negative control. Bound to the wrong carrier in flight, the cross-check must warn and the carry must stop."),
 		ECVF_Default);
+
+	/**
+	 * The V key from the console: 0 his own eyes, 1 the chase camera of his ship.
+	 *
+	 * It exists so a headless run can show that the view changes nothing physical -- the same
+	 * flight with sf.View 1 must log the same figures as without it -- and a run has no keyboard.
+	 * Acted on when the value changes, as sf.AimAt is, and it calls exactly what V calls. Being an
+	 * edge, it does not track V: after V has switched the view the variable still holds its old
+	 * value, and typing that same value again does nothing.
+	 */
+	TAutoConsoleVariable<int32> CVarView(
+		TEXT("sf.View"), 0,
+		TEXT("0: through the occupant's eyes. 1: the chase camera of his ship, as the V key.\n")
+		TEXT("Acted on when the value CHANGES. The pawn stays possessed either way."),
+		ECVF_Default);
 }
 
 ASFCharacter::ASFCharacter(const FObjectInitializer& ObjectInitializer)
@@ -234,6 +249,7 @@ void ASFCharacter::Tick(float DeltaSeconds)
 	PollInteract();
 	PollDockInput();
 	PollBindFrameCommand();
+	PollViewInput();
 }
 
 void ASFCharacter::BindFrame(USFShipFrameComponent* Frame)
@@ -451,6 +467,162 @@ void ASFCharacter::PollBindFrameCommand()
 		TEXT("Frame bound by console to %s (sf.BindFrame). This ignores where he is standing, which is "
 			 "the point: it is a negative control."),
 		Frame->GetOwner() ? *Frame->GetOwner()->GetActorNameOrLabel() : TEXT("nothing"));
+}
+
+void ASFCharacter::PollViewInput()
+{
+	// Nothing is consumed without a controller: neither the key's edge nor the variable's change.
+	// An sf.View 1 from -ExecCmds that arrived before possession is then acted on at the first
+	// tick that can act on it, instead of being used up by a tick that could not.
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return;
+	}
+
+	// Before the key, so a V pressed in the frame the ship went away starts from the eyes.
+	if (bWatchingShip && !WatchedShip.IsValid())
+	{
+		UE_LOG(LogStarForge, Warning, TEXT("View: the ship being watched is gone."));
+		SetChaseView(false);
+	}
+
+	// On the edge, like E and F: held, it would switch the view every frame.
+	const bool bDown = PC->IsInputKeyDown(EKeys::V);
+	if (bDown && !bViewWasDown)
+	{
+		SetChaseView(!bWatchingShip);
+	}
+	bViewWasDown = bDown;
+
+	const int32 Command = CVarView.GetValueOnGameThread();
+	if (Command != LastViewCommand)
+	{
+		LastViewCommand = Command;
+
+		if (Command == 0 || Command == 1)
+		{
+			SetChaseView(Command == 1);
+		}
+		else
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("View: sf.View %d is neither 0 (eyes) nor 1 (chase); the view is unchanged."), Command);
+		}
+	}
+}
+
+void ASFCharacter::SetChaseView(bool bChase)
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || bChase == bWatchingShip)
+	{
+		return;
+	}
+
+	if (!bChase)
+	{
+		// Deactivated as well as left, so a ship nobody watches never carries an active camera
+		// that the engine's CalcCamera would pick the next time anything made it a view target.
+		if (ASFTestShip* Ship = WatchedShip.Get())
+		{
+			if (UCameraComponent* ChaseCamera = Ship->GetChaseCamera())
+			{
+				ChaseCamera->Deactivate();
+			}
+		}
+		WatchedShip = nullptr;
+		bWatchingShip = false;
+
+		PC->SetViewTargetWithBlend(this, 0.0f);
+
+		// Read back rather than asserted, as the rig lines are.
+		if (PC->GetViewTarget() == this)
+		{
+			UE_LOG(LogStarForge, Display, TEXT("View: back to the eyes."));
+		}
+		else
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("View: back to the eyes asked for, but the view is on %s."), *GetNameSafe(PC->GetViewTarget()));
+		}
+		return;
+	}
+
+	ASFTestShip* Ship = FindShipToWatch();
+	UCameraComponent* ChaseCamera = Ship ? Ship->GetChaseCamera() : nullptr;
+	if (!ChaseCamera)
+	{
+		UE_LOG(LogStarForge, Warning, TEXT("View: no ship to look at -- staying in the eyes."));
+		return;
+	}
+
+	// Active first: a view target is asked for its first ACTIVE camera, and an inactive one sends
+	// the view to the actor's eyes point, which for a ship is its origin -- the cabin's centre.
+	// No blend: this is a switch, and a view halfway through a blend is neither of the two.
+	ChaseCamera->Activate();
+	PC->SetViewTargetWithBlend(Ship, 0.0f);
+
+	WatchedShip = Ship;
+	bWatchingShip = true;
+
+	if (PC->GetViewTarget() == Ship && ChaseCamera->IsActive())
+	{
+		UE_LOG(LogStarForge, Display, TEXT("View: chase camera of %s."), *Ship->GetName());
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("View: chase camera of %s asked for, but the view is on %s and the camera is %s."),
+			*Ship->GetName(), *GetNameSafe(PC->GetViewTarget()),
+			ChaseCamera->IsActive() ? TEXT("active") : TEXT("INACTIVE"));
+	}
+}
+
+ASFTestShip* ASFCharacter::FindShipToWatch() const
+{
+	// The carrier he is bound to, when it is a ship: that is the ship he is in, whoever crews it.
+	if (const USFShipboardMovementComponent* Movement = GetShipboardMovement())
+	{
+		if (const USFShipFrameComponent* Frame = Movement->GetShipFrame())
+		{
+			if (ASFTestShip* Ship = Cast<ASFTestShip>(Frame->GetOwner()))
+			{
+				return Ship;
+			}
+		}
+	}
+
+	// Bound to a station, or to nothing: the ship crewed as the player's, as sf.BindFrame ship
+	// finds it. The same two steps as the HUD's FindPlayersShip, except that the second is sorted
+	// by name rather than taken in iteration order: TActorIterator's order is the order the level
+	// happened to add actors in, no rig promises it, and a view that picks a different ship from
+	// one run to the next is not an instrument anybody can compare.
+	TArray<ASFTestShip*> PlayerShips;
+	for (TActorIterator<ASFTestShip> It(GetWorld()); It; ++It)
+	{
+		if (It->GetCrewing() == ESFShipCrewing::PlayerShip)
+		{
+			PlayerShips.Add(*It);
+		}
+	}
+
+	if (PlayerShips.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	// TArray::Sort hands a predicate the pointed-to objects, not the pointers.
+	PlayerShips.Sort([](const ASFTestShip& A, const ASFTestShip& B) { return A.GetName() < B.GetName(); });
+
+	if (PlayerShips.Num() > 1)
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("View: %d ships are crewed as the player's; watching %s, the first by name."),
+			PlayerShips.Num(), *PlayerShips[0]->GetName());
+	}
+
+	return PlayerShips[0];
 }
 
 void ASFCharacter::ToggleSeat()

@@ -3,10 +3,13 @@
 #include "CoreMinimal.h"
 #include "FlightController.h"
 #include "GameFramework/Actor.h"
+#include "UObject/SoftObjectPtr.h"
 #include "SFTestShip.generated.h"
 
+class UCameraComponent;
 class USFShipFrameComponent;
 class USceneComponent;
+class UStaticMesh;
 class UStaticMeshComponent;
 class UPointLightComponent;
 class UBoxComponent;
@@ -134,6 +137,20 @@ public:
 	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
 	bool bWeaponsFree = false;
 
+	/**
+	 * The picture of the ship, put on the Visual component at BeginPlay. Only a picture: the
+	 * physics body stays the rig's 8 m box whatever this names (see the constructor).
+	 *
+	 * A soft pointer loaded at BeginPlay rather than a ConstructorHelpers finder like the rig's
+	 * own shapes, because this asset is content the rig does not own. The rig has to run from a
+	 * bare C++ build, and a finder that misses writes an Error from the class default object's
+	 * constructor, before any world exists and under the class's name rather than a ship's; a
+	 * soft pointer that misses is one Warning per ship, from the ship. Empty is legal and
+	 * silent: it is the rig as it was before the model existed.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Visual")
+	TSoftObjectPtr<UStaticMesh> VisualMesh;
+
 	ESFShipCrewing GetCrewing() const { return Crewing; }
 
 	USFAutomationOperatorComponent* GetAutomationOperator() const { return AutomationOperator; }
@@ -172,6 +189,14 @@ public:
 	/** What the gunner post's automation tracks. Spawned by BeginPlay; null if that failed. */
 	ASFTargetDrone* GetTargetDrone() const { return TargetDrone; }
 
+	/**
+	 * The view from behind and above the ship. Inactive until a person asks for it (V or
+	 * sf.View in ASFCharacter), which activates it and makes the ship the view target together:
+	 * AActor::CalcCamera takes the first ACTIVE camera on a view target, and with none active it
+	 * falls back to the actor's own location, which for a ship is the centre of its cabin.
+	 */
+	UCameraComponent* GetChaseCamera() const { return ChaseCamera; }
+
 	/** Where a passenger should be placed so he starts standing on the floor. */
 	FVector GetInteriorSpawnWorldLocation() const;
 
@@ -207,6 +232,12 @@ private:
 	 */
 	UStaticMeshComponent* AddOrientationMarker(
 		FName Name, UStaticMesh* Mesh, const FVector& RelativeLocation, double UniformScale);
+
+	/** Loads VisualMesh onto Visual and says what it loaded, or that it loaded nothing. */
+	void ApplyVisualMesh();
+
+	/** Poses the chase camera to fit whatever Visual shows, or the hull box when it shows nothing. */
+	void PlaceChaseCamera();
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<UBoxComponent> Hull;
@@ -273,6 +304,12 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> OrientationMarkers;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<UStaticMeshComponent> Visual;
+
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<UCameraComponent> ChaseCamera;
 
 	double ElapsedSeconds = 0.0;
 	FVector PreviousVelocityCms = FVector::ZeroVector;

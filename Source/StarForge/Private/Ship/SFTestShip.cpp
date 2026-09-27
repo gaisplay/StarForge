@@ -1,8 +1,11 @@
 #include "Ship/SFTestShip.h"
 
+#include "Camera/CameraComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/CollisionProfile.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "FlightController.h"
 #include "HAL/IConsoleManager.h"
@@ -25,6 +28,7 @@
 #include "StarForgeLog.h"
 #include "Units.h"
 #include "UObject/ConstructorHelpers.h"
+#include "ViewMath.h"
 
 namespace
 {
@@ -132,6 +136,37 @@ namespace
 	 * assetless rig, and the flight model is balanced in the asset as spec 9 says.
 	 */
 	constexpr double DefaultHullMassKg = 50000.0;
+
+	/**
+	 * Where the ship's picture is looked for. The Krishna, imported with its pivot at the centre
+	 * of this rig's cabin cube, which is this actor's origin (Art/Krishna/README.md on the art
+	 * branch, the section on how the ship sits in the rig).
+	 */
+	const TCHAR* DefaultVisualMeshPath = TEXT("/Game/Art/Krishna/SM_Krishna.SM_Krishna");
+
+	/**
+	 * How far above the ship's centre the chase camera stands, as an angle up from behind.
+	 * ASSIGNED, for the owner's convenience, and derived from nothing: he asked to see the ship
+	 * from behind and above, and twenty degrees is a comfortable "above". No figure reads it.
+	 * The distance, by contrast, is derived -- from the camera's own field of view and the size
+	 * of what it has to show (StarForge::View::FitSphereDistance).
+	 */
+	constexpr double ChaseElevationDeg = 20.0;
+
+	/**
+	 * Component by component through the project's one conversion, for the lines the ship logs.
+	 * The long name is not ornament: the game module builds as one unity translation unit, where
+	 * every file's anonymous namespace is the same one, and a global ToMetres would be hidden by
+	 * the local lambda of that name in SFDockingComponent.cpp -- shadow warning C4459, the moment
+	 * the unity order puts this file first.
+	 */
+	FVector ShipVectorCmToMetres(const FVector& Cm)
+	{
+		return FVector(
+			StarForge::Units::CmToMetres(Cm.X),
+			StarForge::Units::CmToMetres(Cm.Y),
+			StarForge::Units::CmToMetres(Cm.Z));
+	}
 }
 
 ASFTestShip::ASFTestShip()
@@ -463,6 +498,45 @@ ASFTestShip::ASFTestShip()
 	{
 		Damageable->ShipData = ShipDataAsset.Object;
 	}
+
+	// The ship's picture, and only a picture: attached to the hull with no offset, because the
+	// mesh's pivot is this actor's origin, and with no collision of any kind, like the orientation
+	// markers. The physics body stays the 8 m Hull box, for three reasons.
+	// - Spec 5: mass and inertia are read back from Chaos, and anything welded into the hull's
+	//   body changes the inertia the allocator and the IFCS fly with, and every recorded figure
+	//   that rests on 533333 kg m^2.
+	// - A convex hull of this mesh would close over the hatch and the tunnel's path.
+	// - The station is a physical body since finding F1, and a 49 m hull would meet it on every
+	//   approach to the port.
+	// A NoCollision component creates no physics state at all (UPrimitiveComponent::
+	// ShouldCreatePhysicsState), so there is nothing to weld; the asset carries no collision
+	// either. The profile is set as well as the flag so the component answers no channel.
+	//
+	// What that costs, and it is a known cost, not an oversight: physics does not see a 49 m hull.
+	// Two ships collide when their 8 m boxes touch, by which time the pictures have passed through
+	// each other -- and the pirate is this same class with this same mesh. A station reaches into
+	// the picture the same way. Changing that is a decision and a measurement of its own.
+	//
+	// Created last, after every existing component, so none of them moves in the order the
+	// engine registers and begins play on them.
+	Visual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Visual"));
+	Visual->SetupAttachment(Hull);
+	Visual->SetMobility(EComponentMobility::Movable);
+	Visual->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+	Visual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Visual->SetGenerateOverlapEvents(false);
+	Visual->CanCharacterStepUpOn = ECB_No;
+	VisualMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(DefaultVisualMeshPath));
+
+	// The view from behind and above. Rigid on the hull -- no spring arm and no lag, on purpose.
+	// A camera lag is a smoothing over the frame time, so how far the picture trails the ship
+	// would depend on the frame rate -- the class of failure this project has already met three
+	// times (the Chaos sleep threshold, the ten-frame cross-check, the differenced angular
+	// velocity). Its pose is computed at BeginPlay, when the mesh it has to frame is known.
+	// Inactive until asked for: see GetChaseCamera.
+	ChaseCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ChaseCamera"));
+	ChaseCamera->SetupAttachment(Hull);
+	ChaseCamera->SetAutoActivate(false);
 }
 
 UStaticMeshComponent* ASFTestShip::AddBoxPanel(FName Name, const FVector& RelativeLocation, const FVector& RelativeScale)
@@ -598,6 +672,108 @@ void ASFTestShip::BeginPlay()
 			TEXT("Ship [%s] spawns no target drone; its gunner's automation will track whatever it is given."),
 			*GetName());
 	}
+
+	// Last, so every line the rigs already print keeps its place, and in this order because the
+	// camera frames whatever the visual turned out to show.
+	ApplyVisualMesh();
+	PlaceChaseCamera();
+}
+
+void ASFTestShip::ApplyVisualMesh()
+{
+	if (VisualMesh.IsNull())
+	{
+		return;
+	}
+
+	UStaticMesh* Mesh = VisualMesh.LoadSynchronous();
+	if (!Mesh)
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Ship visual: [%s] no mesh at %s -- the ship shows as its rig box."),
+			*GetName(), *VisualMesh.ToString());
+		return;
+	}
+
+	Visual->SetStaticMesh(Mesh);
+
+	// Every figure read back from the asset rather than quoted from the art README, so a
+	// re-export that changed the model shows here first. The triangles are LOD0's, counted from
+	// the render data, which an editor build caches on load whatever the RHI
+	// (UStaticMesh::ExecutePostLoadInternal calls CacheDerivedData unconditionally), so a
+	// -nullrhi run counts them too. The rig box is read from the hull, the body physics sees.
+	const FVector SizeMetres = ShipVectorCmToMetres(Mesh->GetBoundingBox().GetSize());
+	UE_LOG(LogStarForge, Display,
+		TEXT("Ship visual: [%s] %s, %d triangles, %.2f x %.2f x %.2f m, no collision; ")
+		TEXT("the physics body stays the %.0f m rig box."),
+		*GetName(), *Mesh->GetName(), Mesh->GetNumTriangles(0),
+		SizeMetres.X, SizeMetres.Y, SizeMetres.Z,
+		StarForge::Units::CmToMetres(2.0 * Hull->GetUnscaledBoxExtent().X));
+}
+
+void ASFTestShip::PlaceChaseCamera()
+{
+	// What the camera has to show, as a box in the hull's frame: the picture's bounds carried
+	// through the picture's own attachment (identity today, but then the camera follows if that
+	// changes), or the hull box when there is no picture. Centimetres go straight into the maths,
+	// which is unit-agnostic in length, and come out as centimetres of camera offset.
+	FBox ShownCm(ForceInit);
+	if (const UStaticMesh* Mesh = Visual->GetStaticMesh())
+	{
+		ShownCm = Mesh->GetBoundingBox().TransformBy(Visual->GetRelativeTransform());
+	}
+	else
+	{
+		const FVector HalfCm = Hull->GetUnscaledBoxExtent();
+		ShownCm = FBox(-HalfCm, HalfCm);
+	}
+
+	// The sphere through the box's corners, so the whole box is inside it from any side.
+	const FVector CentreCm = ShownCm.GetCenter();
+	const double RadiusCm = ShownCm.GetExtent().Size();
+
+	// The camera's own field and aspect, so an edit to either on the component moves the camera
+	// with it. They are also what the screen gets: the local player keeps the VERTICAL field
+	// (AspectRatio_MaintainYFOV, BaseEngine.ini [/Script/Engine.LocalPlayer]) and derives it from
+	// exactly these two, atan(tan(H / 2) / AspectRatio) in CameraStackTypes.cpp, whatever the
+	// window's shape. So the vertical fit holds in any landscape window, where the horizontal field
+	// only gets wider; a window taller than it is wide would clip the sides.
+	const double HorizontalFovRad = FMath::DegreesToRadians(static_cast<double>(ChaseCamera->FieldOfView));
+	const double AspectRatio = ChaseCamera->AspectRatio;
+
+	ChaseCamera->SetRelativeTransform(StarForge::View::ChaseCameraPose(
+		CentreCm, RadiusCm, HorizontalFovRad, AspectRatio, FMath::DegreesToRadians(ChaseElevationDeg)));
+
+	if (StarForge::View::FitSphereDistance(RadiusCm, HorizontalFovRad, AspectRatio) <= 0.0)
+	{
+		// The pose is the identity, which puts the chase camera at the cabin's centre. Said, because
+		// a view of the inside of the cabin would otherwise pass for a camera that works.
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Ship camera: [%s] NO chase pose -- field %.1f deg, aspect %.3f, sphere %.1f m give no ")
+			TEXT("distance to see it from; the camera sits at the ship's origin."),
+			*GetName(), ChaseCamera->FieldOfView, AspectRatio, StarForge::Units::CmToMetres(RadiusCm));
+		return;
+	}
+
+	// Read back from the component, not from the arguments: the line says where the camera IS.
+	const FVector CameraCm = ChaseCamera->GetRelativeLocation();
+	const double DistanceCm = FVector::Dist(CameraCm, CentreCm);
+	const double ElevationDeg = FMath::RadiansToDegrees(FMath::Asin((CameraCm.Z - CentreCm.Z) / DistanceCm));
+
+	// Named by whichever field binds. At the component's default 16:9 that is the vertical one;
+	// a portrait aspect would make it the horizontal, and the line must not say otherwise.
+	const double VerticalFovRad = StarForge::View::VerticalFov(HorizontalFovRad, AspectRatio);
+	const bool bVerticalBinds = VerticalFovRad <= HorizontalFovRad;
+
+	const FVector CentreMetres = ShipVectorCmToMetres(CentreCm);
+	UE_LOG(LogStarForge, Display,
+		TEXT("Ship camera: [%s] chase at %.1f m from the ship's centre (%.2f %.2f %.2f) m, %.1f deg up -- ")
+		TEXT("the %.1f m sphere fits the %.1f deg %s field."),
+		*GetName(), StarForge::Units::CmToMetres(DistanceCm),
+		CentreMetres.X, CentreMetres.Y, CentreMetres.Z, ElevationDeg,
+		StarForge::Units::CmToMetres(RadiusCm),
+		FMath::RadiansToDegrees(bVerticalBinds ? VerticalFovRad : HorizontalFovRad),
+		bVerticalBinds ? TEXT("vertical") : TEXT("horizontal"));
 }
 
 void ASFTestShip::Tick(float DeltaSeconds)

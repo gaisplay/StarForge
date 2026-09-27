@@ -5,6 +5,7 @@
 #include "Ship/SFStationOperator.h"
 #include "SFCharacter.generated.h"
 
+class ASFTestShip;
 class UCameraComponent;
 class USFShipboardMovementComponent;
 class USFShipFrameComponent;
@@ -64,6 +65,19 @@ private:
 	/** sf.BindFrame, acted on when the value changes. The negative control's door. */
 	void PollBindFrameCommand();
 
+	/** V on its edge and sf.View on its change, and the return to the eyes when the watched ship is gone. */
+	void PollViewInput();
+
+	/**
+	 * The one place V and sf.View both land. True shows the chase camera of his ship, false his
+	 * own eyes. Only the view target changes: the pawn stays possessed, because spec 4 says
+	 * possession never changes, and so every key he holds still walks, looks or flies him.
+	 */
+	void SetChaseView(bool bChase);
+
+	/** Whose chase camera V shows; null when there is no ship to look at. The order is in the .cpp. */
+	ASFTestShip* FindShipToWatch() const;
+
 	/** Tries to take the nearest station within reach, or leaves the current one. */
 	void ToggleSeat();
 
@@ -81,4 +95,19 @@ private:
 
 	/** Last value seen on sf.BindFrame, so it acts on a change and not on a level. */
 	FString LastBindFrameCommand;
+
+	/** Edge detection for the view key: held is not pressed. */
+	bool bViewWasDown = false;
+
+	/** Last value seen on sf.View, so it acts on a change and not on a level. Starts at its default. */
+	int32 LastViewCommand = 0;
+
+	/** The ship whose chase camera is on screen. Weak: watching a ship is not keeping it alive. */
+	TWeakObjectPtr<ASFTestShip> WatchedShip;
+
+	/**
+	 * Beside the pointer, not folded into it: a weak pointer to a destroyed ship and one that was
+	 * never set both read as null, and only the first is a view that has to be taken back.
+	 */
+	bool bWatchingShip = false;
 };

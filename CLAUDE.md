@@ -250,6 +250,7 @@ Console variables the rig understands:
 | `sf.KillThruster N [DelaySeconds]` | *(a command)* | Not a variable. Destroys thruster `N`, by its index in the ship data asset, on the player's ship (never an automated one), and rebuilds the array over the survivors. Runs once per entry, so twelve entries in one `-ExecCmds` list are twelve kills. The optional second argument delays the kill by that many seconds of game time, because every `-ExecCmds` entry runs on the first frame, before anything has spooled. Refuses with a `Warning` a thruster already destroyed, an index out of range, a malformed argument or a negative delay |
 | `sf.PlaceOffsetM` | *(empty)* | Metres the place rig moves its place along `+X`, on top of the authored origin. **A string variable, not a numeric one**: a `float` at 4.3e10 rounds in steps of about four kilometres, a quarter of the rig place's own extent. **Read once in `InitGame`, before the local player logs in and before `-ExecCmds` applies**, so it has to arrive as `"-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=45000000000"`, one `-ini` switch per variable. A value that does not parse is a `Warning` and the authored origin stands -- parsed through `FDefaultValueHelper::ParseDouble`, which validates the whole string, and never through `Atod`, which answers zero for a string with no number in it and cannot say so |
 | `sf.PlaceRadiusM` | *(empty)* | Metres of extent, **replacing** the authored radius rather than adding to it, because a control that could only grow a place could never ask for a smaller one. A second variable is needed because the two ceilings break on different inputs: the engine's on distance and the crossing budget on extent, and a control able to break only one cannot tell the two refusals apart |
+| `sf.View` | 0 | 0: the occupant's eyes. 1: the chase camera of his ship, from behind and above -- what the `V` key toggles. The ship is the carrier his frame is bound to, else the ship crewed as the player's. Acted on when the value **changes**, like `sf.AimAt`, and it calls exactly what `V` calls, so a headless run can show the view changes nothing physical: the spike rig with `sf.View 1` differs from the same run without it by one line, `View: chase camera of Ship.` Only the view target changes; the pawn stays possessed, so walking, looking and flying answer in either view |
 | `WorldBounds.DisableChecks` | 1 *(set by the project in `DefaultEngine.ini`)* | **The engine's own variable, not an `sf.*` one.** 1: nothing is destroyed at `KillZ` (−10 485.75 m) or outside the ±2⁴² cm world box. 0: both are back, so a hull flown 10.49 km down is destroyed without a word, and the `World bounds:` line goes out as an `Error` with `checks ON`. Read live by the engine at every `CheckStillInWorld`, and the line reports each change, so it can be typed mid-run. The entry below on `WorldBounds.DisableChecks` says why it is off |
 
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
@@ -336,6 +337,14 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 is written and measured on `feat/place-as-data`, its map and asset are made and accepted, and
 checkpoint 8 is ready to be taken by hand.** 105 headless tests (97 until F3's fix added eight), a clean rebuild with no warnings,
 and all four rigs green at 60 and 400 fps — the fourth now by its own map as well as by URL.
+
+**On `feat/krishna-ship` the ship wears the Krishna and `V` shows it from behind.** 110 headless
+tests: the five added are `StarForge.Core.View.*`. The model is imported from the art branch
+`docs/krishna-art` into `Content/Art/Krishna/` (80 585 triangles, 48.86 × 30.08 × 22.45 m) by
+that branch's `Art/Krishna/ue_import_krishna.py`, whose checks all pass. Every rig at 60 fps was
+compared against `feat/place-as-data`'s build line for line: the only difference is two added lines
+per ship, `Ship visual:` and `Ship camera:`, and the thruster array's inertia line is identical. The
+maps have no light but the cabin lamp, so from outside the hull is expected to read almost black.
 
 **Stage 5 itself changed no existing file** — seven files added, none modified, none removed.
 Checkpoint 8's two fixes then did: F1 changed `SFTestStation.cpp` and `SFTestShip.cpp`, F2 changed
@@ -901,6 +910,27 @@ Things in the code that look like mistakes and are not:
   - A side effect worth knowing: a headless undock happens on the first frame, before the pawn
     has landed after spawning, and a downward thrust used to outrun his fall so that he never
     found the floor. The release gives him that second.
+
+- **A 49 m ship with an 8 m physics body, and no collision on the model.** `ASFTestShip::Visual`
+  is `NoCollision` and creates no physics state, so the hull's body is still the rig's 8 m box
+  and every figure resting on `inertia (533333, 533333, 533333)` stands. Welding the model's
+  collision into the hull would change the inertia the allocator and the IFCS fly with, a convex
+  hull of it would close over the hatch and the tunnel, and since F1 the station is a physical
+  body that a 49 m hull would meet on every approach. The cost is known and deliberate: two ships
+  collide only when their 8 m boxes touch, by which time the pictures have passed through each
+  other -- and the pirate is the same class with the same model. The target drone's 30 m orbit
+  also passes partly inside the picture. Giving physics the ship's real size is a decision and a
+  measurement of its own.
+- **A chase camera bolted to the hull, with no spring arm and no lag.** A lag smooths over the
+  frame time, so how far the picture trailed the ship would depend on the frame rate -- the class
+  of failure this project keeps meeting. The distance is derived, not tuned: the sphere through the
+  model's bounding-box corners (30.8 m about `(11.62, 0, 0.93)` m) just fits the camera's vertical
+  field, `R / sin(58.7° / 2)` = 62.8 m (`StarForge::View::FitSphereDistance`, the sine because a
+  sphere seen from a finite distance fills the cone tangent to it). The local player keeps the
+  vertical field by default (`AspectRatio_MaintainYFOV`), so the fit holds in any landscape window.
+  The elevation, 20°, is the one assigned number, for the owner's convenience. The pose is computed
+  at `BeginPlay` from the mesh the ship actually loaded, so a re-exported model moves the camera
+  with it, and the `Ship camera:` line reads the figures back from the component.
 
 When reading the checkpoint HUD: **check the measured-time line before the drift
 figure.** A drift of zero is what both a perfect minute and a dead instrument look
