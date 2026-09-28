@@ -6,7 +6,7 @@
 #include "Ship/SFGunnerStationComponent.h"
 #include "Ship/SFTargetDrone.h"
 #include "Ship/SFTestShip.h"
-#include "Ship/SFTestStation.h"
+#include "Ship/SFDockingStation.h"
 #include "StarForgeLog.h"
 
 namespace
@@ -74,11 +74,13 @@ void USFAutomationOperatorComponent::PollAimAtCommand()
 	const TCHAR* SoughtClass = nullptr;
 	if (Command.Equals(TEXT("station"), ESearchCase::IgnoreCase))
 	{
-		SoughtClass = TEXT("ASFTestStation");
-		for (TActorIterator<ASFTestStation> It(GetWorld()); It; ++It)
+		// Any docking station, the first by name. The miss says "docking station" now, not
+		// ASFTestStation: no evidence log carries the old text (station-kit plan, task 5).
+		SoughtClass = TEXT("docking station");
+		const TArray<AActor*> Stations = ISFDockingStation::FindAll(GetWorld(), Owner);
+		if (Stations.Num() > 0)
 		{
-			ConsoleTarget = *It;
-			break;
+			ConsoleTarget = Stations[0];
 		}
 	}
 	else if (Command.Equals(TEXT("ship"), ESearchCase::IgnoreCase))

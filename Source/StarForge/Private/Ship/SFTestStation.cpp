@@ -289,3 +289,12 @@ void ASFTestStation::BeginPlay()
 		Station::TunnelLengthCm,
 		Frame ? TEXT("present") : TEXT("MISSING"));
 }
+
+void ASFTestStation::GetDockingPorts(TArray<USFDockingPortComponent*>& Out) const
+{
+	Out.Reset();
+	if (DockingPort)
+	{
+		Out.Add(DockingPort.Get());
+	}
+}

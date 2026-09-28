@@ -8,7 +8,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFShipFrameComponent.h"
-#include "Ship/SFTestStation.h"
+#include "Ship/SFDockingStation.h"
 #include "Ship/SFThrusterArrayComponent.h"
 #include "ShipFrameMath.h"
 #include "StarForgeLog.h"
@@ -135,28 +135,25 @@ void USFDockingComponent::ResolvePorts()
 	Thrusters = Owner->FindComponentByClass<USFThrusterArrayComponent>();
 	Frame = Owner->FindComponentByClass<USFShipFrameComponent>();
 
-	// Counted rather than taken on the first hit. One station is the slice's assumption,
-	// not a fact the level enforces, and a second one would be chosen by iteration order --
-	// which is to say by nothing. The rule this wants eventually is "the nearest free port",
-	// and it is not written yet; until it is, the ambiguity is said out loud rather than
-	// resolved by accident.
-	int32 StationCount = 0;
+	// Every actor that says it is a docking station, by name (ISFDockingStation::FindAll), and its
+	// first port. One station and one port is all step 1 of the station kit has; the rule that
+	// chooses among several -- the nearest free port -- is its step 2, and until then a second
+	// station is said out loud rather than taken by accident.
+	const TArray<AActor*> Stations = ISFDockingStation::FindAll(GetWorld(), Owner);
 	FString ChosenName;
-	for (TActorIterator<ASFTestStation> It(GetWorld()); It; ++It)
+	if (Stations.Num() > 0)
 	{
-		if (StationCount == 0)
-		{
-			StationPort = It->GetDockingPort();
-			ChosenName = It->GetName();
-		}
-		++StationCount;
+		TArray<USFDockingPortComponent*> StationPorts;
+		Cast<ISFDockingStation>(Stations[0])->GetDockingPorts(StationPorts);
+		StationPort = StationPorts.Num() > 0 ? StationPorts[0] : nullptr;
+		ChosenName = Stations[0]->GetName();
 	}
-	if (StationCount > 1)
+	if (Stations.Num() > 1)
 	{
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Docking: [%s] %d stations in this level; '%s' was chosen by iteration order. ")
-			TEXT("Boarding will need the nearest free port instead, and that rule is unwritten."),
-			*Owner->GetName(), StationCount, *ChosenName);
+			TEXT("Docking: [%s] %d docking stations in this level; '%s' was taken first by name. ")
+			TEXT("The nearest free port is not chosen until step 2 of the station kit."),
+			*Owner->GetName(), Stations.Num(), *ChosenName);
 	}
 	bHasStation = StationPort != nullptr;
 

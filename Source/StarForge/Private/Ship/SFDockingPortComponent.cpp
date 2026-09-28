@@ -1,6 +1,8 @@
 #include "Ship/SFDockingPortComponent.h"
 
 #include "GameFramework/Actor.h"
+#include "Ship/SFDockingComponent.h"
+#include "Ship/SFDockingStation.h"
 #include "StarForgeLog.h"
 
 USFDockingPortComponent::USFDockingPortComponent()
@@ -33,4 +35,15 @@ void USFDockingPortComponent::BeginPlay()
 		GetOwner() ? *GetOwner()->GetActorNameOrLabel() : TEXT("nothing"),
 		Location.X, Location.Y, Location.Z,
 		Out.X, Out.Y, Out.Z, Up.X, Up.Y, Up.Z);
+
+	// A port nobody can use says so. It belongs to a station, which a hull docks to, or to a ship,
+	// whose docking component is what docks; anything else was built with a port and without the
+	// declaration that makes it a station, and every search for stations would pass it by in silence.
+	const AActor* Owner = GetOwner();
+	if (Owner && !Owner->Implements<USFDockingStation>() && !Owner->FindComponentByClass<USFDockingComponent>())
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Docking port on '%s' belongs to neither a docking station nor a docking ship: no hull can dock to it, and it docks to nothing."),
+			*Owner->GetName());
+	}
 }

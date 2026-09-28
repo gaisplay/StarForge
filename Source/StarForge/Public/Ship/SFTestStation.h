@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Ship/SFDockingStation.h"
 #include "SFTestStation.generated.h"
 
 class UPointLightComponent;
@@ -30,7 +31,7 @@ class USFShipFrameComponent;
  * there is no placed actor on which anything could be authored.
  */
 UCLASS()
-class STARFORGE_API ASFTestStation : public AActor
+class STARFORGE_API ASFTestStation : public AActor, public ISFDockingStation
 {
 	GENERATED_BODY()
 
@@ -43,6 +44,17 @@ public:
 
 	/** The station's half of the airlock, at the outboard mouth of the tunnel. */
 	USFDockingPortComponent* GetDockingPort() const { return DockingPort; }
+
+	/** Its one port. */
+	virtual void GetDockingPorts(TArray<USFDockingPortComponent*>& Out) const override;
+
+	virtual USFShipFrameComponent* GetStationFrame() const override { return Frame; }
+
+	/**
+	 * Nothing. The rig station has no line to reprint, and every figure the project has recorded
+	 * was taken on it: its log must not move by a character (station-kit spec 6.7 item 1).
+	 */
+	virtual void OnDockingPortChanged(USFDockingPortComponent* Port) override {}
 
 private:
 	/**

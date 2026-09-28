@@ -13,7 +13,7 @@
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFShipStationComponent.h"
 #include "Ship/SFTestShip.h"
-#include "Ship/SFTestStation.h"
+#include "Ship/SFDockingStation.h"
 #include "ShipFrameMath.h"
 #include "StarForgeLog.h"
 #include "Units.h"
@@ -431,10 +431,12 @@ void ASFCharacter::PollBindFrameCommand()
 	}
 	else if (Command.Equals(TEXT("station"), ESearchCase::IgnoreCase))
 	{
-		for (TActorIterator<ASFTestStation> It(GetWorld()); It; ++It)
+		// The first docking station by name, whatever its class: the kit's stations are not
+		// ASFTestStation, and a control that could not find them would prove nothing on them.
+		const TArray<AActor*> Stations = ISFDockingStation::FindAll(GetWorld(), this);
+		if (Stations.Num() > 0)
 		{
-			Frame = It->GetFrameComponent();
-			break;
+			Frame = Cast<ISFDockingStation>(Stations[0])->GetStationFrame();
 		}
 	}
 
