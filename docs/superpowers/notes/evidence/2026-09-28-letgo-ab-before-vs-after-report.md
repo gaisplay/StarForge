@@ -354,3 +354,13 @@ Runs: 113. DIFF 26, SAME 87
 - **Turret:** (24 -> 24)
   - 1: `LogStarForge: Turret: [Ship] gunned by automation | target (3546 -326 352) cm firing 1 | bearing yaw 18.9 pitch 1.4 deg | aim yaw 18.9 pitch 1.4 deg | ON TARGET`
   - 0: `LogStarForge: Turret: [Ship] gunned by automation | target (3542 -326 352) cm firing 1 | bearing yaw 18.9 pitch 1.4 deg | aim yaw 18.9 pitch 1.4 deg | ON TARGET`
+
+## Note added by the main session, 2026-09-28
+
+`2026-09-22-f2fix-F1-60` is listed above against its first replay, `now`, which the regression
+itself had found truncated at 964 lines (`Engine exit requested (reason: ConsoleCtrl RequestExit)`),
+so almost every family differs there. Compared instead with that command's complete second replay,
+`again`, the build with the let-go fix differs only by the one-frame shift: the station-bump
+knockdown stays `felt 42.01 m/s2`, at `t=5.18 s` before and `t=5.20 s` after (one frame at 60 fps),
+`Footing regained` 5.68 -> 5.70 s, and `Footing LOST` counts 1 and 1. So all 26 changed runs are
+the undock runs, each shifted by one frame, and no red counter moved in any of them.

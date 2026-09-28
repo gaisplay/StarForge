@@ -73,6 +73,18 @@ session that never ticked.
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=25 -ExecCmds="sf.FlightLog 1, sf.ShipProfile 0, sf.Intent.X 1" -log
 ```
 
+**A fixed step cannot fail on a whole class of defect, so run the same check with a variable step
+too.** Finding F4 (2026-09-27) passed every `-benchmark` run and knocked the owner down four times
+in one docking cycle by hand, because at a fixed step a one-frame second difference of a pose
+written from time is exact and under a varying one it is not. Drop `-benchmark` and `-fps` and
+keep `-seconds=N`: the run still ends cleanly, on real time (`LaunchEngineLoop.cpp` 4709,
+5692-5695). Uncapped and headless, the world step floors at 0.5 ms (`MinUndilatedFrameTime`) with
+sporadic longer frames, which is the regime such a defect shows in; `t.MaxFPS` paces the frames
+evenly and is no better than `-benchmark` for this. **Launch every background run hidden**
+(`Start-Process ... -WindowStyle Hidden` from PowerShell; `STARTUPINFO` with `SW_HIDE` from Python,
+because `-log` opens a console window), and give every wait loop a deadline and a condition the
+job itself is certain to write.
+
 **The drift line carries knocked-down time and a verdict.** `Shipboard drift: … skipped
 carries N, knocked down S s -- <verdict>`, where the verdict is `footing intact`,
 `KNOCKED DOWN: …`, `CARRY FAILED: …` or `knockdown off (sf.Knockdown 0)`. Under the
@@ -250,6 +262,9 @@ Console variables the rig understands:
 | `sf.KillThruster N [DelaySeconds]` | *(a command)* | Not a variable. Destroys thruster `N`, by its index in the ship data asset, on the player's ship (never an automated one), and rebuilds the array over the survivors. Runs once per entry, so twelve entries in one `-ExecCmds` list are twelve kills. The optional second argument delays the kill by that many seconds of game time, because every `-ExecCmds` entry runs on the first frame, before anything has spooled. Refuses with a `Warning` a thruster already destroyed, an index out of range, a malformed argument or a negative delay |
 | `sf.PlaceOffsetM` | *(empty)* | Metres the place rig moves its place along `+X`, on top of the authored origin. **A string variable, not a numeric one**: a `float` at 4.3e10 rounds in steps of about four kilometres, a quarter of the rig place's own extent. **Read once in `InitGame`, before the local player logs in and before `-ExecCmds` applies**, so it has to arrive as `"-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=45000000000"`, one `-ini` switch per variable. A value that does not parse is a `Warning` and the authored origin stands -- parsed through `FDefaultValueHelper::ParseDouble`, which validates the whole string, and never through `Atod`, which answers zero for a string with no number in it and cannot say so |
 | `sf.PlaceRadiusM` | *(empty)* | Metres of extent, **replacing** the authored radius rather than adding to it, because a control that could only grow a place could never ask for a smaller one. A second variable is needed because the two ceilings break on different inputs: the engine's on distance and the crossing budget on extent, and a control able to break only one cannot tell the two refusals apart |
+| `sf.FeltTimeBase` | 1 | 1: the felt acceleration is differenced on the motion's own time base -- a step simulated at both ends over the physics step, min(dt, `MaxPhysicsDeltaTime`); any other step between the middles of its frames (finding F4's fix, 2026-09-27). 0: both differences divided by the frame, exactly as before -- the negative control, with one `Warning` saying so. Under 0 the uncapped headless `sf.Dock 2` cycle knocks a standing man down again (5 of 5 runs), and so does one 50 ms frame at cruise (`felt 1359.85`). At a fixed step 0 and 1 print the same lines: 113 of 113 evidence commands compared. Read live |
+| `sf.Hitch <ms> [DelaySeconds]` | *(a command)* | Not a variable. Stalls the game thread once for that many milliseconds, after that many seconds of game time, so a run **without** `-benchmark` gets one long frame -- the only way to put a single frame longer than the physics step's 1/30 s among ordinary ones into a headless run (`-benchmark -fps=20` makes every frame that long). One line when it fires, reporting the frame that actually came out and the physics step it got. Under `-benchmark` the step stays fixed and the stall changes no figure; the line says so. Runs once per entry; refuses a malformed, non-positive or over-1000 ms value and a negative delay with a `Warning` |
+| `sf.FeltDebug` | 0 | 1: one `Felt debug [Ship]:` line per ship per frame with everything the felt acceleration was estimated from -- frame, clock, dt, divisor, the simulating flags at both ends, step kind, root to 1e-9 cm, displacement in µm, velocity and its stamp, spacing, acceleration, whether it was recomputed, and the body's own velocity -- so any step can be recomputed by hand. It found the let-go frame's lost snap (below). About 2000 lines a second at an uncapped rate: a diagnostic, never a default. The station is never logged. Read live |
 | `WorldBounds.DisableChecks` | 1 *(set by the project in `DefaultEngine.ini`)* | **The engine's own variable, not an `sf.*` one.** 1: nothing is destroyed at `KillZ` (−10 485.75 m) or outside the ±2⁴² cm world box. 0: both are back, so a hull flown 10.49 km down is destroyed without a word, and the `World bounds:` line goes out as an `Error` with `checks ON`. Read live by the engine at every `CheckStillInWorld`, and the line reports each change, so it can be typed mid-run. The entry below on `WorldBounds.DisableChecks` says why it is off |
 
 **Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
@@ -334,7 +349,7 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 **The vertical slice is finished and the second phase has begun. Stage 5 — the place as data —
 is written and measured on `feat/place-as-data`, its map and asset are made and accepted, and
-checkpoint 8 is ready to be taken by hand.** 105 headless tests (97 until F3's fix added eight), a clean rebuild with no warnings,
+checkpoint 8 is ready to be taken by hand.** 112 headless tests (105 until F4's fix added seven, 97 until F3's added eight), a clean rebuild with no warnings,
 and all four rigs green at 60 and 400 fps — the fourth now by its own map as well as by URL.
 
 **Stage 5 itself changed no existing file** — seven files added, none modified, none removed.
@@ -406,6 +421,21 @@ measured. The two entries below, on 2⁴² and on `WorldBounds.DisableChecks`, c
 6.3 s into a −Z flight at 16 m/s², below the knockdown limit. At 400 fps neither the drift gauge
 nor the carry watchdog says anything. The checks play no part in it: the runs behave the same
 with them on and off.
+
+**F4 was found by hand on 2026-09-27 and fixed the same day, and a second defect it uncovered on
+2026-09-28.** The owner, standing in the cabin at about 420 fps, was knocked down four times in
+one `sf.Dock 2` cycle -- at each end of the release and of the re-capture, `felt 20.22`-`23.74`
+against a true peak of 17.6 -- by the F3 fix's own eased moves. The felt figure divided the
+difference of two step-mean velocities by one frame instead of by the spacing of their middles,
+which over-reads a pose written from time by (1 + dt_prev/dt)/2; a physics body was always read
+exactly, except across a frame longer than 1/30 s, which read `felt 1359.85` at cruise once
+measured. The owner chose to put the instrument on the motion's own time base. The entry below on
+the time base says what it does; the let-go entry says what the per-frame instrument then found.
+Evidence `notes/evidence/2026-09-26-owner-R-release-by-hand.log` (the hand run, taken on the 27th
+and named -26 by its guide), `2026-09-27-f4-*` and `-f4fix-*`, `2026-09-28-letgo-*`; the account is
+in checkpoint 8's results form. **Still open from that run:** its R2, the sideways undock under
+thrust **standing**, was not taken by hand -- typed from the pilot's seat, `sf.Intent` is
+overridden by the seated player's stick.
 
 **Read `docs/superpowers/specs/2026-09-17-world-as-a-graph-of-places.md` before anything
 structural in the second phase**, and note that its §10.4 folds two ceilings into one comparison
@@ -565,7 +595,8 @@ Things in the code that look like mistakes and are not:
   on every carrier, deliberately: a location passes through that round trip as the doubles it
   already was, and differencing the root keeps *v* the velocity of the frame origin, which is
   what the handover maths composes ω against — `GetPhysicsLinearVelocity` would hand back the
-  centre of mass instead. And the two halves are now sampled differently, so on the frame of a
+  centre of mass instead, and nothing at all for a teleported kinematic hull. **What it is
+  divided by changed on 2026-09-27** (F4): see the entry on the time base below. And the two halves are now sampled differently, so on the frame of a
   collision `Footing LOST` reports the body's instantaneous turn in the hundreds of deg/s while
   the once-a-second `Flight:` line, sampled between impacts, reports tens. Both are right.
 
@@ -652,9 +683,11 @@ Things in the code that look like mistakes and are not:
     sideways, vertical and straight undocks are clean at both rates -- `footing intact`, `0.000
     cm`, `fwd 0.0 deg, up 0.0 deg` -- B1 passes again, and two figures this entry quotes above
     moved, both back towards what a hull clear of its dock should do. `sf.Dock 2` now reads
-    `releasing f1 → undocked f60/f401 → capturing 2.9 m, 0.0 m/s → docked`. Roll after undock
-    starts 2.93 m out and touches nothing: `155.1 → 179.4 → 180.0` at 400 fps with pitch and yaw
-    at `0.0`, the pre-(c) series. The F1 slow-intrusion control now begins 2.93 m out and flies
+    `releasing f1 → undocked f61/f402 → capturing 2.9 m, 0.0 m/s → docked` (f60/f401 until the
+    let-go learned to wait a tick on 2026-09-28; see the entry on it below). Roll after undock
+    starts 2.93 m out and touches nothing: `154.8 → 179.4 → 180.0` at 400 fps with pitch and yaw
+    at `0.0` (`155.1` until the let-go waited a tick on 2026-09-28: the spin starts one frame
+    later), the pre-(c) series. The F1 slow-intrusion control now begins 2.93 m out and flies
     back into the tunnel at 0.8 m/s: the hull still stops at the wall with no handover to the
     station, and the bump knocks a standing man down (0.5 s at 60 fps, 1.4 s at 400), which is
     O2's class and protocol, not a gate.
@@ -901,6 +934,53 @@ Things in the code that look like mistakes and are not:
   - A side effect worth knowing: a headless undock happens on the first frame, before the pawn
     has landed after spawning, and a downward thrust used to outrun his fall so that he never
     found the floor. The release gives him that second.
+
+- **The felt acceleration is differenced on the motion's own time base, not over one frame:
+  `StarForge::ShipFrame::EstimateStepVelocity` / `EstimateStepAcceleration`.** A step whose root
+  simulated at *both* its samples is divided by the physics step, min(dt, `MaxPhysicsDeltaTime`),
+  and stamped at its end; any other step -- a pose the code writes from time, and both switches,
+  the release's let-go and the capture's first frame -- is divided by dt and stamped at its middle;
+  the acceleration is the velocity change over the spacing of the stamps. It looks like two
+  estimators where one did. The one did not: `(v_n - v_(n-1)) / dt_n` is exact for a Chaos body,
+  which steps once a frame by semi-implicit Euler (`V += a h, X += V h`,
+  `PBDRigidsEvolutionGBF.cpp` 915-980), and wrong for a pose written from time, whose `dx/dt` is a
+  step's mean centred at its middle: it over-reads by (1 + dt_prev/dt)/2, and the release and
+  capture peak 10 % under the 19.62 limit, so one frame with dt_prev/dt above 1.23 knocks a man
+  down. Finding F4:
+  four knockdowns in one cycle by hand, knockdowns in 12 of 12 uncapped headless runs with a
+  release in them, 0 of 14 at a fixed or capped step. It is exact for a body only while physics steps in the frame's own dt: a frame
+  longer than 1/30 s is clamped (`ChaosScene.cpp` ~344), and the old form read one 50 ms stall at
+  cruise as `felt 1359.85` (`sf.Hitch 50`).
+  - **Bit for bit at a fixed step**, for steps of one kind: `FMath::Min(dt, max)` hands back dt,
+    `(dt - dt/2) + dt/2` is exact, and both divisions are written the old way. Holds under
+    `/fp:precise`, the editor target's setting. So `sf.FeltTimeBase 0` and `1` print the same
+    lines on all 113 headless evidence commands. What does move: the frame after a let-go (spaced
+    1.5 dt) and a capture's first frame (spaced dt/2), which now reads its true 6d/T² where it read
+    half. A capture begun **at speed** reads twice the old step, 2 v0/dt: the run-in starts from
+    rest whatever the approach speed, so that step is real, and only a run-in that starts from the
+    hull's own velocity removes it.
+  - Not the tool for impulses: a contact still decides a knockdown on one frame (O2), and the felt
+    figure still has no α × r term.
+  - Every check of a moving carrier must now also be run with a **variable** step; see the recipe
+    under the headless command near the top of this file.
+- **The release's last pose is written past the scene component's dead band, and the let-go waits
+  a tick: `TeleportDetachedRootExactly` and `bReleaseArrived` in `SFDockingComponent.cpp`.** A
+  helper that follows `SetActorTransform` with `SetRelativeLocation_Direct` looks like a workaround
+  nobody needed. `InternalSetWorldLocationAndRotation` changes nothing -- not the actor, not the
+  body -- when the new location `Equals` the old one per axis within `UE_KINDA_SMALL_NUMBER`,
+  1e-4 cm, and the rotation is unchanged (`SceneComponent.cpp` 3315-3317, `Vector.h` 371,
+  1599-1602). An eased move's last step is that
+  small at an uncapped ~2000 fps: `sf.FeltDebug` showed six releases of twelve losing it, 0.01-0.55
+  µm short, the other six moving 1.04-2.00 µm onto the target, and a path that loses its last step
+  loses its last deceleration -- one run read `felt 20.00` at the let-go. (Chaos's own 1 µm
+  leniency, the first suspect, only serves the rewind's desync test.) The helper finishes a
+  declined step with the two calls the engine makes after its test; it is used for the release's
+  final pose and for the capture's, before the attachment. The let-go then waits a tick so the
+  switch to simulation never shares a tick with a move. After it every uncapped release ended on
+  `-1292.820323028` cm and every cycle docked on `-1000.000000000`, max |a| 17.56. **What it moved:**
+  `undocked.` one frame later (f61 for f60 at 60 fps, f402 for f401 at 400) and `sf.Dock 2`'s
+  re-capture with it; 26 undock runs of 113 changed by exactly that shift and no red counter moved,
+  and their replays are the new baselines `notes/evidence/2026-09-28-letgo-rebase-*.log`.
 
 When reading the checkpoint HUD: **check the measured-time line before the drift
 figure.** A drift of zero is what both a perfect minute and a dead instrument look
