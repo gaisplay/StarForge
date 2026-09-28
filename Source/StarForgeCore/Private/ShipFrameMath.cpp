@@ -186,7 +186,8 @@ namespace StarForge::ShipFrame
 		// alone is the capture's first frame, whose travel is the run-in's first eased step: judged
 		// by its start it would be stamped at its end, the next kinematic middle half a frame
 		// later, and a capture from rest would read about twice its own 6d/T^2 -- 33.99 m/s2 at
-		// 60 fps against a 17.58 peak, on every capture.
+		// 60 fps against a 17.58 peak for the tests' 2.93 m (the rig's standoff is 2.928 m, peak
+		// 17.57), on every capture.
 		//
 		// Judged correctly, that first frame is, at a fixed step, the one frame spaced by less than
 		// the frame -- half of it -- and so the one that reads more than dividing by the frame did.

@@ -60,7 +60,7 @@ namespace
 	 * NewLocation.Equals(GetRelativeLocation()) and the rotation is unchanged
 	 * (SceneComponent.cpp 3315-3317), and Equals is per axis within UE_KINDA_SMALL_NUMBER, 1e-4 cm
 	 * (Vector.h 371, 1599-1602). An eased move's last step is that small at a high frame rate: at
-	 * an uncapped ~2000 fps six of twelve releases lost theirs, 0.04-0.55 um short of the target,
+	 * an uncapped ~2000 fps six of twelve releases lost theirs, 0.01-0.55 um short of the target,
 	 * and a path that loses its last step loses its last deceleration, which the felt figure -- a
 	 * second difference -- then reads as a velocity step (20.00 m/s2 in one run, over the 19.62
 	 * limit, on a release that peaks at 17.6). So a step the engine declines is finished with the
@@ -644,7 +644,7 @@ void USFDockingComponent::AdvanceRelease(double DeltaSeconds)
 		// was sometimes not made at all. Measured with sf.FeltDebug, the hull root to 1e-9 cm
 		// every frame, over twelve headless releases at an uncapped ~2000 fps: in six this step
 		// moved the hull 1.04-2.00 um and it ended exactly on ReleaseTarget; in the other six it
-		// did not move, 0.04-0.55 um short -- the scene component's 1e-4 cm dead band, which
+		// did not move, 0.01-0.55 um short -- the scene component's 1e-4 cm dead band, which
 		// TeleportDetachedRootExactly says how it is closed. (Chaos's own 1 um leniency,
 		// ParticleDirtyFlags.h 94-97, serves only the rewind's desync test, RewindData.h 845, and a
 		// kinematic SetGlobalPose has no early-out, ChaosEngineInterface.cpp 2544.) Relative is
