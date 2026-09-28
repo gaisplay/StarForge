@@ -1,7 +1,11 @@
 #include "Ship/SFShipFrameComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "HAL/IConsoleManager.h"
+#include "PhysicsEngine/PhysicsSettings.h"
+#include "Ship/SFTestShip.h"
 #include "ShipFrameMath.h"
 #include "StarForgeLog.h"
 #include "Units.h"
@@ -13,6 +17,88 @@ namespace
 	{
 		const UPrimitiveComponent* Root = Owner ? Cast<UPrimitiveComponent>(Owner->GetRootComponent()) : nullptr;
 		return (Root && Root->IsSimulatingPhysics()) ? Root : nullptr;
+	}
+
+	/**
+	 * The negative control for finding F4, declared here because this is the file that reads it.
+	 *
+	 * 0 divides both differences of the frame's position by the frame, as every run before
+	 * 2026-09-27 did, the way sf.DockRelease 0 brings back letting go at the docked pose. It must
+	 * bring the F4 knockdowns back -- an uncapped headless sf.Dock 2 cycle trips again under it --
+	 * or the time base is not what removed them. Read live every tick.
+	 */
+	TAutoConsoleVariable<int32> CVarFeltTimeBase(
+		TEXT("sf.FeltTimeBase"), 1,
+		TEXT("1: the felt acceleration is differenced on the motion's own time base -- a simulated step over the physics step, a kinematic one between the middles of its frames.\n")
+		TEXT("0: both differences divided by the frame, as before 2026-09-27 (the negative control for finding F4; over-reads a kinematic carrier under a variable step)."),
+		ECVF_Default);
+
+	/** F4's one knockdown left on a let-go, felt 20.00 where the release peaks at 17.58, lies outside the estimator's model, and only per-frame figures can say what moved the hull. */
+	TAutoConsoleVariable<int32> CVarFeltDebug(
+		TEXT("sf.FeltDebug"), 0,
+		TEXT("1: every tick of every ship's frame, one line with everything the felt acceleration was estimated from -- frame, clock, flags, root, displacement, velocity and its stamp, spacing, acceleration, and the body's own velocity -- so any step can be recomputed by hand.\n")
+		TEXT("0: nothing. Diagnostic only: a line per ship per frame. The station is never logged; it does not move. Read live."),
+		ECVF_Default);
+
+	/** What one tick's linear estimate used, held for sf.FeltDebug to print; the estimate reads none of it. */
+	struct FFeltDebugStep
+	{
+		bool bEstimated = false;
+		bool bSimulated = false;
+		bool bAccelNew = false;
+		FVector DisplacementMetres = FVector::ZeroVector;
+		double DivisorSeconds = 0.0;
+		double SpacingSeconds = 0.0;
+	};
+
+	/**
+	 * The value last announced in each world, shared by every frame component in it, so a change
+	 * is one line per world rather than one per carrier. A world starts from the default, so a
+	 * normal run says nothing and a world begun with the control already at 0 says so in its own
+	 * log. Kept per world and not once for the process: PIE runs several game worlds in one
+	 * process, their frame components tick in turn, and a single slot reset on every change of
+	 * world would repeat the 0 warning on every one of those turns -- twice a frame, for good.
+	 */
+	TMap<TWeakObjectPtr<UWorld>, int32> GAnnouncedFeltTimeBase;
+
+	void AnnounceFeltTimeBase(UWorld* World, int32 Value)
+	{
+		const TWeakObjectPtr<UWorld> Key(World);
+		int32* Announced = GAnnouncedFeltTimeBase.Find(Key);
+		if (!Announced)
+		{
+			// Worlds that have gone are forgotten before a new one is remembered, so the map holds
+			// the live ones and no more.
+			for (auto It = GAnnouncedFeltTimeBase.CreateIterator(); It; ++It)
+			{
+				if (!It.Key().IsValid())
+				{
+					It.RemoveCurrent();
+				}
+			}
+			Announced = &GAnnouncedFeltTimeBase.Add(Key, 1);
+		}
+
+		if (Value == *Announced)
+		{
+			return;
+		}
+		*Announced = Value;
+
+		if (Value != 0)
+		{
+			UE_LOG(LogStarForge, Display,
+				TEXT("Felt acceleration: sf.FeltTimeBase %d -- differenced on the motion's own time base: ")
+				TEXT("a simulated step over the physics step, a kinematic one between the middles of its frames."),
+				Value);
+		}
+		else
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Felt acceleration: sf.FeltTimeBase 0 -- divided by the frame, as before 2026-09-27. It over-reads ")
+				TEXT("a kinematic carrier under a variable step by (1 + dt_prev/dt)/2, so a knockdown on a docking ")
+				TEXT("release or capture may be false. The negative control for finding F4."));
+		}
 	}
 }
 
@@ -98,6 +184,35 @@ void USFShipFrameComponent::TickComponent(
 		AngularVelocityRadPerSec = SimulatingRoot->GetPhysicsAngularVelocityInRadians();
 	}
 
+	const int32 FeltTimeBase = CVarFeltTimeBase.GetValueOnGameThread();
+	AnnounceFeltTimeBase(GetWorld(), FeltTimeBase);
+	const bool bOnTimeBase = (FeltTimeBase != 0);
+
+	// The linear half below assumes physics steps once, by min(dt, MaxPhysicsDeltaTime), inside
+	// the frame's own dt. Async physics steps on its own clock and hands the game thread an
+	// interpolated pose; substepping takes several steps a frame. Either way dx is no longer one
+	// semi-implicit step and nothing below can recover the acceleration from it. Said only on a
+	// simulating carrier: a kinematic pose is written on the game thread against the game clock,
+	// and neither setting touches it. Both are off in this project, so a normal run says nothing.
+	if (bFromBody && !bWarnedPhysicsStepping)
+	{
+		const UPhysicsSettings* PhysicsConfig = UPhysicsSettings::Get();
+		if (PhysicsConfig->bTickPhysicsAsync || PhysicsConfig->bSubstepping)
+		{
+			bWarnedPhysicsStepping = true;
+			const AActor* Owner = GetOwner();
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Frame [%s]: physics runs with %s, so a simulated step is not one physics step of the frame's own dt. ")
+				TEXT("The felt acceleration differenced here is not trustworthy on this carrier, and neither is a knockdown decided on it."),
+				Owner ? *Owner->GetActorNameOrLabel() : TEXT("none"),
+				(PhysicsConfig->bTickPhysicsAsync && PhysicsConfig->bSubstepping) ? TEXT("bTickPhysicsAsync and bSubstepping")
+					: PhysicsConfig->bTickPhysicsAsync ? TEXT("bTickPhysicsAsync")
+					: TEXT("bSubstepping"));
+		}
+	}
+
+	FFeltDebugStep FeltDebug;
+
 	if (bHasSample && DeltaTime > UE_SMALL_NUMBER)
 	{
 		if (!SimulatingRoot)
@@ -123,29 +238,148 @@ void USFShipFrameComponent::TickComponent(
 
 		// Metres from here on: the one crossing of the unit boundary for this
 		// instrument. A second difference of position rather than a read of the body's
-		// velocity: Chaos at a fixed step integrates v += a dt and then x += v dt, so
-		// (x_n - x_{n-1}) / dt is v_n exactly and the difference of two of those is a_n
-		// exactly. It also works for an owner that is not a physics body, which the
-		// docking station of stage 3 will not be.
+		// velocity, for two reasons. A body teleported while kinematic reports a velocity
+		// of zero, so the docking capture and release would vanish from the instrument;
+		// and GetPhysicsLinearVelocity is the centre of mass's, where the handover maths
+		// composes w against the frame origin's.
 		//
 		// Differenced on every carrier, simulating or not, unlike the rotation above: the
 		// round trip that costs the rotation 0.081 deg at gimbal lock is through an
 		// FRotator, and a location passes through it as the doubles it already was.
+		//
+		// On the time base of whatever moved the carrier -- finding F4's fix, 2026-09-27.
+		// Chaos integrates v += a h and then x += v h, so dx / h is v_n exactly and the
+		// difference of two of those is a_n exactly -- at ANY step, fixed or variable, so
+		// long as physics steps once in the frame, by the frame's own dt. Two things break
+		// that; divided by the frame, the first has knocked a man down and the second is
+		// predicted to:
+		//  - a kinematic carrier, whose pose is written against accumulated time: the
+		//    docking release and capture. dx / dt is then the frame's MEAN velocity, which
+		//    belongs to the frame's middle, and the difference of two means divided by dt_n
+		//    instead of the (dt_n + dt_{n-1}) / 2 between their middles over-reads by
+		//    (1 + dt_{n-1}/dt_n) / 2. At about 420 fps by hand the owner was knocked down
+		//    four times in one sf.Dock 2 cycle, at 20.2-23.7 m/s2, by a release that peaks
+		//    at 17.6; headless it tripped in 12 of 12 runs on a variable step and 0 of 14
+		//    on a fixed one, and every headless recipe here runs on a fixed one.
+		//  - a frame longer than MaxPhysicsDeltaTime, 1/30 s by default: physics advances
+		//    only h = min(dt, max) (ChaosScene.cpp 344), dx / dt under-reads v by h / dt,
+		//    and the next normal frame reads the recovery as a spike -- at 200 m/s a 40 ms
+		//    frame reads -833 and then +13 333 m/s2. Predicted, never measured; sf.Hitch
+		//    makes the long frame.
+		// So a simulated step is divided by h and stamped at its end, any other by the
+		// frame and stamped at its middle, and the second difference is taken between the
+		// stamps. A step counts as simulated only if the root simulated at both samples: the
+		// frame the release lets go on snaps the hull and switches simulation on in one
+		// pre-physics tick, and its travel is the snap. At a fixed step no longer than the
+		// physics maximum every figure is bit-identical to dividing by the frame except on
+		// the frame or two either side of such a switch; ShipFrameMath.cpp says why.
+		//
+		// One of those frames reads MORE than it did, and it is the capture's first. The
+		// run-in's smoothstep starts from rest whatever the hull was doing, so a capture
+		// begun at speed steps the velocity inside that frame, and the spacing from the last
+		// simulated end to the first kinematic middle is half the frame: the step reads at
+		// twice what dividing by the frame read. From 2.93 m out, the approach that knocks a
+		// standing man down falls from 0.47 to 0.31 m/s at 60 fps and from 0.068 to 0.044 at
+		// 420. The step is real -- the capture does stop the hull within a frame -- and any
+		// reading of it grows with the frame rate; the cure is a run-in that starts from the
+		// hull's own velocity, which leaves nothing to read, not another spacing here.
 		const FVector DeltaCm = Current.GetLocation() - LastSampledTransform.GetLocation();
-		const FVector VelocityMetersPerSec(
-			StarForge::Units::CmToMetres(DeltaCm.X) / DeltaTime,
-			StarForge::Units::CmToMetres(DeltaCm.Y) / DeltaTime,
-			StarForge::Units::CmToMetres(DeltaCm.Z) / DeltaTime);
 
-		if (bHasVelocitySample)
+		StarForge::ShipFrame::FFrameStep Step;
+		Step.DisplacementMetres = FVector(
+			StarForge::Units::CmToMetres(DeltaCm.X),
+			StarForge::Units::CmToMetres(DeltaCm.Y),
+			StarForge::Units::CmToMetres(DeltaCm.Z));
+		Step.FrameSeconds = DeltaTime;
+
+		// sf.FeltTimeBase 0 is the estimator as it was, and that is this one under the
+		// assumption it was written on: every step one unclamped Chaos step of the frame.
+		Step.bSimulatingAtStart = bOnTimeBase ? bLastSampleSimulating : true;
+		Step.bSimulatingAtEnd = bOnTimeBase ? bFromBody : true;
+		const double MaxPhysicsStepSeconds = bOnTimeBase ? UPhysicsSettings::Get()->MaxPhysicsDeltaTime : 0.0;
+
+		StarForge::ShipFrame::FFrameVelocity Estimate;
+		if (StarForge::ShipFrame::EstimateStepVelocity(Step, MaxPhysicsStepSeconds, Estimate))
 		{
-			LinearAccelMetersPerSecSq = (VelocityMetersPerSec - LinearVelocityMetersPerSec) / DeltaTime;
+			// The divisor here and the spacing below repeat the two functions' own rules for the log
+			// alone, because neither hands them back; keep them in step with ShipFrameMath.cpp.
+			FeltDebug.bEstimated = true;
+			FeltDebug.DisplacementMetres = Step.DisplacementMetres;
+			FeltDebug.bSimulated = Step.bSimulatingAtStart && Step.bSimulatingAtEnd;
+			FeltDebug.DivisorSeconds = (FeltDebug.bSimulated && MaxPhysicsStepSeconds > 0.0)
+				? FMath::Min(Step.FrameSeconds, MaxPhysicsStepSeconds)
+				: Step.FrameSeconds;
+
+			// Never across a change of sf.FeltTimeBase: the previous stamp was set by the
+			// other rule, and switching the control on in the middle of a release would read
+			// a kinematic carrier at twice its acceleration for a frame -- over the limit at
+			// the release's own peak. The figure already held stands for that frame.
+			if (bHasVelocitySample && bOnTimeBase == bLastVelocityOnTimeBase)
+			{
+				StarForge::ShipFrame::FFrameVelocity Previous;
+				Previous.VelocityMetresPerSec = LinearVelocityMetersPerSec;
+				Previous.StampOffsetSeconds = LastVelocityStampOffsetSeconds;
+
+				FeltDebug.SpacingSeconds =
+					(static_cast<double>(DeltaTime) + Estimate.StampOffsetSeconds) - Previous.StampOffsetSeconds;
+
+				FVector AccelMetersPerSecSq = FVector::ZeroVector;
+				if (StarForge::ShipFrame::EstimateStepAcceleration(Previous, Estimate, DeltaTime, AccelMetersPerSecSq))
+				{
+					LinearAccelMetersPerSecSq = AccelMetersPerSecSq;
+					FeltDebug.bAccelNew = true;
+				}
+			}
+
+			LinearVelocityMetersPerSec = Estimate.VelocityMetresPerSec;
+			LastVelocityStampOffsetSeconds = Estimate.StampOffsetSeconds;
+			bLastVelocityOnTimeBase = bOnTimeBase;
+			bHasVelocitySample = true;
+		}
+	}
+
+	// Before the sample is replaced, so the start flag printed is the one this step was judged by.
+	const AActor* FeltDebugOwner = GetOwner();
+	if (CVarFeltDebug.GetValueOnGameThread() != 0 && FeltDebugOwner && FeltDebugOwner->IsA<ASFTestShip>())
+	{
+		const FVector RootCm = Current.GetLocation();
+		const FVector DisplacementMicrometres = FeltDebug.DisplacementMetres * 1.0e6;
+
+		FString BodyVelocity = TEXT("not simulating");
+		if (SimulatingRoot)
+		{
+			const FVector BodyCmPerSec = SimulatingRoot->GetPhysicsLinearVelocity();
+			BodyVelocity = FString::Printf(TEXT("(%.9f, %.9f, %.9f) m/s"),
+				StarForge::Units::CmToMetres(BodyCmPerSec.X),
+				StarForge::Units::CmToMetres(BodyCmPerSec.Y),
+				StarForge::Units::CmToMetres(BodyCmPerSec.Z));
 		}
 
-		LinearVelocityMetersPerSec = VelocityMetersPerSec;
-		bHasVelocitySample = true;
+		UE_LOG(LogStarForge, Display,
+			TEXT("Felt debug [%s]: frame %llu, t %.6f s, dt %.6f ms, divisor %.6f ms, simulating %d -> %d, step %s, ")
+			TEXT("root (%.9f, %.9f, %.9f) cm, dx (%.6f, %.6f, %.6f) um, v (%.9f, %.9f, %.9f) m/s, stamp %.6f ms, ")
+			TEXT("spacing %.6f ms, a (%.6f, %.6f, %.6f) |a| %.6f m/s2 %s, body v %s, sf.FeltTimeBase %d"),
+			*FeltDebugOwner->GetActorNameOrLabel(),
+			GFrameCounter,
+			GetWorld()->GetTimeSeconds(),
+			static_cast<double>(DeltaTime) * 1000.0,
+			FeltDebug.DivisorSeconds * 1000.0,
+			bLastSampleSimulating ? 1 : 0,
+			bFromBody ? 1 : 0,
+			!FeltDebug.bEstimated ? TEXT("none") : FeltDebug.bSimulated ? TEXT("simulated") : TEXT("kinematic"),
+			RootCm.X, RootCm.Y, RootCm.Z,
+			DisplacementMicrometres.X, DisplacementMicrometres.Y, DisplacementMicrometres.Z,
+			LinearVelocityMetersPerSec.X, LinearVelocityMetersPerSec.Y, LinearVelocityMetersPerSec.Z,
+			LastVelocityStampOffsetSeconds * 1000.0,
+			FeltDebug.SpacingSeconds * 1000.0,
+			LinearAccelMetersPerSecSq.X, LinearAccelMetersPerSecSq.Y, LinearAccelMetersPerSecSq.Z,
+			LinearAccelMetersPerSecSq.Size(),
+			FeltDebug.bAccelNew ? TEXT("new") : TEXT("held"),
+			*BodyVelocity,
+			FeltTimeBase);
 	}
 
 	LastSampledTransform = Current;
+	bLastSampleSimulating = bFromBody;
 	bHasSample = true;
 }

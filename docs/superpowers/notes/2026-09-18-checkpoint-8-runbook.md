@@ -179,8 +179,8 @@ LogStarForge: Warning: Place rig: scripted profile off; place 'OpenSpace' read f
 | Ветка | `git branch --show-current` → `feat/place-as-data` |
 | Коммит | `git rev-parse --short HEAD`: записать в бланк, каким бы он ни был |
 | Дерево | `git status --short`: только файлы владельца (`.agents/`, `.claude/`, `.codex/hooks.json`, `.codex/config.toml`) и, после шага 0, два новых файла контента |
-| Старые файлы | `git diff --diff-filter=MDR main -- Source/ Config/ Content/` — ровно восемь: `Source/StarForge/Private/Ship/SFTestStation.cpp` и `SFTestShip.cpp` (физика станции, F1, 2026-09-22); `SFDockingComponent.h`, `SFDockingComponent.cpp`, `Debug/SFFrameDriftHUD.cpp`, `StarForgeCore/Public/DockingMath.h`, `Private/DockingMath.cpp`, `Private/Tests/DockingMathTest.cpp` (отход, F3, 2026-09-25; `SFTestShip.cpp` тронут и там). Любой девятый — находка |
-| Тесты | **105 / 0**: прогнать командой ниже и считать по её журналу (97 до починки F3, которая добавила восемь) |
+| Старые файлы | `git diff --diff-filter=MDR main -- Source/ Config/ Content/` — ровно восемь: `Source/StarForge/Private/Ship/SFTestStation.cpp` и `SFTestShip.cpp` (физика станции, F1, 2026-09-22); `SFDockingComponent.h`, `SFDockingComponent.cpp`, `Debug/SFFrameDriftHUD.cpp`, `StarForgeCore/Public/DockingMath.h`, `Private/DockingMath.cpp`, `Private/Tests/DockingMathTest.cpp` (отход, F3, 2026-09-25; `SFTestShip.cpp` тронут и там). Любой девятый — находка. **С 2026-09-26 — девять:** ещё `Config/DefaultEngine.ini` (`WorldBounds.DisableChecks=1`). **С 2026-09-27 (F4) — тринадцать:** ещё `Ship/SFShipFrameComponent.h`, `SFShipFrameComponent.cpp`, `StarForgeCore/Public/ShipFrameMath.h`, `Private/ShipFrameMath.cpp`; `SFDockingComponent.h`/`.cpp` тронуты и там. Новые `Debug/SFHitchCommand.cpp` и `Tests/FeltTimeBaseTest.cpp` этот фильтр не показывает. Любой четырнадцатый — находка |
+| Тесты | **105 / 0**: прогнать командой ниже и считать по её журналу (97 до починки F3, которая добавила восемь). **С 2026-09-27 — 112 / 0**: семь тестов `StarForge.Core.ShipFrame.TimeBase.*` из починки F4 |
 
 Каждый запуск движка перезаписывает `Saved/Logs/StarForge.log`, в том числе редактор в шаге 0.
 Поэтому тесты гоняются здесь, а не берутся из прошлого прогона:
@@ -190,13 +190,13 @@ LogStarForge: Warning: Place rig: scripted profile off; place 'OpenSpace' read f
 ```
 
 ```bash
-grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log   # 105
+grep -c "Test Completed. Result={Success}" Saved/Logs/StarForge.log   # 112 (105 до F4)
 grep -c "Test Completed. Result={Fail}" Saved/Logs/StarForge.log      # 0
 grep "TEST COMPLETE. EXIT CODE:" Saved/Logs/StarForge.log             # EXIT CODE: 0
 ```
 
-**Ожидается 105: 97 этапа 5 и восемь тестов отхода из починки F3 (2026-09-25).** До починки ожидалось
-97, а не 96, как написано в разделе «Числа этапа» плана. План считал 88 + 8; девятый
+**Ожидается 112: 97 этапа 5, восемь тестов отхода из починки F3 (2026-09-25) и семь
+`StarForge.Core.ShipFrame.TimeBase.*` из починки F4 (2026-09-27).** До починки F3 ожидалось 97, а не 96, как написано в разделе «Числа этапа» плана. План считал 88 + 8; девятый
 тест, `TheDefaultLimitsAreTheSpecsNumbers`, появился из прогона мутанта M2, который до него не убил
 никого. Разбор — в задаче 2, шаг 6 плана; таблица девяти мутантов перенесена в бланк.
 
@@ -498,8 +498,11 @@ Dock: [Ship] releasing, 2.93 m along the port axis over 1.0 s, peak 17.6 m/s2.
 
 и корабль секунду плавно отходит от станции прямо по оси порта; ручка в это время не отвечает, как
 при доводке, а панель пишет `dock    releasing 0.4 of 1.0 s` белым. Стоящего это не сбивает: пик
-17.6 м/с² ниже потолка 19.62. Через секунду обязано появиться `Dock: [Ship] undocked.`, а **сразу за
-ней** —
+17.6 м/с² ниже потолка 19.62. *(Поправка 2026-09-27: это было верно только на ровном шаге. В окне без
+ограничения кадров до починки F4 стоящего сбивало на концах отхода и доводки, хотя пик и ниже потолка:
+прибор делил разность скоростей на длину кадра. После починки фраза снова верна, и проверяется это
+разделом «Перепроверка руками после F4» ниже.)* Через секунду обязано появиться `Dock: [Ship] undocked.`,
+а **сразу за ней** —
 
 ```
 Frame [Ship]: angular velocity read from the simulating body.
@@ -749,6 +752,187 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 
 **Счётчики повторяющихся строк сравниваются внутри частоты, а не поперёк неё.** Односекундная строка
 на семидесятисекундном прогоне ловит границу по-разному: 70 против 69. Это никогда не было находкой.
+
+---
+
+## Перепроверка руками после F4 (~15 минут, три запуска в окне)
+
+**Зачем руками.** Находка F4 ([бланк](2026-09-18-checkpoint-8-results.md), «Находка F4») живёт только
+при **неровном** кадре. `-benchmark` задаёт ровный шаг и провалиться на ней не может. `t.MaxFPS` держит темп
+ровно и тоже не может. Нашёл её прогон владельца 2026-09-27 в окне без ограничения кадров, около 420 fps.
+До починки единственный цикл `sf.Dock 2` в окне, снятый владельцем, дал сбивание на всех четырёх концах
+из четырёх, а безголовый переменный шаг — сбивание в 12 прогонах из 12. После починки безголово — 0 в 17 прогонах. Осталось увидеть то же руками. Р1 —
+повтор проваленного шага, Р2 — шаг, который 27-го не состоялся, К — отрицательный контроль, без которого
+чистый Р1 ничего не доказывает.
+
+**Запускать без `-benchmark` и без `t.MaxFPS`**: частота кадров должна быть свободной, иначе
+перепроверка меряет не тот режим. Редактор закрыт. Тесты — **112 / 0** (раздел «Проверить перед
+запуском»). Из PowerShell, по одной команде:
+
+```powershell
+Set-Location F:\UEProject\StarForge
+```
+
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" --% "F:\UEProject\StarForge\StarForge.uproject" -ExecCmds="Automation RunTests StarForge.Core;Quit" -unattended -nopause -nullrhi -nosplash -log
+```
+
+```powershell
+(Select-String -Path Saved\Logs\StarForge.log -Pattern "Test Completed. Result={Success}" -SimpleMatch).Count
+```
+
+Обязано быть 112.
+
+```powershell
+(Select-String -Path Saved\Logs\StarForge.log -Pattern "Test Completed. Result={Fail}" -SimpleMatch).Count
+```
+
+Обязано быть 0.
+
+**Каждый из трёх запусков — одна и та же команда**, стенд места по карте:
+
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" --% "F:\UEProject\StarForge\StarForge.uproject" /Game/Maps/L_Place -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1, sf.DriftDebug 1"
+```
+
+`sf.DriftDebug 1` нужен ради `dt` в строках `Drift debug` — частоту кадров каждого запуска записать в бланк.
+**Журнал копировать сразу после каждого запуска, до следующего.**
+
+### Р1: цикл `sf.Dock 2` стоя
+
+1. **Стоять в каюте, не садиться.** Кресло держит консольный оператор (по умолчанию). Дождаться на панели
+   `dock    docked` и `footing  intact`.
+2. Открыть консоль (`F1`), набрать, закрыть консоль и не трогать клавиатуру:
+
+   ```
+   sf.Dock 2
+   ```
+
+   Отход, пауза, доводка и `docked.` занимают около трёх секунд.
+3. Выйти (`quit` в консоли или закрыть окно) и скопировать журнал:
+
+   ```powershell
+   Copy-Item Saved\Logs\StarForge.log docs\superpowers\notes\evidence\<дата>-checkpoint-8-F4-R1-cycle-standing.log
+   ```
+
+**Стоп-ворота Р1.** Команда ниже выводит пять строк: первая — `Dock: [Ship] docked.` на кадре 0 (стенд
+ставит корабль в док до начала игры), за ней четыре строки цикла, по порядку:
+
+```
+Dock: [Ship] releasing, 2.93 m along the port axis over 1.0 s, peak 17.6 m/s2.
+Dock: [Ship] undocked.
+Dock: [Ship] capturing, 2.9 m, 0.0 m/s, fwd 0.0 deg, up 0.0 deg
+Dock: [Ship] docked.
+```
+
+```powershell
+Select-String -Path Saved\Logs\StarForge.log -Pattern "Dock: \[Ship\] (releasing,|undocked\.|capturing,|docked\.)"
+```
+
+И **ни одного** `Footing LOST` за цикл:
+
+```powershell
+(Select-String -Path Saved\Logs\StarForge.log -Pattern "Footing LOST" -SimpleMatch).Count
+```
+
+Обязано быть 0. Сверх этого: за `undocked.` — `Frame [Ship]: angular velocity read from the simulating body.`,
+за `capturing` — `… differenced from the transform -- no simulating body.`. **Строки `Felt acceleration:` в
+этом журнале быть не должно вовсе**: при умолчании прибор молчит, и её появление значит, что
+`sf.FeltTimeBase` кто-то сдвинул.
+
+### Р2: отход вбок стоя, под тягой
+
+**Стоя, не в кресле.** В кресле пост держит игрок, его ручка перекрывает `sf.Intent`, и команда не доходит
+до двигателей. Ровно так 27-го этот шаг и не состоялся: `sf.Intent.X 1` набран сидя, и все строки `Flight:`
+тех секунд читают `flown by player | intent lin (0.00 0.00 0.00)`.
+
+1. Новый запуск той же командой. Стоять в каюте; панель пишет `flown by console (standing down)`.
+2. Консоль:
+
+   ```
+   sf.Dock 0
+   ```
+
+3. Дождаться `free`: секунда отхода, затем `Dock: [Ship] undocked.`, и с ним корабль уже свободен. На
+   панели строка `dock` начинается с `free`, а в секундной строке журнала стоит
+   `Dock: [Ship] free | port 2.9 m …`.
+4. Консоль:
+
+   ```
+   sf.Intent.X 1
+   ```
+
+   Выждать три секунды.
+5. Консоль:
+
+   ```
+   sf.Intent.X 0
+   ```
+
+   С ассистом это торможение до нуля. Дождаться, пока строка `Flight:` покажет скорость около нуля, выйти и
+   скопировать журнал:
+
+   ```powershell
+   Copy-Item Saved\Logs\StarForge.log docs\superpowers\notes\evidence\<дата>-checkpoint-8-F4-R2-release-sideways-standing.log
+   ```
+
+**Стоп-ворота Р2.** Шаг засчитан, только если тяга действительно шла от `sf.Intent`: в журнале есть
+`sf.Intent.X = "1"`, а за ним строки `Flight: [Ship] flown by console | intent lin (1.00 0.00 0.00) …` с
+`accel 16.0 m/s2` на разгоне. `flown by player` здесь означает, что шаг снова снят сидя и не засчитан. Дальше
+— `releasing` → `undocked.` → `Frame [Ship] … read from the simulating body`, **ни одного** `Footing LOST`
+(та же команда `Select-String`, что в Р1), `skipped carries 0`, ни одного `Carry NOT RUNNING`.
+
+### К: отрицательный контроль — старая формула, руками
+
+**Без него чистый Р1 ничего не доказывает.** Цикл без сбиваний бывает и по другой причине: кадр в этой
+сессии шёл достаточно ровно. Контроль возвращает формулу до 2026-09-27 и обязан вернуть сбивание в тех же
+условиях. Безголово он так и делал на сборке правки A (e114e74), до правки отпускания (b3e43ca):
+переменный шаг, `sf.FeltTimeBase 0`, сбит в 5 прогонах из 5, в каждом — и в начале отхода (`t ≈ 0.1 s`). На текущей сборке
+контроль безголово не перепрогонялся.
+
+1. Новый запуск той же командой. Стоять в каюте, как в Р1.
+2. Консоль:
+
+   ```
+   sf.FeltTimeBase 0
+   ```
+
+   На следующем кадре в журнале обязано появиться `Warning`:
+
+   ```
+   Felt acceleration: sf.FeltTimeBase 0 -- divided by the frame, as before 2026-09-27. It over-reads a kinematic carrier under a variable step by (1 + dt_prev/dt)/2, so a knockdown on a docking release or capture may be false. The negative control for finding F4.
+   ```
+
+   **Это `Warning` законно только здесь.** В любом другом прогоне оно — находка: переменную оставили в 0.
+3. Консоль:
+
+   ```
+   sf.Dock 2
+   ```
+
+   Дождаться `docked.`.
+4. **Сбивание обязано вернуться хотя бы на одном из четырёх концов**: строка
+   `Footing LOST at t=… s, … felt N m/s2 over the 19.62 limit …` между `releasing` и `docked.`. Если за цикл
+   ни одной — набрать `sf.Dock -1`, затем снова `sf.Dock 2`: переменная действует по смене значения, и
+   повторное `sf.Dock 2` без `-1` ничего не делает (`sf.FeltTimeBase` при этом остаётся в 0). Сколько повторов считать достаточным, не
+   задано; записать в бланк, сколько сделано. **Если сбивание так и не вернулось, контроль ничего не
+   доказал, и Р1 на этой частоте кадров не засчитан.**
+5. Вернуть формулу, чтобы не забыть:
+
+   ```
+   sf.FeltTimeBase 1
+   ```
+
+   Ответ — `Felt acceleration: sf.FeltTimeBase 1 -- differenced on the motion's own time base: …`, уровнем
+   `Display`. Выйти и скопировать журнал:
+
+   ```powershell
+   Copy-Item Saved\Logs\StarForge.log docs\superpowers\notes\evidence\<дата>-checkpoint-8-F4-K-control-feltbase0.log
+   ```
+
+**Числа — в таблицу «Перепроверка руками после F4» в конце раздела F4 бланка**, строки стоп-ворот
+дословно, вместе с `dt` каждого запуска. Р4 (мгновенная повторная стыковка из кресла) в эту перепроверку
+не входит и остаётся открытым.
 
 ---
 
