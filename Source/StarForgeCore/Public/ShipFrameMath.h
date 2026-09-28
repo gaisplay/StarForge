@@ -144,4 +144,87 @@ namespace StarForge::ShipFrame
 		const FCarrierMotion& B,
 		const FVector& PointMetres,
 		double& OutSpeedMetresPerSec);
+
+	/**
+	 * One frame of a carrier's travel as its frame component samples it: how far the frame's
+	 * origin moved between two ticks, over how long, and whether Chaos was simulating the carrier
+	 * at each of the two samples. Metres and seconds.
+	 *
+	 * Two flags and not one, because the rule they feed is under test: a step is SIMULATED only if
+	 * the carrier was a simulating body at BOTH samples. The docking release lets go by snapping the
+	 * hull to its target and switching simulation on in the same pre-physics tick, so the step that
+	 * ends simulating began kinematic, and most of its travel is a teleport rather than an
+	 * integration. Judged by its end alone it would be divided by the physics step and stamped where
+	 * a physics step ends, and it is neither. The capture is the same switch the other way round:
+	 * one tick stops the simulation and makes the run-in's first eased step, so that step began
+	 * simulating and its travel is the eased step, and judged by its start alone it would be
+	 * stamped at its end.
+	 */
+	struct STARFORGECORE_API FFrameStep
+	{
+		FVector DisplacementMetres = FVector::ZeroVector;
+		double FrameSeconds = 0.0;
+		bool bSimulatingAtStart = false;
+		bool bSimulatingAtEnd = false;
+	};
+
+	/**
+	 * A velocity estimated from one frame, with the moment inside that frame it belongs to, given
+	 * as an offset from the frame's END: 0 for a simulated step, -FrameSeconds / 2 for any other.
+	 */
+	struct STARFORGECORE_API FFrameVelocity
+	{
+		FVector VelocityMetresPerSec = FVector::ZeroVector;
+		double StampOffsetSeconds = 0.0;
+	};
+
+	/**
+	 * The velocity one frame's travel implies, on the time base of whatever moved the carrier.
+	 *
+	 * A simulated step is one Chaos step of h = min(FrameSeconds, MaxPhysicsStepSeconds) -- the
+	 * engine's own clamp (ChaosScene.cpp 344), under which a non-positive maximum means unclamped --
+	 * and semi-implicit Euler, v += a h and then x += v h, makes dx / h the body's velocity at the
+	 * END of the step, exactly. Divided by the frame instead, a frame longer than the maximum
+	 * under-reads v by h / dt, and the next normal frame reads the recovery as a spike.
+	 *
+	 * Any other step was written by game code as a pose against accumulated time -- the docking
+	 * capture and release today, every moving station part tomorrow -- so dx / FrameSeconds is the
+	 * step's MEAN velocity, and a mean belongs to the MIDDLE of its step.
+	 *
+	 * Returns false and leaves Out untouched for a frame that is not a positive length: there is no
+	 * velocity in it, and the caller keeps the last one.
+	 */
+	STARFORGECORE_API bool EstimateStepVelocity(
+		const FFrameStep& Step,
+		double MaxPhysicsStepSeconds,
+		FFrameVelocity& Out);
+
+	/**
+	 * The acceleration between two consecutive estimates: their difference over the time between
+	 * their stamps, which is CurrentFrameSeconds + Current's offset - Previous's offset. Kinematic
+	 * at both ends that is (dt_n + dt_{n-1}) / 2, simulated at both it is dt_n.
+	 *
+	 * Between any two estimates, means or ends, that spacing makes the reading a weighted average of
+	 * the true acceleration whose weights are never negative and sum to at most one (less only on a
+	 * step the physics maximum clamped), so for a motion whose VELOCITY IS CONTINUOUS no frame
+	 * sequence can make it read above the motion's own peak. Divided by dt_n, as every run before
+	 * 2026-09-27 was, it over-reads by (1 + dt_{n-1} / dt_n) / 2 -- finding F4, which knocked a man
+	 * down on a release that peaks under the grav-plate limit.
+	 *
+	 * A velocity that steps has no peak to stay under. The docking capture is one: its run-in starts
+	 * from rest whatever the hull was doing, so a capture begun at speed is an impulse on its first
+	 * frame, which is a simulated-to-kinematic switch, spaced by half the frame -- and it reads at
+	 * twice what dividing by the frame read. EstimateStepVelocity's definition says why that is the
+	 * capture's to cure and not this function's.
+	 *
+	 * At a fixed step no longer than the physics maximum, a run of steps of one kind reads bit for
+	 * bit what dividing by the frame read; the definition says why.
+	 *
+	 * Returns false and leaves Out untouched when the spacing is not positive.
+	 */
+	STARFORGECORE_API bool EstimateStepAcceleration(
+		const FFrameVelocity& Previous,
+		const FFrameVelocity& Current,
+		double CurrentFrameSeconds,
+		FVector& OutAccelMetresPerSecSq);
 }
