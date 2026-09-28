@@ -51,6 +51,20 @@ namespace
 		TEXT("Read when the rig assembles itself, before -ExecCmds applies."),
 		ECVF_Default);
 
+	/**
+	 * Which place asset the rig reads, by its bare name in /Game/Places/ -- DA_Place_Berth, not a
+	 * path. A bare name because MSYS rewrites an argument of the form x=/path, and a path mangled on
+	 * the way in would refuse the place for a reason nobody typed. Empty keeps DA_Place_OpenSpace,
+	 * so the rig's default does not move by a line (station-kit spec 6.6).
+	 *
+	 * Read ONCE, in InitGame, for sf.PlaceOffsetM's reason: set it with
+	 * "-ini:Engine:[ConsoleVariables]:sf.PlaceAsset=DA_Place_Berth" on the command line.
+	 */
+	TAutoConsoleVariable<FString> CVarPlaceAsset(TEXT("sf.PlaceAsset"), TEXT(""),
+		TEXT("The place asset the place rig reads, by its bare name in /Game/Places/ (DA_Place_Berth). Empty: DA_Place_OpenSpace.\n")
+		TEXT("Read in InitGame, before -ExecCmds applies: set it with -ini on the command line."),
+		ECVF_Default);
+
 	namespace PlaceRig
 	{
 		/**
@@ -65,6 +79,9 @@ namespace
 
 		/** Where the asset is looked for, named once so the finder and the warning cannot drift. */
 		const TCHAR* AssetPath = TEXT("/Game/Places/DA_Place_OpenSpace.DA_Place_OpenSpace");
+
+		/** Where sf.PlaceAsset's bare names are looked for. */
+		const TCHAR* PlaceAssetDirectory = TEXT("/Game/Places");
 
 		/**
 		 * Reads a metre figure out of a string console variable.
@@ -156,6 +173,55 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 	PlaceRadiusMetres = PlaceRig::FallbackRadiusMetres;
 	PlaceCarriers.Reset();
 
+	PlaceShipStart = FSFShipStart();
+	AssetRefusal.Reset();
+	RequestedAssetName = CVarPlaceAsset.GetValueOnGameThread();
+
+	if (!RequestedAssetName.IsEmpty())
+	{
+		// A name, not a path. A slash means the value was meant as a path, which is exactly what
+		// this variable refuses to carry; refused rather than trimmed, because a trimmed value
+		// names a place nobody asked for.
+		if (RequestedAssetName.Contains(TEXT("/")) || RequestedAssetName.Contains(TEXT("\\")))
+		{
+			AssetRefusal = TEXT("not a bare asset name");
+		}
+		else
+		{
+			const FString ObjectPath = FString::Printf(TEXT("%s/%s.%s"),
+				PlaceRig::PlaceAssetDirectory, *RequestedAssetName, *RequestedAssetName);
+			if (USFPlaceDataAsset* Named = LoadObject<USFPlaceDataAsset>(nullptr, *ObjectPath, nullptr, LOAD_NoWarn))
+			{
+				PlaceData = Named;
+			}
+			else
+			{
+				AssetRefusal = TEXT("no such asset");
+			}
+		}
+	}
+
+	if (!AssetRefusal.IsEmpty())
+	{
+		// Refused before anything is measured, and nothing is put in its stead. The code-written
+		// place and DA_Place_OpenSpace are other places, and their figures, assembled under this
+		// name, would be credited to the asset that was asked for. No size line either: there is
+		// nothing to measure, and a size line here would describe the wrong place.
+		bPlaceMeasured = true;
+		bPlaceFits = false;
+		bPlaceFromAsset = false;
+
+		const FString What = (AssetRefusal == TEXT("no such asset"))
+			? FString::Printf(TEXT("names no place asset at %s/%s"), PlaceRig::PlaceAssetDirectory, *RequestedAssetName)
+			: FString(TEXT("is not a bare asset name"));
+
+		UE_LOG(LogStarForge, Error,
+			TEXT("Place rig: sf.PlaceAsset='%s' %s -- REFUSED before anything was measured; nothing will be ")
+			TEXT("assembled and the pawn class is withdrawn."),
+			*RequestedAssetName, *What);
+		return;
+	}
+
 	bPlaceFromAsset = (PlaceData != nullptr);
 	if (bPlaceFromAsset)
 	{
@@ -165,6 +231,7 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 		PlaceOriginMetres = PlaceData->OriginFromWorldOriginMetres;
 		PlaceRadiusMetres = PlaceData->RadiusMetres;
 		PlaceCarriers = PlaceData->Carriers;
+		PlaceShipStart = PlaceData->ShipStart;
 	}
 	else
 	{
@@ -397,6 +464,13 @@ void ASFPlaceGameMode::StartPlay()
 		}
 	}
 
+	// Hoisted: the free start is measured from it, and the rig line reads the ship back against it.
+	const FVector PlaceOriginCm(
+		StarForge::Units::MetresToCm(PlaceOriginMetres.X),
+		StarForge::Units::MetresToCm(PlaceOriginMetres.Y),
+		StarForge::Units::MetresToCm(PlaceOriginMetres.Z));
+	const bool bStartsFree = (PlaceShipStart.Mode == ESFShipStartMode::Free);
+
 	bool bDocked = false;
 	if (bPlaceFits)
 	{
@@ -408,14 +482,16 @@ void ASFPlaceGameMode::StartPlay()
 		// Spawned at the place's origin and immediately moved by the docking maths. The docked
 		// pose is not authored here for the loop rig's reason: it is derived from the two ports,
 		// so moving a wall or a port moves the docked ship with it, and a constant would
-		// silently stop tracking them.
-		const FVector PlaceOriginCm(
-			StarForge::Units::MetresToCm(PlaceOriginMetres.X),
-			StarForge::Units::MetresToCm(PlaceOriginMetres.Y),
-			StarForge::Units::MetresToCm(PlaceOriginMetres.Z));
+		// silently stop tracking them. A place that asks for a free start (station-kit spec 6.6)
+		// gets the pose it wrote, and nothing docks the ship.
+		const FTransform ShipSpawn = bStartsFree
+			? FTransform(PlaceShipStart.Rotation, PlaceOriginCm + FVector(
+				StarForge::Units::MetresToCm(PlaceShipStart.LocationInPlaceMetres.X),
+				StarForge::Units::MetresToCm(PlaceShipStart.LocationInPlaceMetres.Y),
+				StarForge::Units::MetresToCm(PlaceShipStart.LocationInPlaceMetres.Z)))
+			: FTransform(PlaceOriginCm);
 
-		Ship = World->SpawnActor<ASFTestShip>(
-			ASFTestShip::StaticClass(), FTransform(PlaceOriginCm), ShipParams);
+		Ship = World->SpawnActor<ASFTestShip>(ASFTestShip::StaticClass(), ShipSpawn, ShipParams);
 
 		// Before Super::StartPlay, exactly as on the loop rig: Super is what begins play on the
 		// world and spawns the pawn, and docking afterwards would put the pawn in the world while
@@ -423,16 +499,19 @@ void ASFPlaceGameMode::StartPlay()
 		// nothing deciding which of the two claimed him.
 		if (Ship && Ship->GetDocking())
 		{
-			Ship->GetDocking()->DockImmediately();
-
-			// Asked of the component afterwards rather than assumed from the call: docking
-			// immediately still has to resolve two ports, and a station that failed to spawn
-			// leaves it Free with the ship adrift at the place's origin.
-			bDocked = Ship->GetDocking()->IsDocked();
-			if (!bDocked)
+			if (!bStartsFree)
 			{
-				UE_LOG(LogStarForge, Error,
-					TEXT("Place rig: the ship did not dock and is adrift at the origin of the place."));
+				Ship->GetDocking()->DockImmediately();
+
+				// Asked of the component afterwards rather than assumed from the call: docking
+				// immediately still has to resolve two ports, and a station that failed to spawn
+				// leaves it Free with the ship adrift at the place's origin.
+				bDocked = Ship->GetDocking()->IsDocked();
+				if (!bDocked)
+				{
+					UE_LOG(LogStarForge, Error,
+						TEXT("Place rig: the ship did not dock and is adrift at the origin of the place."));
+				}
 			}
 		}
 		else
@@ -470,6 +549,19 @@ void ASFPlaceGameMode::StartPlay()
 				TEXT("the engine had none to spawn and nobody stands in an empty world measuring a ")
 				TEXT("place that does not exist"));
 
+		if (!AssetRefusal.IsEmpty())
+		{
+			// Its own line, because the size refusal's names the place and its size reason, and here
+			// there is neither: the place is OpenSpace only by default, and "none" is not a reason.
+			// The size refusal's line below stays as it was to the character -- the size controls of
+			// stage 5 and their evidence logs stand on it.
+			UE_LOG(LogStarForge, Error,
+				TEXT("Place rig: place asset '%s' REFUSED (%s) -- NOTHING WAS ASSEMBLED. No carriers, no ship, ")
+				TEXT("and %s."),
+				*RequestedAssetName, *AssetRefusal, *PawnText);
+			return;
+		}
+
 		UE_LOG(LogStarForge, Error,
 			TEXT("Place rig: place '%s' REFUSED (%s) -- NOTHING WAS ASSEMBLED. No carriers, no ship, ")
 			TEXT("and %s."),
@@ -490,7 +582,17 @@ void ASFPlaceGameMode::StartPlay()
 			// moved into the cabin here. That move is a genuine crossing of a frame boundary and
 			// produces the run's first Frame handover line -- Station -> Ship, zero centimetres,
 			// because neither carrier is moving.
-			const FVector Cabin = Ship->GetInteriorSpawnWorldLocation();
+			FVector Cabin = Ship->GetInteriorSpawnWorldLocation();
+			if (!PlaceShipStart.OccupantOffsetShipMetres.IsZero())
+			{
+				// In the ship's axes, so "towards the hatch wall" means the same whatever way the
+				// hull is turned. Added only when asked for: a zero added to a coordinate turns a
+				// -0.0 into +0.0, and the docked rig must stand him on the very point it did.
+				Cabin += Ship->GetActorQuat().RotateVector(FVector(
+					StarForge::Units::MetresToCm(PlaceShipStart.OccupantOffsetShipMetres.X),
+					StarForge::Units::MetresToCm(PlaceShipStart.OccupantOffsetShipMetres.Y),
+					StarForge::Units::MetresToCm(PlaceShipStart.OccupantOffsetShipMetres.Z)));
+			}
 			Pawn->SetActorLocation(Cabin);
 
 			// Read back for the same reason the profile is: the rig's closing line names where
@@ -546,6 +648,18 @@ void ASFPlaceGameMode::StartPlay()
 		bPawnBound ? TEXT("is bound to its frame")
 			: *FString::Printf(TEXT("is NOT BOUND to its frame (bound to %s)"), *BoundToName));
 
+	// Read back from the hull, not from the asset: a ship asked to start somewhere and standing
+	// somewhere else is exactly what this line exists to show.
+	FString ShipText = bDocked ? FString(TEXT("spawns docked")) : FString(TEXT("is ADRIFT"));
+	if (bStartsFree && Ship)
+	{
+		const FVector AtCm = Ship->GetActorLocation() - PlaceOriginCm;
+		ShipText = FString::Printf(TEXT("starts free at place-local (%.1f %.1f %.1f) m, as the place asks"),
+			StarForge::Units::CmToMetres(AtCm.X), StarForge::Units::CmToMetres(AtCm.Y),
+			StarForge::Units::CmToMetres(AtCm.Z));
+	}
+	const bool bShipWrong = bStartsFree ? (Ship == nullptr) : !bDocked;
+
 	// The startup line the runbook sends the operator to look for, and every state in it was read
 	// back rather than attempted. A rig which cannot verify its own setup is not an instrument.
 	const FString Report = FString::Printf(
@@ -554,10 +668,10 @@ void ASFPlaceGameMode::StartPlay()
 		*PlaceName.ToString(),
 		bPlaceFromAsset ? *PlaceData->GetName() : TEXT("a place written in code"),
 		*CarriersText,
-		bDocked ? TEXT("spawns docked") : TEXT("is ADRIFT"),
+		*ShipText,
 		*ManText);
 
-	if (!bProfileOff || bCarriersShort || !bDocked || !bPawnInCabin || !bPawnBound)
+	if (!bProfileOff || bCarriersShort || bShipWrong || !bPawnInCabin || !bPawnBound)
 	{
 		UE_LOG(LogStarForge, Error, TEXT("%s"), *Report);
 	}

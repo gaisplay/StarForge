@@ -71,6 +71,47 @@ struct STARFORGE_API FSFPlaceCarrier
 };
 
 /**
+ * How the player's ship begins on a place (station-kit spec 6.6).
+ *
+ * Docked is today's rig and the default, so every asset saved before this field existed reads
+ * exactly as it did: a UDataAsset does not serialise what equals its class defaults, and the
+ * default here is the old behaviour. Free exists for two controls that need a hull which is not
+ * at a port: the latent-F1 reproductions, a hull standing against the rig station's wall
+ * (N9, N9b), and the pier's all-ports-held control, a hull with nowhere to dock (N4).
+ */
+UENUM(BlueprintType)
+enum class ESFShipStartMode : uint8
+{
+	Docked,
+	Free
+};
+
+USTRUCT(BlueprintType)
+struct STARFORGE_API FSFShipStart
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category = "Ship start")
+	ESFShipStartMode Mode = ESFShipStartMode::Docked;
+
+	/** Free only: where the hull's pivot starts, in the PLACE's frame, in METRES. */
+	UPROPERTY(EditAnywhere, Category = "Ship start")
+	FVector LocationInPlaceMetres = FVector::ZeroVector;
+
+	/** Free only. */
+	UPROPERTY(EditAnywhere, Category = "Ship start")
+	FRotator Rotation = FRotator::ZeroRotator;
+
+	/**
+	 * Where the man is stood, from the cabin's spawn point, in the SHIP's axes and METRES, in either
+	 * mode. Zero by default. There is no headless walking in this project -- no sf.* moves the pawn
+	 * -- so a control that needs him against a cabin wall has to put him there.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Ship start")
+	FVector OccupantOffsetShipMetres = FVector::ZeroVector;
+};
+
+/**
  * A place as data: where it is, how big it is, what kind it is and who stands in it.
  *
  * Spec 5: the map is empty and stays the same; what changes is the assembly. Both existing
@@ -124,6 +165,10 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "StarForge|Place")
 	TArray<FSFPlaceCarrier> Carriers;
+
+	/** Docked by default: see FSFShipStart. */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Place")
+	FSFShipStart ShipStart;
 
 	/**
 	 * Replaces Carriers with the one the rig needs: an ASFTestStation at the place's origin.

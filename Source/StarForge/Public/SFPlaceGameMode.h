@@ -82,6 +82,20 @@ private:
 	UPROPERTY()
 	TArray<FSFPlaceCarrier> PlaceCarriers;
 
+	/** How the player's ship begins, read with the rest of the place in InitGame. */
+	UPROPERTY()
+	FSFShipStart PlaceShipStart;
+
+	/**
+	 * Why sf.PlaceAsset refused the place, or empty. Held here and not in EPlaceRefusal because it
+	 * is a fact about the engine's content, not about the size of a place -- the separation
+	 * bApproachMeasured keeps beside EDockingRefusal.
+	 */
+	FString AssetRefusal;
+
+	/** What sf.PlaceAsset asked for, printed back in both refusal lines. */
+	FString RequestedAssetName;
+
 	StarForge::Place::FPlaceFit PlaceFit;
 
 	/** False until InitGame has run, so the pawn hook can tell "refused" from "not yet asked". */
