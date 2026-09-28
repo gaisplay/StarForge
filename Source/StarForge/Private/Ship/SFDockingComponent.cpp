@@ -51,6 +51,40 @@ namespace
 		TEXT("1: undocking eases the hull out along the port's axis until it is clear of the station, then lets go. ")
 		TEXT("0: let go at the docked pose, as before (the negative control for checkpoint 8's F3)."),
 		ECVF_Default);
+
+	/**
+	 * Puts a DETACHED root exactly on a pose, even when the move is under a micrometre.
+	 *
+	 * SetActorTransform ends in InternalSetWorldLocationAndRotation, which changes nothing -- not
+	 * the relative location, not ComponentToWorld, not the body -- when
+	 * NewLocation.Equals(GetRelativeLocation()) and the rotation is unchanged
+	 * (SceneComponent.cpp 3315-3317), and Equals is per axis within UE_KINDA_SMALL_NUMBER, 1e-4 cm
+	 * (Vector.h 371, 1599-1602). An eased move's last step is that small at a high frame rate: at
+	 * an uncapped ~2000 fps six of twelve releases lost theirs, 0.04-0.55 um short of the target,
+	 * and a path that loses its last step loses its last deceleration, which the felt figure -- a
+	 * second difference -- then reads as a velocity step (20.00 m/s2 in one run, over the 19.62
+	 * limit, on a release that peaks at 17.6). So a step the engine declines is finished with the
+	 * two calls that function makes once its test passes (SceneComponent.cpp 3319, 3341); the
+	 * header asks callers not to use SetRelativeLocation_Direct, and no public move skips the test.
+	 * TeleportPhysics makes the propagation run whatever its own 1e-8 test says (SceneComponent.cpp
+	 * 815), so the pose reaches the kinematic body as every eased step does. Compared exactly, so a
+	 * move the engine made is left alone.
+	 *
+	 * Location only, and only for a detached root, where relative is world: both callers hold the
+	 * rotation constant at that step or set it through SetActorTransform first, and a rotation
+	 * under the rotator's tolerance moves no point of the hull by a measurable amount.
+	 */
+	void TeleportDetachedRootExactly(AActor& Owner, const FTransform& Pose)
+	{
+		Owner.SetActorTransform(Pose, /*bSweep=*/false, /*OutHit=*/nullptr, ETeleportType::TeleportPhysics);
+
+		USceneComponent* Root = Owner.GetRootComponent();
+		if (Root && !Root->GetAttachParent() && Root->GetComponentLocation() != Pose.GetLocation())
+		{
+			Root->SetRelativeLocation_Direct(Pose.GetLocation());
+			Root->UpdateComponentToWorld(EUpdateTransformFlags::None, ETeleportType::TeleportPhysics);
+		}
+	}
 }
 
 USFDockingComponent::USFDockingComponent()
@@ -369,9 +403,11 @@ void USFDockingComponent::CompleteCapture()
 	}
 
 	// Exactly the target, from the maths, not the last interpolated step. This pose is
-	// what the attachment freezes for as long as the ship stays docked.
-	Owner->SetActorTransform(
-		CaptureTarget, /*bSweep=*/false, /*OutHit=*/nullptr, ETeleportType::TeleportPhysics);
+	// what the attachment freezes for as long as the ship stays docked -- and "exactly" has
+	// to be enforced: a last step under a micrometre is declined by the scene component, which
+	// would dock the hull up to 1 um off its pose and lose the run-in's last deceleration
+	// (see TeleportDetachedRootExactly).
+	TeleportDetachedRootExactly(*Owner, CaptureTarget);
 
 	// Attached to the socket, keeping the world transform we have just set. From here the
 	// relative velocity is zero by construction rather than by convergence -- which is
@@ -540,6 +576,7 @@ bool USFDockingComponent::RequestUndock()
 	ReleaseTarget.AddToTranslation(AwayWorld * StarForge::Units::MetresToCm(StandoffMetres));
 
 	CaptureElapsedSeconds = 0.0;
+	bReleaseArrived = false;
 	State = ESFDockingState::Releasing;
 
 	// A non-positive CaptureSeconds is a one-frame jump, and the maths answers the largest
@@ -579,6 +616,21 @@ void USFDockingComponent::AdvanceRelease(double DeltaSeconds)
 		return;
 	}
 
+	if (bReleaseArrived)
+	{
+		// The tick after arrival, with the hull standing on ReleaseTarget and nothing moving
+		// it: the body starts simulating at rest, clear of the station, with nothing under its
+		// port face to drag across.
+		LetGo();
+
+		if (bAutoDockAfterRelease)
+		{
+			bAutoDockAfterRelease = false;
+			SecondsUntilAutoDock = CaptureSeconds;
+		}
+		return;
+	}
+
 	CaptureElapsedSeconds += DeltaSeconds;
 
 	const double Alpha = (CaptureSeconds > UE_DOUBLE_SMALL_NUMBER)
@@ -587,17 +639,31 @@ void USFDockingComponent::AdvanceRelease(double DeltaSeconds)
 
 	if (Alpha >= 1.0)
 	{
-		// Exactly the target, then let go: the body starts simulating at rest, clear of the
-		// station, with nothing under its port face to drag across.
-		Owner->SetActorTransform(
-			ReleaseTarget, /*bSweep=*/false, /*OutHit=*/nullptr, ETeleportType::TeleportPhysics);
-		LetGo();
+		// Exactly the target, as a kinematic teleport like every step before it, and the let-go
+		// on the NEXT tick. Both used to happen here in one pre-physics tick, and the teleport
+		// was sometimes not made at all. Measured with sf.FeltDebug, the hull root to 1e-9 cm
+		// every frame, over twelve headless releases at an uncapped ~2000 fps: in six this step
+		// moved the hull 1.04-2.00 um and it ended exactly on ReleaseTarget; in the other six it
+		// did not move, 0.04-0.55 um short -- the scene component's 1e-4 cm dead band, which
+		// TeleportDetachedRootExactly says how it is closed. (Chaos's own 1 um leniency,
+		// ParticleDirtyFlags.h 94-97, serves only the rewind's desync test, RewindData.h 845, and a
+		// kinematic SetGlobalPose has no early-out, ChaosEngineInterface.cpp 2544.) Relative is
+		// world here because RequestUndock detached the root, and the rotation is ReleaseStart's
+		// throughout, so the location is the whole pose.
+		//
+		// The let-go waits so that the switch to simulation never shares a tick with a move. The
+		// body goes dynamic from the pose it already holds -- SetSimulatePhysics pushes no
+		// transform (BodyInstance.cpp 2591) -- and there is nothing for the sync to pull back; nor
+		// could it pull back less than 1 um, because OnSyncBodies skips a pose within
+		// UE_KINDA_SMALL_NUMBER of the component's (PhysScene_Chaos.cpp 2483). State stays
+		// Releasing through this tick, so Toggle, RequestDock, sf.Dock 2's countdown and the
+		// readouts see nothing Free early. What moves in recorded figures: "undocked." comes one
+		// frame later, f61 for f60 at 60 fps and f402 for f401 at 400
+		// (2026-09-25-f3fix-dockcycle-*.log), and sf.Dock 2's re-capture with it, f121 for f120
+		// and f803 for f802.
+		TeleportDetachedRootExactly(*Owner, ReleaseTarget);
 
-		if (bAutoDockAfterRelease)
-		{
-			bAutoDockAfterRelease = false;
-			SecondsUntilAutoDock = CaptureSeconds;
-		}
+		bReleaseArrived = true;
 		return;
 	}
 

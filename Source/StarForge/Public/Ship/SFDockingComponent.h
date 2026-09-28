@@ -209,7 +209,10 @@ private:
 
 	void AdvanceCapture(double DeltaSeconds);
 
-	/** Eases the hull from ReleaseStart to ReleaseTarget, and lets go on arrival. */
+	/**
+	 * Eases the hull from ReleaseStart to ReleaseTarget, sets the target exactly on arrival,
+	 * and lets go on the tick after. The arrival branch says why the let-go waits.
+	 */
 	void AdvanceRelease(double DeltaSeconds);
 
 	/**
@@ -278,6 +281,13 @@ private:
 
 	FTransform ReleaseStart = FTransform::Identity;
 	FTransform ReleaseTarget = FTransform::Identity;
+
+	/**
+	 * The hull stands on ReleaseTarget and the next tick lets go. A flag rather than a second
+	 * look at the elapsed time, because with a non-positive CaptureSeconds the release arrives
+	 * on its first tick and "already past the end" would let go before the target was set.
+	 */
+	bool bReleaseArrived = false;
 
 	/** Last value read from sf.Dock, so the command acts on an edge and not on a level. */
 	int32 LastDockCommand = -1;
