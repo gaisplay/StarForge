@@ -87,6 +87,17 @@ private:
 	 */
 	void TryHandover(ASFCharacter* Character);
 
+	/**
+	 * Whether another interior volume of this volume's owner still holds Character in an open refused
+	 * episode. The REFUSED line promises silence "until he leaves <carrier>'s volume", naming the
+	 * carrier and not the box, so a carrier built of several boxes says it once for all of them
+	 * (station-kit spec 6.4, 6.7 item 8).
+	 */
+	bool IsRefusedByAnotherVolumeOfThisCarrier(const ASFCharacter* Character) const;
+
+	/** An accepted handover closes the episode on every volume of the owner, not only this one. */
+	void ForgetRefusalOnEveryVolumeOfThisCarrier(const ASFCharacter* Character);
+
 	UFUNCTION()
 	void HandleEndOverlap(
 		UPrimitiveComponent* OverlappedComponent,

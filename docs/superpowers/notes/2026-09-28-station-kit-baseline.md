@@ -84,8 +84,42 @@ compare: 1 findings
 | Проход | Задача | Дата | Время прохода | Вывод сравнителя | Находки |
 |---|---|---|---|---|---|
 | `kit-1.2` | 2 — `sf.PlaceAsset`, строки отказа, `ShipStart` | 2026-09-28 | 2 ч 30 мин 11 с (06:55:18–09:25:29) | `compare: 0 findings`, код выхода 0. Пересборка `{'succeeded': True, 'warnings': 0, 'errors': 0, 'actions': 35}`, тесты 105 / 0; `Replayed: 112 of 112. CHANGED 108, SAME 4`, девять заявок `HOLDS`; `groups: 19 of 19 present` | нет |
+| `kit-1.4` | 4 — объём `ASFTestStation` двумя коробками, эпизод отказа на носитель | 2026-09-28 | 2 ч 33 мин 23 с (09:59:19–12:32:42) | `compare: 0 findings`, код выхода 0. Пересборка `{'succeeded': True, 'warnings': 0, 'errors': 0, 'actions': 35}`, тесты 105 / 0; `Replayed: 116 of 116. CHANGED 108, SAME 8`, девять заявок `HOLDS`; `groups: 19 of 19 present`. Четыре новых повтора — журналы N9 и N9b после исправления (раздел 7) — `new in run, SAME` все четыре | нет |
 
 ## 6. Что считается расхождением
 
 Любая находка сравнителя. План не имеет права её объяснить — только записать в таблицу выше и
 остановиться.
+
+## 7. N9 и N9b после исправления объёма `ASFTestStation` (задача 4)
+
+Те же команды, что до исправления (задача 3), на сборке с двумя коробками и эпизодом отказа на
+носитель. Журналы — `notes/evidence/2026-09-28-latent-f1-{side,roof}-{60,400}.log`, без метки
+`BEFORE-FIX`, так что дальше `regress_evidence.py` повторяет их как опорные.
+
+Стоп-ворота N9 после (§6.9), на каждом из четырёх журналов:
+
+| Журнал | `Ship -> Station` | `while bound to` | `skipped carries [1-9]` | `Carry NOT RUNNING` | `Error` | `Warning` | `World bounds:` |
+|---|---|---|---|---|---|---|---|
+| `latent-f1-side-60` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `latent-f1-side-400` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `latent-f1-roof-60` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `latent-f1-roof-400` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+
+До исправления в тех же журналах было по одной `Frame handover: Ship -> Station` (кадр 147 на 60,
+980 на 400) и по десять `Warning` `while bound to`.
+
+**Протокол, класс O2, не ворота.** Без передачи человек остаётся на корабле, и удар корпуса о стену
+станции на 0.8 м/с сбивает его во всех четырёх прогонах — строкой `Display`, перенос не прерывается.
+До исправления сбития не было ни разу: привязанный к неподвижной станции, он удара не чувствовал.
+
+| Журнал | `Footing LOST` | Лежал | `Shipboard drift` на 10 с |
+|---|---|---|---|
+| `latent-f1-side-60` | `t=4.28 s, ship-local (-100 320 -300) cm: felt 63.29 m/s2 over the 19.62 limit, ship turning 1.9 deg/s` | 0.5 с | `drift now 15.019 cm, … skipped carries 0, knocked down 0.5 s -- KNOCKED DOWN: the drift is his slide, not the carry` |
+| `latent-f1-side-400` | `t=4.25 s, ship-local (-100 320 -300) cm: felt 421.88 m/s2 over the 19.62 limit, ship turning 1.9 deg/s` | 0.9 с | `drift now 26.114 cm, … skipped carries 0, knocked down 0.9 s -- KNOCKED DOWN: …` |
+| `latent-f1-roof-60` | `t=4.28 s, ship-local (-100 320 -300) cm: felt 62.48 m/s2 over the 19.62 limit, ship turning 0.4 deg/s` | 0.5 с | `drift now 14.808 cm, … skipped carries 0, knocked down 0.5 s -- KNOCKED DOWN: …` |
+| `latent-f1-roof-400` | `t=4.25 s, ship-local (-100 320 -300) cm: felt 416.52 m/s2 over the 19.62 limit, ship turning 0.4 deg/s` | 0.9 с | `drift now 27.268 cm, … skipped carries 0, knocked down 0.9 s -- KNOCKED DOWN: …` |
+
+Сбитие приходит на 4.25–4.28 с — это удар о стену (3.75 с по геометрии плюс раскрутка), а не вход
+в прежний объём (2.45 с до исправления). Снос — его скольжение лёжа, не перенос: `skipped carries 0`
+во всех четырёх.

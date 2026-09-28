@@ -141,29 +141,52 @@ ASFTestStation::ASFTestStation()
 	DockingPort->SetRelativeLocation(FVector(0.0, -Station::HalfYCm - Station::TunnelLengthCm, TunnelPortZ));
 	DockingPort->SetRelativeRotation(FRotator(0.0, -90.0, 0.0));
 
-	// The box plus the tunnel: Y from -600 (the tunnel's outboard mouth) to +400, so the
-	// centre is at -100 and the half-extent 500. X and Z reach the inner faces of the
-	// walls. The volume is wider than the tunnel along X and Z, which costs nothing --
-	// the extra is inside solid panels, where a pawn cannot be.
+	// Two boxes, the room and the tunnel. Until 2026-09-28 it was one, from the tunnel's mouth at
+	// -600 to the far wall at +400 and as wide and as tall as the room, on the argument that "the
+	// extra is inside solid panels, where a pawn cannot be". For the room that was true; for the
+	// tunnel it was not. Outside the -Y wall the one box reached 4.7 m past each tunnel wall and
+	// 5.1 m above the tunnel's roof, into open space where a ship can stand -- and a hull flush
+	// against the -Y wall beside the tunnel, or above its roof, had the last 1.8 m of its cabin
+	// inside the station's volume. Two carriers at rest hand a man over on relative speed alone
+	// (USFInteriorVolumeComponent::TryHandover), so a man walking to that end of his cabin was bound
+	// to the station while standing on his own ship: finding F1 without a hull inside the station.
+	// Derived from these constants in station-kit spec 6.9 and reproduced headless before this fix
+	// at 60 and 400 fps (evidence/*-latent-f1-{side,roof}-{60,400}-BEFORE-FIX.log).
 	//
-	// It does not touch the ship's. Docked, the ship's cabin ends at station-local -610
-	// and this begins at -600: ten centimetres of wall, deliberately unclaimed.
-	// The span runs from the tunnel's outboard mouth at -600 to the far wall at +400, so it
-	// is 2*HalfYCm + TunnelLengthCm long -- a thousand centimetres, half-extent 500, centred
-	// at -100. Writing it as (HalfYCm + TunnelLengthCm)/2 gives 300 and looks close enough to
-	// pass a reading; it leaves the whole tunnel and two metres of the station's own deck
-	// inside no volume at all, which is a man who stays bound to the ship for four metres
-	// after walking out of it.
-	const double InteriorHalfYCm = (2.0 * Station::HalfYCm + Station::TunnelLengthCm) * 0.5;  // 500
-	const double InteriorCentreYCm = Station::HalfYCm - InteriorHalfYCm;                      // -100
+	// Both boxes come from the constants the panels come from, so a moved wall moves them too:
+	//   - the room: out to the walls' inner faces, half-extent 590 x 390 x 390 about the root;
+	//   - the tunnel: its bore, X +-HatchHalfWidthCm, Z from the deck's top to the hatch top, Y from
+	//     the port plane at -600 to the -Y wall's inner face at -390. The opening in that wall
+	//     (-410..-390) belongs to the tunnel, as the door in a kit hall's wall belongs to its boom.
+	//
+	// The tunnel box still begins on the port plane, so a docked ship's cabin still ends ten
+	// centimetres short of it (-610 against -600): ten centimetres of wall, deliberately unclaimed,
+	// and a man walking out through the hatch enters the station's volume on the same plane and in
+	// the same frame as before. Two volumes of one carrier do not argue: entering either binds to
+	// this frame, a move between them is no handover, and a refused episode is one per carrier.
+	const double WallInnerOffsetCm = Station::PanelThickness * Station::CubeEdgeCm * 0.5;     // 10
 
 	Interior = CreateDefaultSubobject<USFInteriorVolumeComponent>(TEXT("Interior"));
 	Interior->SetupAttachment(Root);
-	Interior->SetRelativeLocation(FVector(0.0, InteriorCentreYCm, 0.0));
+	Interior->SetRelativeLocation(FVector::ZeroVector);
 	Interior->SetBoxExtent(FVector(
-		Station::HalfXCm - Station::PanelThickness * Station::CubeEdgeCm * 0.5,
-		InteriorHalfYCm,
-		Station::HalfZCm - Station::PanelThickness * Station::CubeEdgeCm * 0.5));
+		Station::HalfXCm - WallInnerOffsetCm,                                                 // 590
+		Station::HalfYCm - WallInnerOffsetCm,                                                 // 390
+		Station::HalfZCm - WallInnerOffsetCm));                                               // 390
+
+	const double TunnelMouthYCm = -Station::HalfYCm - Station::TunnelLengthCm;                  // -600
+	const double TunnelInnerEndYCm = -Station::HalfYCm + WallInnerOffsetCm;                     // -390
+
+	TunnelInterior = CreateDefaultSubobject<USFInteriorVolumeComponent>(TEXT("TunnelInterior"));
+	TunnelInterior->SetupAttachment(Root);
+	TunnelInterior->SetRelativeLocation(FVector(
+		0.0,
+		(TunnelMouthYCm + TunnelInnerEndYCm) * 0.5,                                           // -495
+		(DeckTopZ + HatchTopZ) * 0.5));                                                       // -265
+	TunnelInterior->SetBoxExtent(FVector(
+		Station::HatchHalfWidthCm,                                                            // 100
+		(TunnelInnerEndYCm - TunnelMouthYCm) * 0.5,                                           // 105
+		(HatchTopZ - DeckTopZ) * 0.5));                                                       // 125
 
 	InteriorLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("InteriorLight"));
 	InteriorLight->SetupAttachment(Root);

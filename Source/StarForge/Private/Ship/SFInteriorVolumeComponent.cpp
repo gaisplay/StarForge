@@ -164,19 +164,25 @@ void USFInteriorVolumeComponent::TryHandover(ASFCharacter* Character)
 				RefusedOccupants.Add(Character);
 				SetComponentTickEnabled(true);
 
-				const FString FromName = From->GetOwner() ? From->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
-				const FString ToName = To->GetOwner() ? To->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
-				UE_LOG(LogStarForge, Warning,
-					TEXT("Frame handover REFUSED: %s -> %s, the two carriers move %.2f m/s relative to each other where he ")
-					TEXT("stands, over the %.1f m/s limit. He stays bound to %s; said once until he leaves %s's volume or the ")
-					TEXT("two come within the limit."),
-					*FromName, *ToName, RelativeSpeed, InteriorHandover::MaxRelativeSpeedMetresPerSec, *FromName, *ToName);
+				// One episode per carrier: a man refused in the tunnel and walking on into the room has
+				// not left the station's volume, and the line below promised silence until he does.
+				// Added to this box's list all the same, so the retry every tick goes on as before.
+				if (!IsRefusedByAnotherVolumeOfThisCarrier(Character))
+				{
+					const FString FromName = From->GetOwner() ? From->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
+					const FString ToName = To->GetOwner() ? To->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
+					UE_LOG(LogStarForge, Warning,
+						TEXT("Frame handover REFUSED: %s -> %s, the two carriers move %.2f m/s relative to each other where he ")
+						TEXT("stands, over the %.1f m/s limit. He stays bound to %s; said once until he leaves %s's volume or the ")
+						TEXT("two come within the limit."),
+						*FromName, *ToName, RelativeSpeed, InteriorHandover::MaxRelativeSpeedMetresPerSec, *FromName, *ToName);
+				}
 			}
 			return;
 		}
 	}
 
-	RefusedOccupants.RemoveAll(IsCharacter);
+	ForgetRefusalOnEveryVolumeOfThisCarrier(Character);
 	Character->BindFrame(To);
 }
 
@@ -241,4 +247,33 @@ void USFInteriorVolumeComponent::HandleEndOverlap(
 	{
 		return !Entry.IsValid() || Entry.Get() == OtherActor;
 	});
+}
+
+bool USFInteriorVolumeComponent::IsRefusedByAnotherVolumeOfThisCarrier(const ASFCharacter* Character) const
+{
+	TInlineComponentArray<USFInteriorVolumeComponent*> Volumes(GetOwner());
+	for (const USFInteriorVolumeComponent* Volume : Volumes)
+	{
+		if (Volume && Volume != this && Volume->RefusedOccupants.ContainsByPredicate(
+			[Character](const TWeakObjectPtr<ASFCharacter>& Entry) { return Entry.Get() == Character; }))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void USFInteriorVolumeComponent::ForgetRefusalOnEveryVolumeOfThisCarrier(const ASFCharacter* Character)
+{
+	// Every box, or a neighbour would go on retrying a handover that has already happened. Their
+	// ticks switch themselves off on the next pass once their lists are empty.
+	TInlineComponentArray<USFInteriorVolumeComponent*> Volumes(GetOwner());
+	for (USFInteriorVolumeComponent* Volume : Volumes)
+	{
+		if (Volume)
+		{
+			Volume->RefusedOccupants.RemoveAll(
+				[Character](const TWeakObjectPtr<ASFCharacter>& Entry) { return Entry.Get() == Character; });
+		}
+	}
 }
