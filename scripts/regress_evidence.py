@@ -19,11 +19,11 @@ Verdicts, per replayed command:
     VARIES        differs, and the second replay differs from the first: the run does not repeat
                   itself (two hulls colliding resolve on a contact manifold the step decides; see
                   CLAUDE.md), so its figures are protocol and only its red counters are judged
-    CHANGED?      differs, and the second replay could not be read, so change and variance cannot
-                  be told apart
-    INVALID       neither StarForge.log nor StarForge_2.log carries this run's command line: the
-                  run never started or its log went elsewhere (a run the engine wrote to
-                  StarForge_2.log beside an open editor is found and accepted)
+    CHANGED?      differs, and the second replay could not be read or died before its world
+                  began, so change and variance cannot be told apart
+    INVALID       no log carries this run's command line (it went elsewhere, or the run never
+                  started), or the one that does died before its world began (live_log, below).
+                  A run the engine wrote to StarForge_2.log beside an open editor is accepted
 
 CHANGED is not a verdict of failure. The tree moves, and a change after a known commit is expected;
 the report lists what changed so a person can say which. What a person must never have to do is
@@ -222,7 +222,7 @@ def run_engine(cmd):
         if f.exists():
             text = f.read_text("utf-8", errors="replace")
             if same_command(command_line(text[:400000]), cmd):
-                return text
+                return live_log(text)
     return None
 
 
@@ -386,6 +386,28 @@ def write_report(out, plan, summary):
     md += ["", "## Not replayed", ""] + [f"- `{n}` — {w}" for n, w in summary.get("skipped", [])]
     (out / "report.md").write_text("\n".join(md), "utf-8")
     print(f"report: {out / 'report.md'}", flush=True)
+
+
+def live_log(text):
+    """The log, or None when the run it records died before its world began.
+
+    Two replays of the station-kit base did (2026-09-28): each log ended at frame 0 on
+    `Engine exit requested (reason: ConsoleCtrl RequestExit)`, with no world brought up and not one
+    LogStarForge line. Each carried its command line, so each was taken for the run: one read
+    CHANGED with 0 lines, and the other VARIES, because its second run was alive -- and a VARIES
+    replay is judged by its red counters, which on an empty log are all zero. Every game world has
+    written a World bounds: line since 2026-09-26, so a live run has project lines; and a console
+    control event is not how a -benchmark -seconds run ends, at any frame.
+    """
+    why = [w for w, dead in (
+        ("no LogStarForge line", not project_lines(text)),
+        ("no world brought up for play", "Bringing World" not in text),
+        ("stopped by a console control event", "Engine exit requested (reason: ConsoleCtrl" in text),
+    ) if dead]
+    if why:
+        print(f"  dead run: {'; '.join(why)}", flush=True)
+        return None
+    return text
 
 
 if __name__ == "__main__":
