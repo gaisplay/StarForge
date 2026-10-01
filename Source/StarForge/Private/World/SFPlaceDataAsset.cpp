@@ -4,6 +4,12 @@
 
 void USFPlaceDataAsset::PopulateOpenSpaceWithOneStation()
 {
+	// PopulateSymmetricLayout's three calls, for its reason: the details panel wraps a CallInEditor
+	// press in a transaction but never calls Modify() on the object, so without them Ctrl+Z does not
+	// undo the fill and the package is never dirtied -- closing the editor throws the station away
+	// without a save prompt, and an asset with Carriers empty is a 1.2 KB file that looks finished.
+	Modify();
+
 	Carriers.Empty();
 
 	FSFPlaceCarrier Station;
@@ -16,6 +22,16 @@ void USFPlaceDataAsset::PopulateOpenSpaceWithOneStation()
 	Station.Rotation = FRotator::ZeroRotator;
 
 	Carriers.Add(Station);
+
+#if WITH_EDITOR
+	// Nothing broadcasts a property change for a function call, so the panel would keep drawing
+	// the empty array and the button would look as if it did nothing.
+	PostEditChange();
+#endif
+
+	// Modify() dirties the package only inside a transaction; this does it whichever way the call
+	// arrived, so the asterisk and the save prompt are there before the editor is closed.
+	MarkPackageDirty();
 }
 
 const TCHAR* USFPlaceDataAsset::KindName(ESFPlaceKind InKind)
