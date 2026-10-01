@@ -4,8 +4,8 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
-#include "Misc/DefaultValueHelper.h"
 #include "Misc/PackageName.h"
+#include "NumberText.h"
 #include "Place.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
@@ -27,7 +27,7 @@ namespace
 	 * representable float, and at 4.3e10 the gap between neighbouring floats is about 4 km --
 	 * a quarter of the rig place's own radius, in the one figure this whole stage turns on.
 	 * sf.BindFrame and sf.AimAt are the precedent for a string variable; ParseMetres below is the
-	 * parse (FDefaultValueHelper::ParseDouble, never Atod), and what it parsed is printed back.
+	 * parse (StarForge::Parse::TryParseFiniteNumber, never Atod), and what it parsed is printed back.
 	 *
 	 * Read ONCE, when the rig assembles itself, which is before -ExecCmds is applied: set it
 	 * before the level starts, with "-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=..." on the
@@ -72,13 +72,10 @@ namespace
 		/**
 		 * Reads a metre figure out of a string console variable.
 		 *
-		 * Returns false on empty, which is "no command", and on anything that does not parse to
-		 * a finite number, which is said out loud by the caller. A silent fall-back to the
+		 * Returns false on empty, which is "no command", and on anything that is not a finite
+		 * number written out, which is said out loud by the caller. A silent fall-back to the
 		 * authored value would let a negative control be performed with a typo in it and count
 		 * as having found nothing.
-		 *
-		 * One guard covers infinity and NaN both: FMath::IsFinite tests that the exponent is not
-		 * all ones (GenericPlatformMath.h 587), and a NaN's is.
 		 */
 		bool ParseMetres(const FString& Raw, double& OutMetres)
 		{
@@ -87,35 +84,20 @@ namespace
 				return false;
 			}
 
-			// ParseDouble rather than Atod, and the difference is the whole point of this
-			// function. Atod cannot fail: it answers 0.0 for a string with no number in it at
-			// all and offers no way to tell that apart from a genuine zero, so the first form
-			// of this rig accepted sf.PlaceOffsetM=nonsense, moved the place by zero metres,
-			// and announced "the console changed the place" over a place the console had not
-			// touched. That is worse than passing in silence -- it is a control reporting that
-			// it did the thing it did not do.
+			// The strict reader, and the history of this call is the whole reason. Atod cannot
+			// fail: it answers 0.0 for a string with no number in it at all, so the first form of
+			// this rig accepted sf.PlaceOffsetM=nonsense, moved the place by zero metres, and
+			// announced "the console changed the place" over a place the console had not touched.
+			// That is worse than passing in silence -- it is a control reporting that it did the
+			// thing it did not do.
 			//
-			// ParseDouble validates the entire string through IsStringValidFloat before
-			// converting (DefaultValueHelper.cpp), so "nonsense" and "43abc" are both refused
-			// while "4.3e10" and "-1.5" are taken. Measured on this rig: the junk control now
-			// warns and builds the authored place, where before it warned about nothing.
-			double Parsed = 0.0;
-			if (!FDefaultValueHelper::ParseDouble(Raw, Parsed))
-			{
-				return false;
-			}
-
-			// Still needed after a shape check: "1e999" is a perfectly well-formed number that
-			// converts to infinity. One guard covers infinity and NaN both -- FMath::IsFinite
-			// tests that the exponent is not all ones (GenericPlatformMath.h 587), and a NaN's
-			// is.
-			if (!FMath::IsFinite(Parsed))
-			{
-				return false;
-			}
-
-			OutMetres = Parsed;
-			return true;
+			// FDefaultValueHelper::ParseDouble came next and refused "nonsense", but every part of
+			// its grammar is optional (IsStringValidFloat, DefaultValueHelper.cpp 268-308): "." and
+			// "e10" passed, converted through the same Atod, and sf.PlaceOffsetM=. brought
+			// the same false report of a move of zero metres back (review of 2026-09-23, reproduced
+			// by a run). TryParseFiniteNumber needs a digit in the mantissa and in any exponent and
+			// refuses an overflow to infinity, so "4.3e10" and "-1.5" are taken and those warn.
+			return StarForge::Parse::TryParseFiniteNumber(Raw, OutMetres);
 		}
 	}
 }

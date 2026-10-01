@@ -8,7 +8,7 @@
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/App.h"
-#include "Misc/DefaultValueHelper.h"
+#include "NumberText.h"
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "StarForgeLog.h"
 #include "TimerManager.h"
@@ -125,13 +125,16 @@ namespace
 
 	void HitchFromConsole(const TArray<FString>& Args, UWorld* World)
 	{
-		// ParseDouble and not Atod, for the reason SFPlaceGameMode gives: Atod answers zero for a
-		// string with no number in it, and a stall of zero would pass for a stall nobody measured.
+		// The strict reader, not Atod and not FDefaultValueHelper::ParseDouble. Both answer zero for
+		// a string with no digit in it -- ParseDouble validates first, but every part of its grammar
+		// is optional, so "e", "." and "e5" pass -- and a delay of zero is the immediate path: the
+		// stall lands on the frame -ExecCmds runs, with the hull at rest, and only a missing
+		// "scheduled" line would say so.
 		double Milliseconds = 0.0;
 		double AfterSeconds = 0.0;
 		const bool bParsed = (Args.Num() == 1 || Args.Num() == 2)
-			&& FDefaultValueHelper::ParseDouble(Args[0], Milliseconds)
-			&& (Args.Num() == 1 || FDefaultValueHelper::ParseDouble(Args[1], AfterSeconds));
+			&& StarForge::Parse::TryParseFiniteNumber(Args[0], Milliseconds)
+			&& (Args.Num() == 1 || StarForge::Parse::TryParseFiniteNumber(Args[1], AfterSeconds));
 		if (!bParsed)
 		{
 			UE_LOG(LogStarForge, Warning,
