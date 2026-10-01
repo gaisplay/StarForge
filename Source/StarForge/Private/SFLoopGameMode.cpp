@@ -30,6 +30,13 @@ void ASFLoopGameMode::StartPlay()
 	bool bProfileOff = false;
 	if (IConsoleVariable* Profile = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile")))
 	{
+		// Kept for EndPlay. The variable belongs to the process, not to this world: left at 0, every
+		// later session in the same editor -- the spike rig's above all, whose default is the
+		// scripted manoeuvre -- would fly on thrust from a zero intent and hold the ship at rest,
+		// and a drift of 0.000 cm over a ship that never moved reads as a pass.
+		ProfileBeforeRig = Profile->GetInt();
+		bRestoreProfile = true;
+
 		Profile->Set(0);
 
 		// Read back, because Set is advisory rather than authoritative. It writes with
@@ -176,4 +183,26 @@ void ASFLoopGameMode::StartPlay()
 	{
 		UE_LOG(LogStarForge, Error, TEXT("%s"), *Report);
 	}
+}
+
+void ASFLoopGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// At SetByCode, the priority the write in StartPlay left the variable at, which is how the
+	// engine's own TGuardConsoleVariable restores too. Set takes only an equal or stronger source
+	// (CanChange, ConsoleManager.cpp 275-311), so the default's own SetByConstructor would be
+	// refused, and a refusal changes nothing and writes a LogConsoleManager warning. A value typed
+	// at the console since -- -ExecCmds included -- outranks code and stands, which is right: a
+	// person chose that one. The priority is asked first so that standing aside is not a warning.
+	// No line of ours: a standalone run ends through here too, after its last measured line.
+	if (bRestoreProfile)
+	{
+		IConsoleVariable* Profile = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"));
+		if (Profile && ((uint32)Profile->GetFlags() & ECVF_SetByMask) <= (uint32)ECVF_SetByCode)
+		{
+			Profile->Set(ProfileBeforeRig, ECVF_SetByCode);
+		}
+		bRestoreProfile = false;
+	}
+
+	Super::EndPlay(EndPlayReason);
 }

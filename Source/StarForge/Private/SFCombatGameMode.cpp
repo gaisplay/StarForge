@@ -25,7 +25,8 @@ namespace
 	 *
 	 * Read once, when the rig assembles itself, and that is before -ExecCmds is applied: set it
 	 * before the level starts (in the editor's console before Play, or with an ini override on
-	 * the command line), or type it and restart the level.
+	 * the command line), or type it and restart the level. A change after the assembly is watched
+	 * for and said once, as a warning, because it changes nothing and would otherwise say nothing.
 	 */
 	TAutoConsoleVariable<int32> CVarPirate(TEXT("sf.Pirate"), 1,
 		TEXT("1: the combat rig spawns the pirate. 0: it does not, and the player's automation has no target.\n")
@@ -96,6 +97,11 @@ void ASFCombatGameMode::StartPlay()
 	bool bProfileOff = false;
 	if (IConsoleVariable* Profile = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile")))
 	{
+		// Kept for EndPlay, which puts it back: see SFLoopGameMode.cpp for why a 0 left behind
+		// stops the spike rig's manoeuvre in every later session of the same editor.
+		ProfileBeforeRig = Profile->GetInt();
+		bRestoreProfile = true;
+
 		Profile->Set(0);
 		const int32 Held = Profile->GetInt();
 		bProfileOff = (Held == 0);
@@ -114,7 +120,8 @@ void ASFCombatGameMode::StartPlay()
 	}
 
 	UWorld* World = GetWorld();
-	const bool bPirateWanted = CVarPirate.GetValueOnGameThread() != 0;
+	PirateAtAssembly = CVarPirate.GetValueOnGameThread();
+	const bool bPirateWanted = PirateAtAssembly != 0;
 
 	// Player's ship at the origin, pirate 1000 m along +X and 150 m up, yawed 180 so its nose faces
 	// back. Both spawn with no target drone: the thing to aim at is the other ship.
@@ -141,6 +148,11 @@ void ASFCombatGameMode::StartPlay()
 	}
 
 	Super::StartPlay();
+
+	// Watched from here, where this mode has begun play and EndPlay is therefore certain to take
+	// the watch off again (AActor::RouteEndPlay calls EndPlay only on an actor that has begun).
+	PirateChangedHandle = CVarPirate.AsVariable()->OnChangedDelegate().AddUObject(
+		this, &ASFCombatGameMode::OnPirateChanged);
 
 	// After Super::StartPlay, because before it the components have not begun to live. A target
 	// set earlier would survive -- neither the automation's BeginPlay nor the hull's touches it
@@ -239,17 +251,48 @@ void ASFCombatGameMode::StartPlay()
 			bFault = true;
 		}
 
-		// The hull field the rig set, read back, not the weapon's own flag: the weapon exposes no getter.
-		// The hull hands the field to the weapon before Super::BeginPlay, and the weapon's own BeginPlay
-		// line ("weapons hold" / "weapons free") is its read-back in the log. The same holds for "armed".
-		if (!Ship->bWeaponsFree)
+		// Two reads, because two things decide whether this hull fires, and the weapon's rule is the one
+		// mirrored here (USFWeaponComponent::ApplyTrigger): the latch sf.Fire, on a hull that answers
+		// the console, overrides the hull field -- 1 fires a weapons-hold hull, 0 holds a weapons-free
+		// one, anything else leaves the field to decide.
+		//
+		// The field is the one the rig set, read back, not the weapon's own flag: the weapon exposes no
+		// getter. The hull hands the field to the weapon before Super::BeginPlay, and the weapon's own
+		// BeginPlay line ("weapons hold" / "weapons free") is its read-back in the log. The same holds
+		// for "armed".
+		//
+		// The latch is declared in SFWeaponComponent.cpp and reached by name, like sf.ConsoleOperator.
+		// It belongs to the process, not to this world: a 1 typed in an earlier session or before Play,
+		// or put on the command line with -ini, is already down here, and the ship fires from its first
+		// gunner tick. A 1 from -ExecCmds lands after this line, and that one is the "until". "Latched",
+		// not "fires": the latch replaces the operator's trigger and never the operator, so an empty
+		// gunner's post still does not fire under it. A miss is the loud side.
+		const IConsoleVariable* FireVar = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.Fire"));
+		const int32 FireLatch = (FireVar && bPlayerCrewing) ? FireVar->GetInt() : -1;
+		if (!FireVar)
 		{
-			ShipText += TEXT(" and holds fire until sf.Fire 1");
+			ShipText += TEXT(" but its trigger latch sf.Fire is NOT FOUND, so whether it holds fire cannot be read");
+			bFault = true;
+		}
+		else if (FireLatch == 1)
+		{
+			ShipText += TEXT(" but its trigger is LATCHED DOWN from the start -- sf.Fire is already 1");
+			bFault = true;
+		}
+		else if (Ship->bWeaponsFree)
+		{
+			ShipText += (FireLatch == 0)
+				? TEXT(" but does NOT HOLD FIRE once sf.Fire 0 is lifted -- its automation shoots on its own")
+				: TEXT(" but does NOT HOLD FIRE -- its automation shoots on its own");
+			bFault = true;
+		}
+		else if (FireLatch == 0)
+		{
+			ShipText += TEXT(" and holds fire (sf.Fire 0) until sf.Fire 1");
 		}
 		else
 		{
-			ShipText += TEXT(" but does NOT HOLD FIRE -- its automation shoots on its own");
-			bFault = true;
+			ShipText += TEXT(" and holds fire until sf.Fire 1");
 		}
 
 		const AActor* Aimed = Ship->GetAutomationOperator() ? Ship->GetAutomationOperator()->GetTargetActor() : nullptr;
@@ -337,4 +380,41 @@ void ASFCombatGameMode::StartPlay()
 	{
 		UE_LOG(LogStarForge, Display, TEXT("%s"), *Report);
 	}
+}
+
+void ASFCombatGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	CVarPirate.AsVariable()->OnChangedDelegate().Remove(PirateChangedHandle);
+	PirateChangedHandle.Reset();
+
+	// At SetByCode, and only while nothing stronger holds the variable, for the reasons
+	// SFLoopGameMode.cpp's EndPlay gives. No line.
+	if (bRestoreProfile)
+	{
+		IConsoleVariable* Profile = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"));
+		if (Profile && ((uint32)Profile->GetFlags() & ECVF_SetByMask) <= (uint32)ECVF_SetByCode)
+		{
+			Profile->Set(ProfileBeforeRig, ECVF_SetByCode);
+		}
+		bRestoreProfile = false;
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ASFCombatGameMode::OnPirateChanged(IConsoleVariable* Variable)
+{
+	// The delegate fires on every Set, the same value included, and a value the rig was assembled
+	// with is not one it ignored. Said once per world: the point is that the switch did nothing,
+	// and one line makes it.
+	if (bPirateChangeReported || !Variable || Variable->GetInt() == PirateAtAssembly)
+	{
+		return;
+	}
+	bPirateChangeReported = true;
+
+	UE_LOG(LogStarForge, Warning,
+		TEXT("Combat rig: sf.Pirate changed to %d after the rig was assembled with %d -- it is read once, ")
+		TEXT("when the rig assembles itself, so nothing in this world changes until the level restarts."),
+		Variable->GetInt(), PirateAtAssembly);
 }

@@ -7,13 +7,14 @@
 #include "SFPlaceGameMode.generated.h"
 
 class ASFTestShip;
+class IConsoleVariable;
 
 /**
  * The place rig: one place, assembled from data on an empty map.
  *
  * At its defaults it builds what the loop rig builds -- a station, a ship already docked to it
  * and a person in the cabin -- and that sameness is the acceptance, not a convenience. The loop
- * rig writes those three things in its own constructor; this one reads them out of an asset. If
+ * rig writes those three things in its own StartPlay; this one reads them out of an asset. If
  * the figures differ by so much as the hatch crossing, the difference is in the data path and
  * nowhere else.
  *
@@ -23,8 +24,11 @@ class ASFTestShip;
  *
  * Before anything is spawned the place is MEASURED (spec 10.4) and the measurement is printed,
  * whether it fits or not. A place that does not fit is not built at all: no carriers, no ship,
- * no pawn, and so nothing that could undock. That ordering is the whole point -- past the
- * engine's border a hull vanishes the frame its physics body comes on, with a clean log.
+ * no pawn, and so nothing that could undock. That ordering is the whole point. The border used
+ * to delete a hull the frame its physics body came on, with one LogActor warning and nothing from
+ * LogStarForge; since 2026-09-26 the project runs with WorldBounds.DisableChecks=1, nothing
+ * deletes it there, and past 2^42 cm nothing has been measured, so this refusal is the only thing
+ * standing at the border (Place.h).
  *
  * The measurement is in InitGame and the assembly in StartPlay, and the split is not tidiness.
  * In standalone -game the engine logs the local player in, calls PostLogin, and spawns his pawn
@@ -51,12 +55,31 @@ public:
 	 */
 	virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
 
+	/** Puts back the sf.ShipProfile StartPlay found, and stops watching the place's variables. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/**
+	 * Why the place stands refused, or None while it fits and before InitGame has measured it.
+	 * For the panel: a refused place has no pawn, and all a HUD can say of that unprompted is that
+	 * nobody is possessed -- in red, as if the rig were broken, over a refusal the control asked
+	 * for. StarForge::Place::RefusalName gives the words the size line uses.
+	 */
+	StarForge::Place::EPlaceRefusal GetPlaceRefusal() const;
+
 private:
 	/**
-	 * Resolved in the constructor by path, guarded, exactly as ASFTestShip resolves its ship
-	 * data. The map is empty by design, so there is no placed actor on which this could be
-	 * authored; and the asset does not exist the first time this file is compiled, so a
-	 * constructor that insisted on it could not be built even once.
+	 * sf.PlaceOffsetM and sf.PlaceRadiusM are read once, in InitGame, and a change after it would
+	 * do nothing in silence -- typed mid-run, it looks like a control that was performed. Said once
+	 * per variable, as a warning.
+	 */
+	void OnPlaceVariableChanged(IConsoleVariable* Variable);
+
+	/**
+	 * Resolved in InitGame by path, guarded. The map is empty by design, so there is no placed
+	 * actor on which this could be authored; and the asset may not exist, so nothing may insist
+	 * on it. Not in the constructor: a static finder there is resolved once per process, and an
+	 * editor started before the asset existed would keep the code-written place until it was
+	 * restarted.
 	 */
 	UPROPERTY()
 	TObjectPtr<USFPlaceDataAsset> PlaceData;
@@ -88,4 +111,15 @@ private:
 	bool bPlaceMeasured = false;
 
 	bool bPlaceFits = false;
+
+	int32 ProfileBeforeRig = 1;
+	bool bRestoreProfile = false;
+
+	/** What the two variables read when the place was measured. */
+	FString OffsetRawAtMeasure;
+	FString RadiusRawAtMeasure;
+	bool bOffsetChangeReported = false;
+	bool bRadiusChangeReported = false;
+	FDelegateHandle OffsetChangedHandle;
+	FDelegateHandle RadiusChangedHandle;
 };

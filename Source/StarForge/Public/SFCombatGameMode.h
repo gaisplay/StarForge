@@ -5,6 +5,7 @@
 #include "SFCombatGameMode.generated.h"
 
 class ASFTestShip;
+class IConsoleVariable;
 
 /**
  * The combat rig: the player's ship at the origin with a person in its cabin, and a pirate
@@ -31,10 +32,27 @@ public:
 
 	virtual void StartPlay() override;
 
+	/** Puts back the sf.ShipProfile StartPlay found, and stops watching sf.Pirate. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
+	/**
+	 * sf.Pirate is read once, in StartPlay, and a change after it would do nothing in silence --
+	 * typed mid-run, it looks like a control that was performed. Said once, as a warning.
+	 */
+	void OnPirateChanged(IConsoleVariable* Variable);
+
 	UPROPERTY()
 	TObjectPtr<ASFTestShip> Ship;
 
 	UPROPERTY()
 	TObjectPtr<ASFTestShip> Pirate;
+
+	int32 ProfileBeforeRig = 1;
+	bool bRestoreProfile = false;
+
+	/** What sf.Pirate read when the rig was assembled. */
+	int32 PirateAtAssembly = 1;
+	bool bPirateChangeReported = false;
+	FDelegateHandle PirateChangedHandle;
 };
