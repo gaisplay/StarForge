@@ -44,9 +44,6 @@ public:
 	/** The station's half of the airlock, at the outboard mouth of the tunnel. */
 	USFDockingPortComponent* GetDockingPort() const { return DockingPort; }
 
-	/** The box, the tunnel and everything in them. Whoever walks in rides the station. */
-	USFInteriorVolumeComponent* GetInterior() const { return Interior; }
-
 private:
 	/**
 	 * Builds one wall out of an engine cube. Duplicated from ASFTestShip deliberately:
@@ -69,8 +66,13 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFDockingPortComponent> DockingPort;
 
+	/** The room, out to the walls' inner faces. Whoever walks in rides the station. */
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFInteriorVolumeComponent> Interior;
+
+	/** The tunnel's bore, from the port plane to the -Y wall's inner face. See the constructor. */
+	UPROPERTY(VisibleAnywhere, Category = "StarForge")
+	TObjectPtr<USFInteriorVolumeComponent> TunnelInterior;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<UPointLightComponent> InteriorLight;
