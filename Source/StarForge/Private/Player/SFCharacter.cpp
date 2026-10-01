@@ -14,7 +14,6 @@
 #include "Ship/SFShipStationComponent.h"
 #include "Ship/SFTestShip.h"
 #include "Ship/SFTestStation.h"
-#include "ShipFrameMath.h"
 #include "StarForgeLog.h"
 #include "Units.h"
 
@@ -364,12 +363,13 @@ void ASFCharacter::PollLookInput(float DeltaSeconds)
 	// "look up" moves along precesses continuously: holding the key swept the view
 	// round in a circle instead of raising it.
 	//
-	// The capsule is rotated to the ship's every tick by the carry, so its up vector
-	// is the deck normal and is the axis to turn about.
-	const FQuat NewView = StarForge::ShipFrame::ApplyLookStep(
-		PC->GetControlRotation().Quaternion(), GetActorUpVector(), Yaw, Pitch);
-
-	PC->SetControlRotation(NewView.Rotator());
+	// Through the movement component, which holds the view in the ship's coordinates and
+	// writes the control rotation from them: a step written here would be the controller's
+	// copy moving under the one the carry keeps.
+	if (USFShipboardMovementComponent* Movement = GetShipboardMovement())
+	{
+		Movement->TurnView(Yaw, Pitch);
+	}
 }
 
 void ASFCharacter::PollInteract()

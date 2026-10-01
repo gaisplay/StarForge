@@ -290,6 +290,12 @@ public:
 	 */
 	FString DescribeFooting() const;
 
+	/**
+	 * One step of look input, turned in the deck's axes by StarForge::ShipFrame::ApplyLookStep
+	 * and stored in the ship's. Degrees; yaw positive to the right, pitch positive up.
+	 */
+	void TurnView(double YawDegrees, double PitchDegrees);
+
 
 	/** False while knocked down: a man who is down does not land. See the cpp. */
 	virtual bool IsValidLandingSpot(const FVector& CapsuleLocation, const FHitResult& Hit) const override;
@@ -363,6 +369,26 @@ private:
 	 */
 	void ReleaseLostFrame();
 
+	/** The controller the view is written to, or null for a pawn nobody possesses. */
+	AController* GetOwnerController() const;
+
+	/**
+	 * Takes the controller's view as the truth if anyone but this component has moved it --
+	 * the game mode at a restart, a possession -- or if there is no ship-local view yet.
+	 *
+	 * Compared against what the controller held after this component's own last write, not
+	 * against what it was asked for: SetControlRotation declines a change within 1e-3 deg
+	 * (Controller.cpp 140), so a declined write would read as somebody else's and re-seed
+	 * the view from the stale value -- exactly the loss this exists to stop.
+	 */
+	void SyncViewFromController(const AController& Controller);
+
+	/** Keeps the view where it is in the world while the pose it is stored against changes. */
+	void ReexpressView(const FTransform& NewReference);
+
+	/** Writes ship rotation x LocalView to the controller and records what it then holds. */
+	void WriteView(AController& Controller, const FQuat& FrameRotation);
+
 	/**
 	 * Decides whether he keeps his feet this frame and acts on it: enters falling with
 	 * the base kept, pushes him with what the plates could not absorb, stands him up
@@ -387,6 +413,34 @@ private:
 
 	/** This occupant's own view of where the ship was last tick. */
 	FTransform LastFrameTransform = FTransform::Identity;
+
+	/**
+	 * Where he is looking, in the frame of LastFrameTransform: the ship's, once the carry has
+	 * run. The control rotation is written from it, never composed onto.
+	 *
+	 * The view used to be carried by increments, each frame's turn of the ship composed onto
+	 * the control rotation and written back, and the controller loses part of what it is
+	 * given. It declines any change within 1e-3 deg (Controller.cpp 140), and FQuat::Rotator
+	 * answers exactly +/-90 of pitch within 0.081 deg of the vertical (UnrealMath.cpp
+	 * 698-708). Both are angles per frame, so the turn rate they swallow grows with the frame
+	 * rate -- under 0.06 deg/s at 60 fps, under 0.4 at 400 -- and what an increment loses is
+	 * lost for good, since the next one starts from the pose already moved on. Measured on the
+	 * spike rig at 400 fps, flying forward and yawing at 0.24 deg/s: every write was declined,
+	 * the view stood still in the world while the cabin turned past it, 2.8 deg off after
+	 * twelve seconds. Held whole, it trails by the one frame's 0.0006 deg and no more.
+	 *
+	 * A hull that only turns does not show it, which is worth knowing before testing it so.
+	 * The physics sync moves the hull's component only once its pose differs from the body's
+	 * by 1e-4 in some quaternion component (EqualsNoScale, PrimitiveComponentPhysics.cpp 949),
+	 * which is 0.0115 deg, so a hull turning in place turns in steps the controller accepts.
+	 * One that is also moving clears the test on its translation every frame and turns in
+	 * steps of a frame's worth.
+	 */
+	FQuat LocalView = FQuat::Identity;
+	bool bLocalViewValid = false;
+
+	/** What the controller held right after this component last wrote to it. */
+	FRotator LastLeftControlRotation = FRotator::ZeroRotator;
 
 
 	/** See GetLostFrameName. */

@@ -139,6 +139,15 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 
 	if (NewFrame)
 	{
+		// The view is stored against the pose below and goes with it: re-expressed in the new
+		// carrier's frame before that pose is replaced, so a binding changes what carries the
+		// view and not where he is looking.
+		if (AController* Controller = GetOwnerController())
+		{
+			SyncViewFromController(*Controller);
+		}
+		ReexpressView(NewFrame->GetFrameTransform());
+
 		LastFrameTransform = NewFrame->GetFrameTransform();
 		LostFrameName.Reset();
 	}
@@ -352,7 +361,15 @@ void USFShipboardMovementComponent::DetectCarryGap()
 		const int64 Skipped = static_cast<int64>(OwnTickCount - LastCarryTick - 1);
 		SkippedCarryFrames += Skipped;
 		TotalSkippedCarryFrames += Skipped;
-		LastFrameTransform = ShipFrame->GetFrameTransform();
+
+		// The view was not carried through the gap either, and stays where it is in the world.
+		const FTransform Reseeded = ShipFrame->GetFrameTransform();
+		if (AController* Controller = GetOwnerController())
+		{
+			SyncViewFromController(*Controller);
+		}
+		ReexpressView(Reseeded);
+		LastFrameTransform = Reseeded;
 		bBaselineValid = false;
 
 		// The re-seed above is what makes a pending handover unmeasurable: the carry that
@@ -513,13 +530,12 @@ void USFShipboardMovementComponent::CarryWithFrame()
 
 	// The view is stored ship-local: the player keeps looking at the same
 	// bulkhead no matter what the ship does, and the stars sweep past outside.
-	if (ACharacter* Owner = Cast<ACharacter>(GetOwner()))
+	// Written whole from the ship's rotation, never composed onto what the controller holds;
+	// LocalView says what composing lost.
+	if (AController* Controller = GetOwnerController())
 	{
-		if (AController* Controller = Owner->GetController())
-		{
-			const FQuat NewView = FrameDelta * Controller->GetControlRotation().Quaternion();
-			Controller->SetControlRotation(NewView.Rotator());
-		}
+		SyncViewFromController(*Controller);
+		WriteView(*Controller, CurrentFrameTransform.GetRotation());
 	}
 
 	LastFrameTransform = CurrentFrameTransform;
@@ -990,4 +1006,61 @@ void USFShipboardMovementComponent::ReleaseLostFrame()
 	bHandoverPending = false;
 	bPendingHandoverCarryGap = false;
 	LostFrameName = Lost;
+}
+
+AController* USFShipboardMovementComponent::GetOwnerController() const
+{
+	return CharacterOwner ? CharacterOwner->GetController() : nullptr;
+}
+
+void USFShipboardMovementComponent::SyncViewFromController(const AController& Controller)
+{
+	const FRotator Held = Controller.GetControlRotation();
+	if (bLocalViewValid && Held.Equals(LastLeftControlRotation, 0.0))
+	{
+		return;
+	}
+
+	// Somebody else's view is in the world as it stood at the last carry, which is the pose
+	// LocalView is stored against.
+	LocalView = (LastFrameTransform.GetRotation().Inverse() * Held.Quaternion()).GetNormalized();
+	LastLeftControlRotation = Held;
+	bLocalViewValid = true;
+}
+
+void USFShipboardMovementComponent::ReexpressView(const FTransform& NewReference)
+{
+	if (!bLocalViewValid)
+	{
+		return;
+	}
+
+	LocalView = (NewReference.GetRotation().Inverse() * LastFrameTransform.GetRotation() * LocalView).GetNormalized();
+}
+
+void USFShipboardMovementComponent::WriteView(AController& Controller, const FQuat& FrameRotation)
+{
+	Controller.SetControlRotation((FrameRotation * LocalView).Rotator());
+	LastLeftControlRotation = Controller.GetControlRotation();
+}
+
+void USFShipboardMovementComponent::TurnView(double YawDegrees, double PitchDegrees)
+{
+	AController* Controller = GetOwnerController();
+	if (!Controller || !UpdatedComponent)
+	{
+		return;
+	}
+
+	SyncViewFromController(*Controller);
+
+	// Turned in the world, because the step's axes are the deck's as the capsule stands now --
+	// its up vector is the deck normal, the carry rotates it with the ship -- and stored back
+	// against the pose the capsule was last carried to, which is the pose that up belongs to.
+	const FQuat Reference = LastFrameTransform.GetRotation();
+	const FQuat Turned = StarForge::ShipFrame::ApplyLookStep(
+		Reference * LocalView, UpdatedComponent->GetUpVector(), YawDegrees, PitchDegrees);
+
+	LocalView = (Reference.Inverse() * Turned).GetNormalized();
+	WriteView(*Controller, Reference);
 }
