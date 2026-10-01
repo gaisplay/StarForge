@@ -5,6 +5,7 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/DefaultValueHelper.h"
+#include "Misc/PackageName.h"
 #include "Place.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
@@ -13,7 +14,6 @@
 #include "Ship/SFTestShip.h"
 #include "Ship/SFTestStation.h"
 #include "StarForgeLog.h"
-#include "UObject/ConstructorHelpers.h"
 #include "Units.h"
 #include "World/SFPlaceDataAsset.h"
 
@@ -63,7 +63,10 @@ namespace
 		constexpr double FallbackRadiusMetres = 18000.0;
 		const FName StationName = TEXT("Station");
 
-		/** Where the asset is looked for, named once so the finder and the warning cannot drift. */
+		/**
+		 * Where the asset is looked for, named once so the lookup and the warning cannot drift: the
+		 * warning prints the package this path names rather than a copy of it.
+		 */
 		const TCHAR* AssetPath = TEXT("/Game/Places/DA_Place_OpenSpace.DA_Place_OpenSpace");
 
 		/**
@@ -121,17 +124,6 @@ ASFPlaceGameMode::ASFPlaceGameMode()
 {
 	DefaultPawnClass = ASFCharacter::StaticClass();
 	HUDClass = ASFFrameDriftHUD::StaticClass();
-
-	// By path and guarded, exactly as ASFTestShip resolves DA_TestShip, and for the same two
-	// reasons: the map is empty so there is no placed actor to author this on, and the asset
-	// does not exist the first time this file compiles. An unresolved finder leaves PlaceData
-	// null, which InitGame reports in a warning and answers with a place written in code.
-	static ConstructorHelpers::FObjectFinder<USFPlaceDataAsset> PlaceAsset(PlaceRig::AssetPath);
-
-	if (PlaceAsset.Succeeded())
-	{
-		PlaceData = PlaceAsset.Object;
-	}
 }
 
 void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
@@ -156,6 +148,14 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 	PlaceRadiusMetres = PlaceRig::FallbackRadiusMetres;
 	PlaceCarriers.Reset();
 
+	// By path and guarded, for ASFTestShip's two reasons -- the map is empty, so there is no placed
+	// actor to author this on, and the asset may not exist -- but here, on every InitGame, and not
+	// through a static ConstructorHelpers finder in the constructor. That finder ran once per
+	// process, when the class default object was built, so an editor started before the asset
+	// existed went on building the place written in code, under the warning below that there was no
+	// asset, in every Play until it was restarted. NoWarn because the miss is this rig's line to say.
+	PlaceData = LoadObject<USFPlaceDataAsset>(nullptr, PlaceRig::AssetPath, nullptr, LOAD_NoWarn);
+
 	bPlaceFromAsset = (PlaceData != nullptr);
 	if (bPlaceFromAsset)
 	{
@@ -177,9 +177,10 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 		PlaceCarriers.Add(Station);
 
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Place rig: no place asset at /Game/Places/DA_Place_OpenSpace, so a place written ")
+			TEXT("Place rig: no place asset at %s, so a place written ")
 			TEXT("in code was used instead. Its figures are the asset's; the size line below is what ")
-			TEXT("the two have to agree on."));
+			TEXT("the two have to agree on."),
+			*FPackageName::ObjectPathToPackageName(FString(PlaceRig::AssetPath)));
 	}
 
 	FString OverrideText;
