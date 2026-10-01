@@ -683,7 +683,7 @@ void ASFTestShip::TickScriptedProfile()
 	// never learns that docking exists, exactly as the pilot's post never does. The two
 	// coincide while docking is what locks the array, because docking also stops the
 	// simulation, and they part the moment something locks a hull that is still simulating:
-	// a powered-down ship does, through LockForPowerDown, and IsLocked asks after both locks.
+	// a powered-down ship does, and IsLocked asks its damage model as well as the docking lock.
 	// Neither predicate is therefore a restatement of the other, and dropping either one is
 	// a decision, not a tidy-up.
 	//

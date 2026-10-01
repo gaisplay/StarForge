@@ -6,6 +6,7 @@
 #include "HAL/IConsoleManager.h"
 #include "NumberText.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "Ship/SFDamageableComponent.h"
 #include "Ship/SFShipDataAsset.h"
 #include "StarForgeLog.h"
 #include "TimerManager.h"
@@ -150,6 +151,10 @@ USFThrusterArrayComponent::USFThrusterArrayComponent()
 void USFThrusterArrayComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	AActor* Owner = GetOwner();
+	Damageable = Owner ? Owner->FindComponentByClass<USFDamageableComponent>() : nullptr;
+
 	Rebuild();
 }
 
@@ -411,9 +416,9 @@ void USFThrusterArrayComponent::SetLocked(bool bInLocked)
 	bLocked = bInLocked;
 }
 
-void USFThrusterArrayComponent::LockForPowerDown()
+bool USFThrusterArrayComponent::IsLocked() const
 {
-	bPowerDownLocked = true;
+	return bLocked || (Damageable && Damageable->IsPoweredDown());
 }
 
 void USFThrusterArrayComponent::ApplyDemand(const StarForge::FWrench& DemandShipFrame, double DeltaSeconds)

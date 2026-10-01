@@ -8,6 +8,7 @@
 #include "SFThrusterArrayComponent.generated.h"
 
 class UPrimitiveComponent;
+class USFDamageableComponent;
 class USFShipDataAsset;
 
 /**
@@ -134,22 +135,23 @@ public:
 	 * engines are locked, and neither it nor whoever holds it has to know that docking
 	 * exists. Same shape as the scripted-profile lock one level up.
 	 *
-	 * This is the docking lock, and undocking clears it. A powered-down ship is held by
-	 * LockForPowerDown, which this does not touch.
+	 * This is the docking lock, and undocking clears it. A powered-down ship is held by the
+	 * second lock IsLocked asks after, which this does not touch.
 	 */
 	void SetLocked(bool bInLocked);
 
 	/**
-	 * Locks the array for good: ApplyDemand refuses exactly as it does under SetLocked(true), and
-	 * nothing unlocks it. A lock of its own because the two are released by different things.
-	 * The docking lock is released by every undock, unconditionally, and when it was the only
-	 * lock a ship powered down while docked flew again the moment it undocked while IsPoweredDown
-	 * still read true. Nothing in this project powers a ship back up, so nothing releases this one.
+	 * Whether either lock holds: the docking lock above, or the owner's power-down, asked of its
+	 * USFDamageableComponent. What ApplyDemand, every post and the scripted profile ask before
+	 * commanding.
+	 *
+	 * Two locks because they are released by different things. PowerDown writes SetLocked(true),
+	 * and every undock writes SetLocked(false) unconditionally, so while that was the only lock a
+	 * ship powered down while docked flew again the moment it undocked, while IsPoweredDown still
+	 * read true. Asked rather than copied into a flag here: the power state has one owner, and
+	 * nothing in this project powers a ship back up, so this half never releases.
 	 */
-	void LockForPowerDown();
-
-	/** Whether either lock holds. What every post and the scripted profile ask before commanding. */
-	bool IsLocked() const { return bLocked || bPowerDownLocked; }
+	bool IsLocked() const;
 
 	/** The most this array can produce on each axis. What assist-off is a fraction of. */
 	StarForge::FWrench GetArrayCapability() const { return Capability; }
@@ -210,6 +212,7 @@ private:
 	/** True while docking holds the array. See SetLocked. */
 	bool bLocked = false;
 
-	/** True from the power-down on. See LockForPowerDown. */
-	bool bPowerDownLocked = false;
+	/** The owner's damage model, resolved once at BeginPlay; absent, only the docking lock holds. See IsLocked. */
+	UPROPERTY()
+	TObjectPtr<USFDamageableComponent> Damageable;
 };
