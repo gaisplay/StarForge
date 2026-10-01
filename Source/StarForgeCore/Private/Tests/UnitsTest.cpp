@@ -108,6 +108,23 @@ bool FInertiaRotationIsHonouredTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("the principal-axis rotation is applied both ways"),
 		Result.Equals(FVector(2.0, 0.0, 0.0), 1e-9));
 
+	// Ninety degrees cannot tell which way round the rotation goes: R and its inverse differ
+	// there by a half turn, which commutes with a diagonal tensor, so swapping RotateVector
+	// and UnrotateVector gives the same (2, 0, 0). At 45 degrees they part. The principal
+	// axes are the ship's carried by InertiaRotation, so a vector along one of them must
+	// come back scaled by that axis's moment alone: principal X, ship (1, 1, 0) / sqrt 2,
+	// by 1, and principal Y, ship (-1, 1, 0) / sqrt 2, by 2. Swapped, the first reads twice
+	// itself and the second once.
+	Mass.InertiaRotation = FRotator(0.0, 45.0, 0.0).Quaternion();
+	const FVector PrincipalX = Mass.InertiaRotation.RotateVector(FVector(1.0, 0.0, 0.0));
+	const FVector PrincipalY = Mass.InertiaRotation.RotateVector(FVector(0.0, 1.0, 0.0));
+	TestTrue(TEXT("the fixture's principal X lies along ship (1, 1, 0)"),
+		PrincipalX.Equals(FVector(1.0, 1.0, 0.0) / FMath::Sqrt(2.0), 1e-9));
+	TestTrue(TEXT("at 45 degrees a vector along principal X comes back times its moment of 1"),
+		Mass.TransformByInertia(PrincipalX).Equals(PrincipalX, 1e-9));
+	TestTrue(TEXT("and one along principal Y times its moment of 2"),
+		Mass.TransformByInertia(PrincipalY).Equals(2.0 * PrincipalY, 1e-9));
+
 	// With identity rotation the same call must be a plain componentwise scale, so
 	// the rotation branch cannot be quietly wrong in the common case either.
 	Mass.InertiaRotation = FQuat::Identity;
