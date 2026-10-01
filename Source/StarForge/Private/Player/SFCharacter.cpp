@@ -25,16 +25,20 @@ namespace
 	 * The negative control for the handover, and the same trick as sf.ShipGravity 0 for
 	 * the carry. With the ship docked it is a legitimate handover and everything stays
 	 * quiet; with the ship undocked and under thrust it is a knowingly wrong binding, and
-	 * the cross-check has to complain within ten frames and the carry has to stop shortly
-	 * after. An instrument that stays calm through that is blind.
+	 * the cross-check has to complain within its FrameMismatchThresholdSeconds, a sixth of a
+	 * second -- its first line reads 0.17 s, which is ten frames at 60 fps and sixty-seven at
+	 * 400 -- and the carry has to stop shortly after. An instrument that stays calm through
+	 * that is blind.
 	 *
 	 * Declared here because this is the file that reads it. Empty means "no command", and
-	 * it acts on a change of the value rather than on its level.
+	 * it acts on a change of the value rather than on its level -- which is why the end of
+	 * every world puts it back to empty (see EndPlay).
 	 */
 	TAutoConsoleVariable<FString> CVarBindFrame(
 		TEXT("sf.BindFrame"), TEXT(""),
 		TEXT("ship|station: bind the occupant to that carrier's frame wherever he is standing. Empty: no command.\n")
-		TEXT("A negative control. Bound to the wrong carrier in flight, the cross-check must warn and the carry must stop."),
+		TEXT("A negative control. Bound to the wrong carrier in flight, the cross-check must warn within a sixth of a second ")
+		TEXT("(its first line reads 0.17 s) and the carry must stop. Cleared when the world ends."),
 		ECVF_Default);
 }
 
@@ -219,6 +223,19 @@ void ASFCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		{
 			Movement->SetStrappedIn(false);
 		}
+	}
+
+	// sf.BindFrame acts on a change, and the edge is detected against the value this
+	// character last saw -- which a new character starts out not having seen. A console
+	// variable outlives the world, so a control typed in one Play session was a change on the
+	// next session's first tick, and rebound the man the rig had just placed in the cabin. It
+	// goes back to empty with the world that saw it. By the console's priority, because a
+	// value typed at the console outranks a write from code and this write would otherwise be
+	// dropped without a word; a value typed between sessions is a change to the next one and
+	// still acts.
+	if (!CVarBindFrame.GetValueOnGameThread().IsEmpty())
+	{
+		CVarBindFrame->Set(TEXT(""), ECVF_SetByConsole);
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -467,6 +484,18 @@ void ASFCharacter::PollBindFrameCommand()
 	{
 		UE_LOG(LogStarForge, Warning,
 			TEXT("sf.BindFrame '%s': no such carrier in this level. Nothing was rebound."), *Command);
+		return;
+	}
+
+	// BindFrame refuses a rebinding to the frame he already rides, rightly, and silently. The
+	// line below used to be printed anyway, so a control that never ran read exactly like one
+	// that ran and found nothing.
+	const USFShipboardMovementComponent* Movement = GetShipboardMovement();
+	if (Movement && Movement->GetShipFrame() == Frame)
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("sf.BindFrame '%s': he is already bound to %s. Nothing was rebound; the control did not run."),
+			*Command, Frame->GetOwner() ? *Frame->GetOwner()->GetActorNameOrLabel() : TEXT("nothing"));
 		return;
 	}
 
