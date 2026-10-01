@@ -127,6 +127,21 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 		bHandoverPending = true;
 	}
 
+	// A gap still open when the binding ends is banked here, by the same count DetectCarryGap
+	// takes. That function banks a gap only when the carry resumes, and a binding ends one for
+	// good: a man off his carrier who drifts into another's volume is bound on the overlap,
+	// base or no base, and a hull destroyed after he came off it is released through here.
+	// Either way the gap left no trace -- the open-gap warnings stopped, CARRY SKIPPED never
+	// appeared, and the interval line below read NO FOOTING or FRAME LOST for a carry that had
+	// failed. An ordinary handover comes at most one tick after the last carry, so its gap is
+	// zero and nothing moves.
+	if (bHasCarriedOnce && OwnTickCount > LastCarryTick + 1)
+	{
+		const int64 Skipped = static_cast<int64>(OwnTickCount - LastCarryTick - 1);
+		SkippedCarryFrames += Skipped;
+		TotalSkippedCarryFrames += Skipped;
+	}
+
 	// The interval this binding ends is logged while its own figures are still in place.
 	// It used to be logged after the resets below, so the line describing the old frame's
 	// interval always read "skipped carries 0" and could never say CARRY FAILED -- about an
@@ -943,7 +958,7 @@ FString USFShipboardMovementComponent::DescribeFooting() const
 	}
 
 	// Both carry failures that the count above cannot see yet: it is banked when the carry
-	// resumes, and neither of these resumes it.
+	// resumes or the binding ends, and neither of these has done either.
 	if (bBoundToFrame && !ShipFrame.IsValid())
 	{
 		return TEXT("FRAME LOST: the carrier he was bound to no longer exists");

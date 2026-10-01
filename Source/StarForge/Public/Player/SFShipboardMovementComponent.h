@@ -106,7 +106,8 @@ public:
 	/**
 	 * The same count over the whole session. No binding resets it: a handover used to erase
 	 * the only record of a carry failure, because the count above belongs to one binding and
-	 * walking through the hatch starts a new one. The readout's red line reads this.
+	 * walking through the hatch starts a new one. A gap still open when a binding ends is
+	 * banked into both before the binding goes. The readout's red line reads this.
 	 */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	int64 GetTotalSkippedCarryFrames() const { return TotalSkippedCarryFrames; }
