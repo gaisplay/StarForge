@@ -648,11 +648,11 @@ void ASFTestShip::TickScriptedProfile()
 	// Both are asked as questions about the hull rather than about docking, on purpose:
 	// those are the profile's true preconditions, and putting them this way means the rig
 	// never learns that docking exists, exactly as the pilot's post never does. The two
-	// coincide today because the only thing that locks the array -- docking -- also stops
-	// the simulation, and they part the moment something locks a hull that is still
-	// simulating: a damaged ship, a powered-down ship, a hull taken by a pirate. All three
-	// are stage 4's, and all three reach for SetLocked. Neither predicate is therefore a
-	// restatement of the other, and dropping either one is a decision, not a tidy-up.
+	// coincide while docking is what locks the array, because docking also stops the
+	// simulation, and they part the moment something locks a hull that is still simulating:
+	// a powered-down ship does, through LockForPowerDown, and IsLocked asks after both locks.
+	// Neither predicate is therefore a restatement of the other, and dropping either one is
+	// a decision, not a tidy-up.
 	//
 	// Silent, because it would run every frame.
 	if (!Hull->IsSimulatingPhysics() || (Thrusters && Thrusters->IsLocked()))

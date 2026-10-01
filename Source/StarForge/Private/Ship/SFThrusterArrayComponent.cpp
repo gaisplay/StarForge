@@ -411,13 +411,18 @@ void USFThrusterArrayComponent::SetLocked(bool bInLocked)
 	bLocked = bInLocked;
 }
 
+void USFThrusterArrayComponent::LockForPowerDown()
+{
+	bPowerDownLocked = true;
+}
+
 void USFThrusterArrayComponent::ApplyDemand(const StarForge::FWrench& DemandShipFrame, double DeltaSeconds)
 {
 	// Before the readiness check, so a locked array reads as quiet whether or not it
 	// ever built. Clearing rather than merely returning: the last demand anybody made
 	// would otherwise sit in these accessors for as long as the ship stays docked, and
 	// the readout would print a live-looking wrench beside the word "docked".
-	if (bLocked)
+	if (IsLocked())
 	{
 		ClearDemand();
 		return;

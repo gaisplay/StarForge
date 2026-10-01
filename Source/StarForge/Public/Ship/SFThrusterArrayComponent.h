@@ -133,10 +133,23 @@ public:
 	 * The array refuses, not the post and not the operator: the post asks whether its
 	 * engines are locked, and neither it nor whoever holds it has to know that docking
 	 * exists. Same shape as the scripted-profile lock one level up.
+	 *
+	 * This is the docking lock, and undocking clears it. A powered-down ship is held by
+	 * LockForPowerDown, which this does not touch.
 	 */
 	void SetLocked(bool bInLocked);
 
-	bool IsLocked() const { return bLocked; }
+	/**
+	 * Locks the array for good: ApplyDemand refuses exactly as it does under SetLocked(true), and
+	 * nothing unlocks it. A lock of its own because the two are released by different things.
+	 * The docking lock is released by every undock, unconditionally, and when it was the only
+	 * lock a ship powered down while docked flew again the moment it undocked while IsPoweredDown
+	 * still read true. Nothing in this project powers a ship back up, so nothing releases this one.
+	 */
+	void LockForPowerDown();
+
+	/** Whether either lock holds. What every post and the scripted profile ask before commanding. */
+	bool IsLocked() const { return bLocked || bPowerDownLocked; }
 
 	/** The most this array can produce on each axis. What assist-off is a fraction of. */
 	StarForge::FWrench GetArrayCapability() const { return Capability; }
@@ -194,6 +207,9 @@ private:
 
 	bool bReady = false;
 
-	/** True while something has locked the array. See SetLocked. */
+	/** True while docking holds the array. See SetLocked. */
 	bool bLocked = false;
+
+	/** True from the power-down on. See LockForPowerDown. */
+	bool bPowerDownLocked = false;
 };
