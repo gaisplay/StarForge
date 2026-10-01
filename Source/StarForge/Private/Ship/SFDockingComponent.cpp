@@ -31,6 +31,11 @@ namespace
 	 * startup, so "sf.Dock 0, sf.Dock 1" leaves only the last value behind and the cycle
 	 * docked -> free -> docked cannot be asked for in one run at all. 2 asks for the whole
 	 * cycle on a single edge: undock now, dock again one capture later.
+	 *
+	 * The variable outlives the world it was typed in -- a PIE session, RestartLevel, open --
+	 * and every component starts from -1, so a value left behind is a keypress on the next
+	 * world's first tick: the loop rig's ship, spawned docked, released by nobody. EndPlay
+	 * puts it back to -1 when a world ends.
 	 */
 	TAutoConsoleVariable<int32> CVarDock(
 		TEXT("sf.Dock"), -1,
@@ -166,6 +171,15 @@ void USFDockingComponent::ResolvePorts()
 			TEXT("Docking component on [%s] found no port; this ship can never dock."), *Owner->GetName());
 	}
 
+	// The window's speed is read off the frame and nowhere else, so with no frame it is not a
+	// figure at all. ASFTestShip always carries one; the component is spawnable on anything.
+	if (!Frame)
+	{
+		UE_LOG(LogStarForge, Error,
+			TEXT("Docking component on [%s] found no frame component; its approach speed cannot be measured and this ship can never dock."),
+			*Owner->GetName());
+	}
+
 	// Not an error. L_FrameSpike has no station on purpose, and a ship that cannot dock
 	// there is correct rather than broken -- it just has to say so when asked.
 	UE_LOG(LogStarForge, Display,
@@ -179,6 +193,32 @@ void USFDockingComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	ResolvePorts();
+}
+
+void USFDockingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Reset when the world ends rather than seeded in BeginPlay: a value typed between two PIE
+	// sessions, in the editor's console before Play, is a command for the next world and has to
+	// reach it as a change. Not on Destroyed or RemovedFromWorld, where the world goes on and the
+	// value is still its own keypress; not on Quit, where no world follows in this process.
+	//
+	// ECVF_SetByConsole, because the console and -ExecCmds both write at that priority and Set
+	// refuses anything lower, keeping the old value with a LogConsoleManager warning
+	// (ConsoleManager.cpp 275-312). -ExecCmds applies on the first frame, after BeginPlay, so a
+	// headless sf.Dock 0 or 2 still arrives as a change.
+	if (EndPlayReason == EEndPlayReason::EndPlayInEditor || EndPlayReason == EEndPlayReason::LevelTransition)
+	{
+		const int32 LeftOver = CVarDock.GetValueOnGameThread();
+		if (LeftOver != -1)
+		{
+			CVarDock->Set(-1, ECVF_SetByConsole);
+			UE_LOG(LogStarForge, Display,
+				TEXT("Dock: sf.Dock %d reset to -1 as this world ends, so the next world does not take it for a keypress."),
+				LeftOver);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 const TCHAR* USFDockingComponent::RefusalName(StarForge::Docking::EDockingRefusal Refusal)
@@ -204,7 +244,7 @@ bool USFDockingComponent::CanDockNow() const
 void USFDockingComponent::UpdateApproach()
 {
 	const AActor* Owner = GetOwner();
-	if (!Port || !StationPort || !Owner)
+	if (!Port || !StationPort || !Owner || !Frame)
 	{
 		// A refusal is still the right answer -- CanDockNow must not go green on an
 		// instrument that read nothing -- but none of the four window conditions is what
@@ -212,6 +252,11 @@ void USFDockingComponent::UpdateApproach()
 		// that, so the refusal line can say it could not measure instead of reading the
 		// stored reason out and printing "distance 0.0 m over 3.0": a verdict against a
 		// figure that is INSIDE its own limit.
+		//
+		// A missing frame is the same case. The speed is read off the frame alone, and a 0.0
+		// standing in for it passes the 1.0 m/s condition whatever the hull is doing: a green
+		// window on a speed nobody read, and a capture that takes a hull closing at 5 m/s and,
+		// since the run-in starts from rest, stops it inside one frame.
 		bApproachMeasured = false;
 		LastApproachSI = StarForge::Docking::FDockingApproach();
 		LastPortOffsetShipLocalMetres = FVector::ZeroVector;
@@ -227,7 +272,7 @@ void USFDockingComponent::UpdateApproach()
 	//
 	// The frame samples in TG_PostPhysics and this runs pre-physics, so the figure is one
 	// frame old: 1.6 cm of travel at the 1 m/s limit and sixty frames a second.
-	const double SpeedSI = Frame ? Frame->GetLinearVelocityMetersPerSec().Size() : 0.0;
+	const double SpeedSI = Frame->GetLinearVelocityMetersPerSec().Size();
 
 	const StarForge::Docking::FDockingApproach InCentimetres =
 		StarForge::Docking::ComputeDockingApproach(
@@ -264,13 +309,14 @@ void USFDockingComponent::LogRefusal() const
 		// vocabulary for the four conditions of the window, and a missing port is an
 		// engine-side fact about this component, not a thing the approach did -- the same
 		// separation HasStation() already keeps. Which one is missing, because "could not
-		// measure" on its own sends the reader to check all three.
+		// measure" on its own sends the reader to check all four.
 		UE_LOG(LogStarForge, Warning,
 			TEXT("Dock: [%s] refused -- the approach could not be measured: no %s."),
 			*GetNameSafe(GetOwner()),
 			!Port ? TEXT("port on this ship")
 				: !StationPort ? TEXT("station port")
-				: TEXT("owner"));
+				: !GetOwner() ? TEXT("owner")
+				: TEXT("frame component on this ship, so its speed is unmeasured"));
 		return;
 	}
 
