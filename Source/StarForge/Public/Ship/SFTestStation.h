@@ -23,9 +23,8 @@ class USFShipFrameComponent;
  * but each is its own kinematic collider and nothing on it moves under physics. The frame
  * component derives velocity and acceleration as differences of its owner's transform
  * precisely so that an owner which is not a rigid body is still a full reference frame: the
- * knockdown of spec 6 works on the station
- * through the same code, and reads zero, because a station that does not move cannot
- * knock anyone off his feet.
+ * knockdown of spec 6 works on the station through the same code, and reads zero, because a
+ * station that does not move cannot knock anyone off his feet.
  *
  * Assembled in the constructor from engine cubes for the same reason the ship is: the
  * loop map is empty by design and the game mode spawns this from StaticClass(), so

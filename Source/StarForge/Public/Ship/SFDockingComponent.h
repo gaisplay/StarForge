@@ -269,9 +269,9 @@ private:
 	 * Whether the refusal above stands on a figure anything actually measured.
 	 *
 	 * False until the first complete pass of UpdateApproach, and false again whenever a
-	 * port or the frame is missing and it returns early. The refusal it leaves behind is a real
-	 * refusal -- nothing may dock on an unread instrument -- but it is not one of the four
-	 * window conditions, and reporting it as one prints a distance nobody measured.
+	 * port or the frame is missing and it returns early. The refusal it leaves behind is a
+	 * real refusal -- nothing may dock on an unread instrument -- but it is not one of the
+	 * four window conditions, and reporting it as one prints a figure nobody measured.
 	 */
 	bool bApproachMeasured = false;
 
