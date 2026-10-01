@@ -1,5 +1,7 @@
 #include "DockingMath.h"
 
+#include <limits>
+
 namespace StarForge::Docking
 {
 	namespace
@@ -15,14 +17,21 @@ namespace StarForge::Docking
 		 * against exactly that; the clamp is what keeps a rounding error from ever having
 		 * to depend on them.
 		 *
-		 * It is not itself a filter for non-finite input and must not be read as one:
-		 * Clamp(NaN, -1, 1) returns 1.0, whose Acos is zero -- perfectly aligned, the
-		 * most permissive answer there is. A genuinely non-finite approach reaches CanDock
-		 * by way of the distance or the carried speed, and is refused there.
+		 * It is not a filter for non-finite input, so a dot product that is not finite is
+		 * kept away from it: Clamp returns 1.0 for a NaN and for +Inf, whose Acos is zero --
+		 * perfectly aligned, the most permissive answer there is. A port rotation gone NaN
+		 * arrives here with its location still finite, so neither the distance nor the
+		 * carried speed refuses it first; the angle goes out as NaN instead, and CanDock's
+		 * negated guards refuse it.
 		 */
 		double AngleBetween(const FVector& A, const FVector& B)
 		{
-			return FMath::Acos(FMath::Clamp(FVector::DotProduct(A, B), -1.0, 1.0));
+			const double Dot = FVector::DotProduct(A, B);
+			if (!FMath::IsFinite(Dot))
+			{
+				return std::numeric_limits<double>::quiet_NaN();
+			}
+			return FMath::Acos(FMath::Clamp(Dot, -1.0, 1.0));
 		}
 
 		/**
@@ -70,11 +79,12 @@ namespace StarForge::Docking
 		// the same, and the two differ exactly where this function must not be wrong. A
 		// non-finite figure compares false against both, so `> Limit` falls through all
 		// four guards and answers None -- permission to dock, granted on a question that
-		// could not be evaluated. Negated, it fails the first condition instead. Both
-		// paths in are reachable: the speed is carried from the caller's instrument
-		// untouched, and a port location that is not finite carries into FVector::Dist --
-		// as NaN if a coordinate is NaN, as +Infinity if one is merely infinite. The
-		// negation refuses both; `> Limit` would refuse only the infinite one.
+		// could not be evaluated. Negated, it fails the first condition instead. Every
+		// path in is reachable: the speed is carried from the caller's instrument
+		// untouched, a port location that is not finite carries into FVector::Dist --
+		// as NaN if a coordinate is NaN, as +Infinity if one is merely infinite -- and a
+		// port rotation that is not finite comes out of AngleBetween as two NaN angles.
+		// The negation refuses all of them; `> Limit` would refuse only the infinite one.
 		if (!(ApproachSI.Distance <= Limits.DistanceMetres))
 		{
 			return EDockingRefusal::Distance;

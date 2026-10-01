@@ -406,6 +406,39 @@ bool FDockingNonFiniteApproachIsRefusedTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("an infinite distance is refused too"),
 		StarForge::Docking::CanDock(Infinite, Limits) == StarForge::Docking::EDockingRefusal::Distance);
 
+	// And the path the two angles take in, which no field above reaches: a port whose rotation
+	// is not finite while its location is. The distance between the origins is then a sound
+	// figure inside the window, and both axes are NaN. The clamp in front of Acos used to turn
+	// their NaN dot product into 1.0, an angle of zero -- nose-on, decks parallel -- and
+	// CanDock granted the docking on a pose nobody could read. Positions in metres, so the
+	// approach goes to CanDock as it comes: the transforms carry whatever unit they are given.
+	const FTransform GoodStationPort(FRotator(0.0, 180.0, 0.0).Quaternion(), FVector(2.0, 0.0, 0.0));
+	const FQuat NaNRotation(NaN, NaN, NaN, NaN);
+	const FQuat InfiniteRotation(Inf, 0.0, 0.0, 1.0);
+
+	for (const FQuat& Broken : { NaNRotation, InfiniteRotation })
+	{
+		const StarForge::Docking::FDockingApproach FromTheShip =
+			StarForge::Docking::ComputeDockingApproach(
+				FTransform(Broken, FVector::ZeroVector), GoodStationPort, 0.3);
+		TestTrue(TEXT("the fixture's distance is a sound figure inside the window"),
+			FMath::IsNearlyEqual(FromTheShip.Distance, 2.0, 1e-12));
+		TestFalse(TEXT("a ship port whose rotation is not finite has no forward angle"),
+			FMath::IsFinite(FromTheShip.ForwardAngleRad));
+		TestFalse(TEXT("and no up angle"), FMath::IsFinite(FromTheShip.UpAngleRad));
+		TestTrue(TEXT("and the docking is refused on the first angle it cannot read"),
+			StarForge::Docking::CanDock(FromTheShip, Limits) == StarForge::Docking::EDockingRefusal::Forward);
+
+		const StarForge::Docking::FDockingApproach FromTheStation =
+			StarForge::Docking::ComputeDockingApproach(
+				FTransform::Identity, FTransform(Broken, FVector(2.0, 0.0, 0.0)), 0.3);
+		TestFalse(TEXT("a station port whose rotation is not finite has no forward angle either"),
+			FMath::IsFinite(FromTheStation.ForwardAngleRad));
+		TestFalse(TEXT("nor an up angle"), FMath::IsFinite(FromTheStation.UpAngleRad));
+		TestTrue(TEXT("and is refused the same way"),
+			StarForge::Docking::CanDock(FromTheStation, Limits) == StarForge::Docking::EDockingRefusal::Forward);
+	}
+
 	// The same failure one function over: both of CapturePose's range guards are false for
 	// a NaN alpha, so it would slerp the hull to a pose of NaNs -- and a capture ends in an
 	// attachment that freezes whatever pose it was handed, with nothing to correct it.
