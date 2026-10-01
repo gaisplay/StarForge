@@ -31,6 +31,11 @@ namespace
 	 * startup, so "sf.Dock 0, sf.Dock 1" leaves only the last value behind and the cycle
 	 * docked -> free -> docked cannot be asked for in one run at all. 2 asks for the whole
 	 * cycle on a single edge: undock now, dock again one capture later.
+	 *
+	 * The variable outlives the world it was typed in -- a PIE session, RestartLevel, open --
+	 * and every component starts from -1, so a value left behind is a keypress on the next
+	 * world's first tick: the loop rig's ship, spawned docked, released by nobody. EndPlay
+	 * puts it back to -1 when a world ends.
 	 */
 	TAutoConsoleVariable<int32> CVarDock(
 		TEXT("sf.Dock"), -1,
@@ -179,6 +184,32 @@ void USFDockingComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	ResolvePorts();
+}
+
+void USFDockingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Reset when the world ends rather than seeded in BeginPlay: a value typed between two PIE
+	// sessions, in the editor's console before Play, is a command for the next world and has to
+	// reach it as a change. Not on Destroyed or RemovedFromWorld, where the world goes on and the
+	// value is still its own keypress; not on Quit, where no world follows in this process.
+	//
+	// ECVF_SetByConsole, because the console and -ExecCmds both write at that priority and Set
+	// refuses anything lower, keeping the old value with a LogConsoleManager warning
+	// (ConsoleManager.cpp 274-308). -ExecCmds applies on the first frame, after BeginPlay, so a
+	// headless sf.Dock 0 or 2 still arrives as a change.
+	if (EndPlayReason == EEndPlayReason::EndPlayInEditor || EndPlayReason == EEndPlayReason::LevelTransition)
+	{
+		const int32 LeftOver = CVarDock.GetValueOnGameThread();
+		if (LeftOver != -1)
+		{
+			CVarDock->Set(-1, ECVF_SetByConsole);
+			UE_LOG(LogStarForge, Display,
+				TEXT("Dock: sf.Dock %d reset to -1 as this world ends, so the next world does not take it for a keypress."),
+				LeftOver);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 const TCHAR* USFDockingComponent::RefusalName(StarForge::Docking::EDockingRefusal Refusal)

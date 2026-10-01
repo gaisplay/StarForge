@@ -73,6 +73,10 @@ public:
 	USFDockingComponent();
 
 	virtual void BeginPlay() override;
+
+	/** Puts sf.Dock back to -1 when the world ends, so the next world does not replay it. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	virtual void TickComponent(
 		float DeltaTime,
 		ELevelTick TickType,
