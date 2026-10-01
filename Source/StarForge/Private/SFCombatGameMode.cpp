@@ -244,17 +244,48 @@ void ASFCombatGameMode::StartPlay()
 			bFault = true;
 		}
 
-		// The hull field the rig set, read back, not the weapon's own flag: the weapon exposes no getter.
-		// The hull hands the field to the weapon before Super::BeginPlay, and the weapon's own BeginPlay
-		// line ("weapons hold" / "weapons free") is its read-back in the log. The same holds for "armed".
-		if (!Ship->bWeaponsFree)
+		// Two reads, because two things decide whether this hull fires, and the weapon's rule is the one
+		// mirrored here (USFWeaponComponent::ApplyTrigger): the latch sf.Fire, on a hull that answers
+		// the console, overrides the hull field -- 1 fires a weapons-hold hull, 0 holds a weapons-free
+		// one, anything else leaves the field to decide.
+		//
+		// The field is the one the rig set, read back, not the weapon's own flag: the weapon exposes no
+		// getter. The hull hands the field to the weapon before Super::BeginPlay, and the weapon's own
+		// BeginPlay line ("weapons hold" / "weapons free") is its read-back in the log. The same holds
+		// for "armed".
+		//
+		// The latch is declared in SFWeaponComponent.cpp and reached by name, like sf.ConsoleOperator.
+		// It belongs to the process, not to this world: a 1 typed in an earlier session or before Play,
+		// or put on the command line with -ini, is already down here, and the ship fires from its first
+		// gunner tick. A 1 from -ExecCmds lands after this line, and that one is the "until". "Latched",
+		// not "fires": the latch replaces the operator's trigger and never the operator, so an empty
+		// gunner's post still does not fire under it. A miss is the loud side.
+		const IConsoleVariable* FireVar = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.Fire"));
+		const int32 FireLatch = (FireVar && bPlayerCrewing) ? FireVar->GetInt() : -1;
+		if (!FireVar)
 		{
-			ShipText += TEXT(" and holds fire until sf.Fire 1");
+			ShipText += TEXT(" but its trigger latch sf.Fire is NOT FOUND, so whether it holds fire cannot be read");
+			bFault = true;
+		}
+		else if (FireLatch == 1)
+		{
+			ShipText += TEXT(" but its trigger is LATCHED DOWN from the start -- sf.Fire is already 1");
+			bFault = true;
+		}
+		else if (Ship->bWeaponsFree)
+		{
+			ShipText += (FireLatch == 0)
+				? TEXT(" but does NOT HOLD FIRE once sf.Fire 0 is lifted -- its automation shoots on its own")
+				: TEXT(" but does NOT HOLD FIRE -- its automation shoots on its own");
+			bFault = true;
+		}
+		else if (FireLatch == 0)
+		{
+			ShipText += TEXT(" and holds fire (sf.Fire 0) until sf.Fire 1");
 		}
 		else
 		{
-			ShipText += TEXT(" but does NOT HOLD FIRE -- its automation shoots on its own");
-			bFault = true;
+			ShipText += TEXT(" and holds fire until sf.Fire 1");
 		}
 
 		const AActor* Aimed = Ship->GetAutomationOperator() ? Ship->GetAutomationOperator()->GetTargetActor() : nullptr;
