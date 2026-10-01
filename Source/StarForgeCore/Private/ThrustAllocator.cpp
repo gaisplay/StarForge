@@ -234,7 +234,7 @@ namespace StarForge
 					// of the thrust. On the rig's 200 kN the Gram entries reach 2.56e12, and
 					// a replica of this elimination lands within 1e-4 of the exact pivots of
 					// its rank-deficient subsets, 0.018-0.045; ten times the thrust puts the
-					// rounding at lambda itself, so the branch stays. Keep what is already
+					// rounding at about lambda itself, so the branch stays. Keep what is already
 					// allocated rather than discarding a partial answer.
 					break;
 				}
