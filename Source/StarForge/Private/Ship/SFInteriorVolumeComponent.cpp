@@ -236,9 +236,37 @@ void USFInteriorVolumeComponent::HandleEndOverlap(
 	UPrimitiveComponent* OtherComp,
 	int32 OtherBodyIndex)
 {
-	// Leaving still does not unbind (see the class comment). It only closes a refused episode.
+	// Leaving does not unbind (see the class comment). It closes a refused episode.
 	RefusedOccupants.RemoveAll([OtherActor](const TWeakObjectPtr<ASFCharacter>& Entry)
 	{
 		return !Entry.IsValid() || Entry.Get() == OtherActor;
 	});
+
+	// And leaving the volume of the frame he is bound to, while another carrier's volume still
+	// holds him, is entering that one. Binding happens when the EDGE of his capsule touches a
+	// volume, and docked, the two volumes are 10 cm apart against a 34 cm radius: his capsule is in
+	// both across a 58 cm band of the doorway. Walking out he is bound to the station at its near
+	// edge; turning back anywhere inside the band he never leaves the ship's volume, so no entry
+	// rebinds him, and he stayed the station's in his own cabin -- not carried by the ship, E
+	// unable to find the pilot's seat, and since the F3 release, dropped by the next undock.
+	// Through TryHandover, so the speed gate holds here as on entry.
+	ASFCharacter* Character = Cast<ASFCharacter>(OtherActor);
+	const USFShipboardMovementComponent* Movement = Character ? Character->GetShipboardMovement() : nullptr;
+	const USFShipFrameComponent* Mine = GetOwnerFrame();
+	if (!Movement || !Mine || Movement->GetShipFrame() != Mine || IsOverlappingActor(Character))
+	{
+		return;
+	}
+
+	TArray<UPrimitiveComponent*> Overlapping;
+	Character->GetOverlappingComponents(Overlapping);
+	for (UPrimitiveComponent* Component : Overlapping)
+	{
+		USFInteriorVolumeComponent* Other = Cast<USFInteriorVolumeComponent>(Component);
+		if (Other && Other != this && Other->GetOwnerFrame() && Other->GetOwnerFrame() != Mine)
+		{
+			Other->TryHandover(Character);
+			return;
+		}
+	}
 }
