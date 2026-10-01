@@ -126,9 +126,10 @@ public:
 	 *
 	 * The count above is blind here by construction: it measures from the last carry, and
 	 * after a binding there has not been one. A man bound in mid-air who never reaches a
-	 * deck is the case it cannot see -- recorded on the spike rig at 400 fps under full
-	 * thrust along -Z, where the floor outruns his spawn fall and he is never carried in
-	 * eighty seconds while every instrument stays calm.
+	 * deck is the case it cannot see -- recorded on the spike rig under full thrust along
+	 * -Z, where the floor outruns his spawn fall: never carried in eighty seconds at 400 fps,
+	 * and at 60 not before a brief contact 6.0-6.3 s in, whose end the record had read as
+	 * the moment he came off. Every instrument stayed calm until then.
 	 */
 	double GetSecondsBoundUncarried() const { return bHasCarriedOnce ? 0.0 : SecondsBoundUncarried; }
 
@@ -296,7 +297,6 @@ public:
 	 */
 	void TurnView(double YawDegrees, double PitchDegrees);
 
-
 	/** False while knocked down: a man who is down does not land. See the cpp. */
 	virtual bool IsValidLandingSpot(const FVector& CapsuleLocation, const FHitResult& Hit) const override;
 
@@ -441,7 +441,6 @@ private:
 
 	/** What the controller held right after this component last wrote to it. */
 	FRotator LastLeftControlRotation = FRotator::ZeroRotator;
-
 
 	/** See GetLostFrameName. */
 	FString LostFrameName;
