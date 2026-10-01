@@ -58,6 +58,14 @@ public:
 	/** Puts back the sf.ShipProfile StartPlay found, and stops watching the place's variables. */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	/**
+	 * Why the place stands refused, or None while it fits and before InitGame has measured it.
+	 * For the panel: a refused place has no pawn, and all a HUD can say of that unprompted is that
+	 * nobody is possessed -- in red, as if the rig were broken, over a refusal the control asked
+	 * for. StarForge::Place::RefusalName gives the words the size line uses.
+	 */
+	StarForge::Place::EPlaceRefusal GetPlaceRefusal() const;
+
 private:
 	/**
 	 * sf.PlaceOffsetM and sf.PlaceRadiusM are read once, in InitGame, and a change after it would

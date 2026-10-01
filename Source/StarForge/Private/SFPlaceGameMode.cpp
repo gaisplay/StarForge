@@ -604,6 +604,11 @@ void ASFPlaceGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+StarForge::Place::EPlaceRefusal ASFPlaceGameMode::GetPlaceRefusal() const
+{
+	return (bPlaceMeasured && !bPlaceFits) ? PlaceFit.Refusal : StarForge::Place::EPlaceRefusal::None;
+}
+
 void ASFPlaceGameMode::OnPlaceVariableChanged(IConsoleVariable* Variable)
 {
 	const bool bOffset = (Variable == CVarPlaceOffsetM.AsVariable());
