@@ -51,6 +51,9 @@ public:
 	 */
 	virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
 
+	/** Puts back the sf.ShipProfile StartPlay found. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
 	/**
 	 * Resolved in the constructor by path, guarded, exactly as ASFTestShip resolves its ship
@@ -88,4 +91,7 @@ private:
 	bool bPlaceMeasured = false;
 
 	bool bPlaceFits = false;
+
+	int32 ProfileBeforeRig = 1;
+	bool bRestoreProfile = false;
 };

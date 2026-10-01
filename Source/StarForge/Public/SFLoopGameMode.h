@@ -29,10 +29,16 @@ public:
 
 	virtual void StartPlay() override;
 
+	/** Puts back the sf.ShipProfile StartPlay found, so the rig's 0 does not outlive its world. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
 	UPROPERTY()
 	TObjectPtr<ASFTestStation> Station;
 
 	UPROPERTY()
 	TObjectPtr<ASFTestShip> Ship;
+
+	int32 ProfileBeforeRig = 1;
+	bool bRestoreProfile = false;
 };

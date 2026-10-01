@@ -31,10 +31,16 @@ public:
 
 	virtual void StartPlay() override;
 
+	/** Puts back the sf.ShipProfile StartPlay found. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
 	UPROPERTY()
 	TObjectPtr<ASFTestShip> Ship;
 
 	UPROPERTY()
 	TObjectPtr<ASFTestShip> Pirate;
+
+	int32 ProfileBeforeRig = 1;
+	bool bRestoreProfile = false;
 };

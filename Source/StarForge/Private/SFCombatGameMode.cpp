@@ -96,6 +96,11 @@ void ASFCombatGameMode::StartPlay()
 	bool bProfileOff = false;
 	if (IConsoleVariable* Profile = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile")))
 	{
+		// Kept for EndPlay, which puts it back: see SFLoopGameMode.cpp for why a 0 left behind
+		// stops the spike rig's manoeuvre in every later session of the same editor.
+		ProfileBeforeRig = Profile->GetInt();
+		bRestoreProfile = true;
+
 		Profile->Set(0);
 		const int32 Held = Profile->GetInt();
 		bProfileOff = (Held == 0);
@@ -337,4 +342,21 @@ void ASFCombatGameMode::StartPlay()
 	{
 		UE_LOG(LogStarForge, Display, TEXT("%s"), *Report);
 	}
+}
+
+void ASFCombatGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// At SetByCode, and only while nothing stronger holds the variable, for the reasons
+	// SFLoopGameMode.cpp's EndPlay gives. No line.
+	if (bRestoreProfile)
+	{
+		IConsoleVariable* Profile = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"));
+		if (Profile && ((uint32)Profile->GetFlags() & ECVF_SetByMask) <= (uint32)ECVF_SetByCode)
+		{
+			Profile->Set(ProfileBeforeRig, ECVF_SetByCode);
+		}
+		bRestoreProfile = false;
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
