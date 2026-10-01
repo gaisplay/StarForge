@@ -206,6 +206,17 @@ ASFTestShip::ASFTestShip()
 	Hull->SetLinearDamping(0.0f);
 	Hull->SetAngularDamping(0.0f);
 
+	// Euler's equations, so the plant is the one the flight controller is written for. The
+	// controller feeds w x Iw forward in both modes (spec 5: tau = I alpha + w x (I w)), and that is
+	// right only for a body that has it; Chaos integrates the gyroscopic part only when this flag is
+	// set (PBDRigidsEvolutionGBF.cpp 939), and the engine default is off (BodyInstanceCore.cpp 18).
+	// Without it the feed-forward was a disturbance: on a 20 x 8 x 8 m hull, full roll and pitch
+	// settled at 180 / 76 / 58 deg/s instead of 180 / 120 / 0. The rig's hull is a cube, whose w x Iw
+	// is zero, so no recorded figure depended on it -- which is how it went unseen. The owner chose
+	// on 2026-10-01 to make the plant agree with the controller rather than drop the term. Read at
+	// body creation (BodyInstance.cpp 1334), so it survives the physics state an undock recreates.
+	Hull->BodyInstance.bGyroscopicTorqueEnabled = true;
+
 	// Stated rather than derived from the box volume, so the inertia the flight
 	// maths later reads back from Chaos is reproducible instead of depending on a
 	// default density. The thruster array replaces this with the asset's mass at
