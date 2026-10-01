@@ -5,7 +5,9 @@
 #include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "Player/SFCharacter.h"
+#include "Place.h"
 #include "Player/SFShipboardMovementComponent.h"
+#include "SFPlaceGameMode.h"
 #include "Ship/SFDamageableComponent.h"
 #include "Ship/SFDockingComponent.h"
 #include "Ship/SFGunnerStationComponent.h"
@@ -156,6 +158,23 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	{
 		// A blank screen during a checkpoint run is indistinguishable from a rig that
 		// is simply quiet, so every exit from this function has to say why.
+		//
+		// A refused place withholds the pawn on purpose (ASFPlaceGameMode measures in InitGame and
+		// answers the login with no pawn class), so here "nobody possessed" is the refusal, and red
+		// would dress a control that worked as a broken rig. Orange, and named, because it is still
+		// a finding without sf.PlaceOffsetM or sf.PlaceRadiusM on the command line; the log carries
+		// the Error either way.
+		const UWorld* World = GetWorld();
+		const ASFPlaceGameMode* PlaceMode = World ? World->GetAuthGameMode<ASFPlaceGameMode>() : nullptr;
+		const StarForge::Place::EPlaceRefusal Refusal =
+			PlaceMode ? PlaceMode->GetPlaceRefusal() : StarForge::Place::EPlaceRefusal::None;
+		if (Refusal != StarForge::Place::EPlaceRefusal::None)
+		{
+			DrawLine(FString::Printf(TEXT("PLACE REFUSED - %s; nothing was assembled, so there is no occupant to measure"),
+				StarForge::Place::RefusalName(Refusal)), Y, FLinearColor(1.0f, 0.45f, 0.0f));
+			return;
+		}
+
 		DrawLine(TEXT("NO SFCHARACTER POSSESSED - there is no occupant to measure"), Y, FLinearColor::Red);
 		return;
 	}
