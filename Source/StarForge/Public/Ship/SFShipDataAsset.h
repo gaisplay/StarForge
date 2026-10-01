@@ -65,7 +65,13 @@ public:
 	UPROPERTY(EditAnywhere, Category = "StarForge|Limits")
 	double MaxSpeed = 200.0;
 
-	/** Boost ceiling from spec 7, metres per second. Consumed by plan 2b. */
+	/**
+	 * Boost ceiling from spec 7, metres per second. Nothing reads it: FFlightLimits has no boost
+	 * and BuildLimits copies MaxSpeed alone, so no stick can ask for more than MaxSpeed, and
+	 * changing this in an asset changes nothing in flight. Kept because it is the spec's figure.
+	 * The one 400 m/s anything flies is the scripted profile's, ASFTestShip::PeakSpeedCms, a
+	 * literal of its own.
+	 */
 	UPROPERTY(EditAnywhere, Category = "StarForge|Limits")
 	double BoostSpeed = 400.0;
 
