@@ -4,6 +4,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "HAL/IConsoleManager.h"
+#include "NumberText.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Ship/SFShipDataAsset.h"
 #include "StarForgeLog.h"
@@ -72,18 +73,20 @@ namespace
 
 	void KillThrusterFromConsole(const TArray<FString>& Args, UWorld* World)
 	{
-		const auto IsWholeNumber = [](const FString& Arg) { return Arg.IsNumeric() && !Arg.Contains(TEXT(".")); };
-
-		const bool bParsed = (Args.Num() == 1 || Args.Num() == 2) && IsWholeNumber(Args[0])
-			&& (Args.Num() == 1 || Args[1].IsNumeric());
+		// Read strictly. FString::IsNumeric passes a sign with nothing after it and a lone point
+		// (CString.h 148-175), and Atoi and Atod read "-", "+" and "." as zero: a typo destroyed
+		// thruster 0, or killed on the first frame, the one frame a delay exists to keep the kill off.
+		int32 AssetIndex = 0;
+		double AfterSeconds = 0.0;
+		const bool bParsed = (Args.Num() == 1 || Args.Num() == 2)
+			&& StarForge::Parse::TryParseWholeNumber(Args[0], AssetIndex)
+			&& (Args.Num() == 1 || StarForge::Parse::TryParseFiniteNumber(Args[1], AfterSeconds));
 		if (!bParsed)
 		{
 			UE_LOG(LogStarForge, Warning,
 				TEXT("sf.KillThruster needs a thruster index, a whole number, and optionally a delay in seconds; nothing destroyed."));
 			return;
 		}
-		const int32 AssetIndex = FCString::Atoi(*Args[0]);
-		const double AfterSeconds = (Args.Num() == 2) ? FCString::Atod(*Args[1]) : 0.0;
 
 		if (!(AfterSeconds >= 0.0) || !FMath::IsFinite(AfterSeconds))
 		{
