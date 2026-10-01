@@ -151,14 +151,23 @@ namespace StarForge::ShipFrame
 	 * at each of the two samples. Metres and seconds.
 	 *
 	 * Two flags and not one, because the rule they feed is under test: a step is SIMULATED only if
-	 * the carrier was a simulating body at BOTH samples. The docking release lets go by snapping the
-	 * hull to its target and switching simulation on in the same pre-physics tick, so the step that
-	 * ends simulating began kinematic, and most of its travel is a teleport rather than an
-	 * integration. Judged by its end alone it would be divided by the physics step and stamped where
-	 * a physics step ends, and it is neither. The capture is the same switch the other way round:
-	 * one tick stops the simulation and makes the run-in's first eased step, so that step began
-	 * simulating and its travel is the eased step, and judged by its start alone it would be
-	 * stamped at its end.
+	 * the carrier was a simulating body at BOTH samples. The capture is why the start counts: one
+	 * pre-physics tick stops the simulation and makes the run-in's first eased step, so that step
+	 * began simulating and its travel is the eased step, and judged by its start alone it would be
+	 * stamped at its end. The end counts for a move written into the tick that switches simulation
+	 * on, whose travel is a teleport: judged by its end alone it would be divided by the physics
+	 * step and stamped where a physics step ends, and it is neither. That is how the release let
+	 * go until 2026-09-28. Since then it writes its last eased pose exactly on one tick and lets go
+	 * on the next, which moves nothing (USFDockingComponent, bReleaseArrived), so the step that
+	 * ends simulating carries only what Chaos integrated from rest in it -- nothing at all in
+	 * sf.FeltDebug's record -- and the rule decides only where its zero is stamped.
+	 *
+	 * Under thrust that step can carry one physics step, if the pilot's demand lands in the same
+	 * tick: the pilot station and the docking component share TG_PrePhysics with no prerequisite
+	 * between them. Read as kinematic, that step's velocity is stamped half a frame early. Derived,
+	 * not measured: the throttle spools from zero at the let-go, and with the authored 0.05 s that
+	 * keeps the thrust's part of the reading under the thrust's own acceleration on any frame; a
+	 * spool near zero, on a let-go frame much longer than the one before it, reads up to twice it.
 	 */
 	struct STARFORGECORE_API FFrameStep
 	{
