@@ -6,6 +6,8 @@
 #include "Engine/World.h"
 #include "FlightController.h"
 #include "HAL/IConsoleManager.h"
+#include "PBDRigidsSolver.h"
+#include "Physics/Experimental/PhysScene_Chaos.h"
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "Ship/SFAutomationOperatorComponent.h"
 #include "Ship/SFConsoleOperatorComponent.h"
@@ -546,14 +548,45 @@ void ASFTestShip::BeginPlay()
 	// mechanism that can hand GetActorTransform a smoothed value instead of the one
 	// physics computed, and every drift figure this rig has ever produced rests on
 	// that not happening.
-	const IConsoleVariable* AsyncMode =
-		IConsoleManager::Get().FindConsoleVariable(TEXT("p.Chaos.Solver.AsyncPhysicsBlockMode"));
+	//
+	// Asked of this world's solver, the way the engine asks it: IsUsingAsyncResults
+	// (PhysicsSolverBase.h 712-715) is !p.ForceDisableAsyncPhysics && AsyncDt >= 0, and the
+	// scene set AsyncDt from bTickPhysicsAsync when it was built, -1 with it off
+	// (PhysScene_Chaos.cpp 549). Its two inputs are read rather than the function called,
+	// because it reads a Chaos export and this module does not link Chaos. A variable that is
+	// not found is said in capitals on a Warning, never in brackets on a Display line: the
+	// "p.Chaos.Solver.AsyncPhysicsBlockMode" looked up here until 2026-10-01 is registered
+	// nowhere in 5.8, all 306 of these lines in evidence read "(cvar absent)", and a build with
+	// Tick Physics Async on would have printed the same. Substepping is read from the settings,
+	// where the engine reads it every frame (PhysLevel.cpp 212).
+	//
+	// Either one on is a state no drift figure in this project was taken under, so it is said
+	// in capitals and as a Warning, as every rig line says a state that did not hold.
+	const FPhysScene* PhysicsScene = GetWorld() ? GetWorld()->GetPhysicsScene() : nullptr;
+	const Chaos::FPhysicsSolverBase* Solver = PhysicsScene ? PhysicsScene->GetSolver() : nullptr;
+	const IConsoleVariable* ForceDisableAsync =
+		IConsoleManager::Get().FindConsoleVariable(TEXT("p.ForceDisableAsyncPhysics"));
+	const bool bSubstepping = UPhysicsSettings::Get()->bSubstepping;
+	const bool bRead = Solver && ForceDisableAsync;
+	const bool bAsync = bRead && ForceDisableAsync->GetInt() == 0 && Solver->GetAsyncDeltaTime() >= 0.0;
 
-	UE_LOG(LogStarForge, Display,
-		TEXT("Physics: async block mode %s, substepping %s. Drift figures are only "
-			 "comparable across runs where these match."),
-		AsyncMode ? *FString::FromInt(AsyncMode->GetInt()) : TEXT("(cvar absent)"),
-		UPhysicsSettings::Get()->bSubstepping ? TEXT("on") : TEXT("off"));
+	const FString SolverText = !Solver ? FString(TEXT("solver UNREAD -- this world has no physics scene"))
+		: !ForceDisableAsync ? FString(TEXT("solver UNREAD -- p.ForceDisableAsyncPhysics is not registered"))
+		: bAsync ? FString::Printf(TEXT("solver ASYNCHRONOUS at a fixed %.4f s step"), Solver->GetAsyncDeltaTime())
+		: FString(TEXT("solver synchronous"));
+
+	if (!bRead || bAsync || bSubstepping)
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Physics: %s, substepping %s. Drift figures are only comparable across runs where these match."),
+			*SolverText, bSubstepping ? TEXT("ON") : TEXT("off"));
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Display,
+			TEXT("Physics: %s, substepping off. Drift figures are only comparable across runs where these match."),
+			*SolverText);
+	}
 
 	// The rig assembles itself, so the thing the turret tracks is spawned here rather
 	// than placed: L_FrameSpike is empty by design. Anchored to this ship's position so
