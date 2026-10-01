@@ -88,8 +88,12 @@ namespace StarForge
 		/**
 		 * Damped pseudo-inverse rows for the given subset of columns.
 		 *
-		 * Returns false when that subset cannot span six axes, which is a normal
-		 * outcome once enough thrusters have saturated rather than an error.
+		 * Not a test of span. The damping adds lambda to every eigenvalue of the Gram
+		 * matrix, so it inverts whatever the subset spans, and a subset short of six
+		 * axes gets the damped least-squares answer over the axes it has -- Build's
+		 * probes, not this, are what refuse a rank-deficient array. Returns false for an
+		 * empty subset, and when elimination meets a pivot under UE_DOUBLE_SMALL_NUMBER;
+		 * the .cpp's Solve says why the second is kept rather than proved dead.
 		 */
 		static bool ComputeResponseRows(
 			const TArray<FWrench>& InColumns,

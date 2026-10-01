@@ -183,7 +183,7 @@ void USFDamageableComponent::ReceiveHit(const FVector& HitWorldCm, double Damage
 	}
 
 	FHitOutcome Outcome;
-	if (!ApplyHit(Shields, Limits, Face, Damage, Outcome))
+	if (!ApplyHit(Shields, Face, Damage, Outcome))
 	{
 		UE_LOG(LogStarForge, Error,
 			TEXT("Hit on [%s] %s face: the shield maths refused %.1f damage -- not a finite non-negative number, ")

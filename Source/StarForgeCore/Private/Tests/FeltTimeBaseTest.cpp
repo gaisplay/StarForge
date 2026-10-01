@@ -303,23 +303,27 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FFeltTimeBaseLetGoIsKinematicTest::RunTest(const FString& Parameters)
 {
-	// The end of a release as USFDockingComponent writes it: eased kinematic frames, then one
-	// pre-physics tick that snaps the hull to its target and switches simulation on, then the body
-	// under thrust. The switching step ends simulating and began kinematic, and its travel is the
-	// snap, so it is kinematic: divided by its frame and stamped at its middle.
+	// The end of a release as USFDockingComponent writes it since 2026-09-28: eased kinematic
+	// frames; then the arrival, the frame that runs the release's time out, which writes the
+	// target exactly and is kinematic at both ends; then, one tick later, the let-go, which
+	// switches simulation on and moves nothing. That step began kinematic and ends simulating,
+	// and its travel is what Chaos integrated from rest -- nothing, in sf.FeltDebug's record of a
+	// release (2026-09-28-letgo-feltdebug-release-EXTRACT.log, frame 1809: simulating 0 -> 1,
+	// dx 0). Judged by both ends it is kinematic, stamped at its middle; then the body under
+	// thrust.
 	//
-	// The let-go frame is a 40 ms hitch, and it is the frame that runs the release's time out, as it
-	// would in AdvanceRelease: the snap then covers the last 40 ms of the move, 13.6 mm. At a normal
-	// frame dx / dt and dx / h are one number and only the stamp would tell the two kinds apart; at
-	// 40 ms physics is clamped to 1/30 s and the divisor tells as well.
-	constexpr float LetGoFrame = 0.040f;
+	// The arrival is a 40 ms hitch, so it carries the last 40 ms of the move, 13.6 mm, rather
+	// than the micrometres an ordinary frame leaves. Those are the poses the one-tick let-go at
+	// the end of this test snaps across, so the two sequences differ in one thing: which tick
+	// the snap is on.
+	constexpr float ArrivalFrame = 0.040f;
 	const TArray<float> Frames = { JitterLong, JitterShort };
 
 	TArray<FFrameStep> Steps;
 	double Elapsed = 0.0;
 	double Pose = 0.0;
 	int32 FrameIndex = 0;
-	while (Elapsed + static_cast<double>(LetGoFrame) < CaptureSeconds)
+	while (Elapsed + static_cast<double>(ArrivalFrame) < CaptureSeconds)
 	{
 		const double FrameSeconds = static_cast<double>(Frames[FrameIndex++ % Frames.Num()]);
 		Elapsed += FrameSeconds;
@@ -328,31 +332,45 @@ bool FFeltTimeBaseLetGoIsKinematicTest::RunTest(const FString& Parameters)
 		Steps.Add(MakeStep(FVector(NewPose - Pose, 0.0, 0.0), FrameSeconds, false, false));
 		Pose = NewPose;
 	}
+	const TArray<FFrameStep> Eased = Steps;
 
-	// The snap: the rest of the way to the target, kinematic at the start and simulating at the end.
-	// Nothing is added for the physics step inside it -- the body is let go at rest, and the thrust
-	// arrives on the next frame.
 	const double SnapMetres = ReleaseMetres - Pose;
-	TestTrue(TEXT("the fixture's snap is a real distance"), SnapMetres > 0.01);
-	const int32 LetGoIndex = Steps.Add(MakeStep(FVector(SnapMetres, 0.0, 0.0), LetGoFrame, false, true));
+	TestTrue(TEXT("the fixture's arrival is a real distance"), SnapMetres > 0.01);
+	const int32 ArrivalIndex = Steps.Add(MakeStep(FVector(SnapMetres, 0.0, 0.0), ArrivalFrame, false, false));
+
+	const double LetGoFrame = static_cast<double>(Frames[FrameIndex % Frames.Num()]);
+	const int32 LetGoIndex = Steps.Add(MakeStep(FVector::ZeroVector, LetGoFrame, false, true));
 
 	// Then the hull under the spike rig's thrust, from rest at the target.
-	Steps.Append(SimulatedSteps(FVector(ReleaseMetres, 0.0, 0.0), FVector::ZeroVector, Frames, 4,
-		[](int32) { return FVector(SpikeThrust, 0.0, 0.0); }));
+	const TArray<FFrameStep> Thrust = SimulatedSteps(FVector(ReleaseMetres, 0.0, 0.0), FVector::ZeroVector, Frames, 4,
+		[](int32) { return FVector(SpikeThrust, 0.0, 0.0); });
+	Steps.Append(Thrust);
+
+	FFrameVelocity Arrival;
+	StarForge::ShipFrame::EstimateStepVelocity(Steps[ArrivalIndex], MaxPhysicsStepSeconds, Arrival);
 
 	FFrameVelocity LetGo;
 	TestTrue(TEXT("the let-go step has a velocity"),
 		StarForge::ShipFrame::EstimateStepVelocity(Steps[LetGoIndex], MaxPhysicsStepSeconds, LetGo));
+	TestTrue(TEXT("of nothing, because nothing moved it"), LetGo.VelocityMetresPerSec.X == 0.0);
 
-	// Kinematic: over the whole 40 ms and stamped 20 ms before the frame's end. Judged by its end
-	// alone it would be divided by the 33.3 ms physics step, 20% higher, and stamped at the end. Both
-	// compared exactly, because each is the same division the estimator makes.
-	TestTrue(TEXT("divided by its frame, not by the physics step"),
-		LetGo.VelocityMetresPerSec.X == SnapMetres / static_cast<double>(LetGoFrame));
-	TestTrue(TEXT("and stamped at its middle"),
-		LetGo.StampOffsetSeconds == -0.5 * static_cast<double>(LetGoFrame));
+	// With no travel the divisor cannot show; the stamp is what the rule decides. Judged by its
+	// end alone the step would be stamped at its end, half a frame later.
+	TestTrue(TEXT("and it is stamped at its middle"),
+		LetGo.StampOffsetSeconds == -0.5 * LetGoFrame);
 
-	// The first simulated step after it is spaced from that middle: 16 h over h + 20 ms.
+	// So the let-go frame reads the arrival's mean velocity going to zero between the two
+	// middles: about -16.3 m/s2 here, and -8.7 at a fixed 60 fps, where the arrival carries the
+	// last 2.4 mm.
+	FVector LetGoAccel = FVector::ZeroVector;
+	TestTrue(TEXT("the let-go step gives an acceleration"),
+		StarForge::ShipFrame::EstimateStepAcceleration(Arrival, LetGo, LetGoFrame, LetGoAccel));
+	const double ExpectedLetGo = (0.0 - Arrival.VelocityMetresPerSec.X)
+		/ (0.5 * LetGoFrame + 0.5 * static_cast<double>(ArrivalFrame));
+	TestTrue(FString::Printf(TEXT("spaced between the two middles (read %.6f, expected %.6f)"), LetGoAccel.X, ExpectedLetGo),
+		FMath::IsNearlyEqual(LetGoAccel.X, ExpectedLetGo, 1e-9));
+
+	// And the first simulated step after it is spaced from that middle: 16 h over h + dt / 2.
 	const FFrameStep& First = Steps[LetGoIndex + 1];
 	FFrameVelocity FirstVelocity;
 	StarForge::ShipFrame::EstimateStepVelocity(First, MaxPhysicsStepSeconds, FirstVelocity);
@@ -360,28 +378,47 @@ bool FFeltTimeBaseLetGoIsKinematicTest::RunTest(const FString& Parameters)
 	FVector Accel = FVector::ZeroVector;
 	TestTrue(TEXT("the step after it gives an acceleration"),
 		StarForge::ShipFrame::EstimateStepAcceleration(LetGo, FirstVelocity, First.FrameSeconds, Accel));
-
-	const double Expected = (SpikeThrust * First.FrameSeconds - LetGo.VelocityMetresPerSec.X)
-		/ (First.FrameSeconds + 0.5 * static_cast<double>(LetGoFrame));
+	const double Expected = SpikeThrust * First.FrameSeconds / (First.FrameSeconds + 0.5 * LetGoFrame);
 	TestTrue(FString::Printf(TEXT("spaced from the let-go step's middle (read %.6f, expected %.6f)"), Accel.X, Expected),
 		FMath::IsNearlyEqual(Accel.X, Expected, 1e-9));
 
-	// What it is for. Every pair of estimates is then a weighted mean of the true acceleration --
-	// kinematic to simulated as well, where the weight rises across the earlier frame and stays at one
-	// across the later -- and the true one here never leaves [-17.58, +16]: the release, rest, then
-	// thrust. So no frame reads more than the release's peak (it reads -16.6 at worst, on the
-	// let-go frame). Tolerance as in ReleaseUnderJitterStaysUnderItsPeak.
+	// What it is for. Every pair of estimates is a weighted mean of the true acceleration, and the
+	// true one here never leaves [-17.58, +16]: the release, rest, then thrust. So no frame reads
+	// more than the release's peak. Tolerance as in ReleaseUnderJitterStaysUnderItsPeak.
 	const double Peak = 6.0 * ReleaseMetres / (CaptureSeconds * CaptureSeconds);
 	const double Largest = LargestSize(ReadOnTimeBase(Steps, MaxPhysicsStepSeconds).Accelerations);
 	TestTrue(FString::Printf(TEXT("nothing through the let-go reads over %.2f (read %.2f)"), Peak, Largest),
 		Largest <= Peak + 1e-6);
 
-	// The fixture's own check, with the mutant written in: the same steps with the let-go judged by
-	// its end alone. Divided by h its velocity is 13.6 mm / 33.3 ms = 0.407 m/s, and spaced from the
-	// next step by that step's 3.02 ms alone, the next frame reads (0.048 - 0.407) / 0.00302 -- about
-	// -119 m/s2, a knockdown nobody deserved.
-	TArray<FFrameStep> JudgedByItsEnd = Steps;
-	JudgedByItsEnd[LetGoIndex].bSimulatingAtStart = true;
+	// What the rule still guards: a move written into the let-go tick itself, which is how the
+	// release let go before 2026-09-28 -- the same snap, on a step that began kinematic and ends
+	// simulating, with nothing added for the physics step inside it. Its travel is a teleport, so
+	// it is kinematic: over the whole 40 ms and stamped 20 ms before the frame's end. Judged by its
+	// end alone it would be divided by the 33.3 ms physics step, 20% higher, and stamped at the
+	// end. Both compared exactly, because each is the same division the estimator makes.
+	TArray<FFrameStep> OneTick = Eased;
+	const int32 SnapIndex = OneTick.Add(MakeStep(FVector(SnapMetres, 0.0, 0.0), ArrivalFrame, false, true));
+	OneTick.Append(Thrust);
+
+	FFrameVelocity Snap;
+	StarForge::ShipFrame::EstimateStepVelocity(OneTick[SnapIndex], MaxPhysicsStepSeconds, Snap);
+	TestTrue(TEXT("a snap on the switching step is divided by its frame, not by the physics step"),
+		Snap.VelocityMetresPerSec.X == SnapMetres / static_cast<double>(ArrivalFrame));
+	TestTrue(TEXT("and stamped at its middle"),
+		Snap.StampOffsetSeconds == -0.5 * static_cast<double>(ArrivalFrame));
+
+	const double OneTickLargest = LargestSize(ReadOnTimeBase(OneTick, MaxPhysicsStepSeconds).Accelerations);
+	TestTrue(FString::Printf(TEXT("and nothing through it reads over %.2f either (read %.2f)"), Peak, OneTickLargest),
+		OneTickLargest <= Peak + 1e-6);
+
+	// The fixture's own check, with the mutant written in: the one-tick snap judged by its end
+	// alone. Divided by h its velocity is 13.6 mm / 33.3 ms = 0.407 m/s, and spaced from the
+	// next step by that step's 3.02 ms alone, the next frame reads (0.048 - 0.407) / 0.00302 --
+	// about -119 m/s2, a knockdown nobody deserved. On the two-tick let-go above the same mutant
+	// only moves the stamps of a step with no travel and reads under the peak, so this is the
+	// sequence that can show it.
+	TArray<FFrameStep> JudgedByItsEnd = OneTick;
+	JudgedByItsEnd[SnapIndex].bSimulatingAtStart = true;
 	const double MutantLargest = LargestSize(ReadOnTimeBase(JudgedByItsEnd, MaxPhysicsStepSeconds).Accelerations);
 	TestTrue(FString::Printf(TEXT("where judging the step by its end reads %.1f, over the limit"), MutantLargest),
 		MutantLargest > GravPlateLimit);

@@ -108,8 +108,7 @@ namespace StarForge::Damage
 	 * a negative hit would recharge the face it landed on, and an infinite one would pass an
 	 * infinity to the hull.
 	 */
-	STARFORGECORE_API bool ApplyHit(
-		FShieldState& State, const FShieldLimits& Limits, EShipFace Face, double Damage, FHitOutcome& Out);
+	STARFORGECORE_API bool ApplyHit(FShieldState& State, EShipFace Face, double Damage, FHitOutcome& Out);
 
 	/**
 	 * Advances every face's timer by DeltaSeconds, and regenerates each face at RegenPerSecond

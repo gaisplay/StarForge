@@ -51,7 +51,8 @@ namespace StarForge::Units
 	 * threshold -- a step at the most sensitive part of the travel, which a gamepad
 	 * hides and a long-throw stick does not.
 	 *
-	 * Raw and the result are both in [-1, 1]; DeadZone is a fraction of that range.
+	 * Raw and the result are both in [-1, 1]; DeadZone is a fraction of that range. A zone
+	 * of one or more covers all of it and ignores the stick: every input reads zero.
 	 */
 	STARFORGECORE_API double ApplyDeadZone(double Raw, double DeadZone);
 }
