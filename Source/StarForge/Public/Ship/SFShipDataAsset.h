@@ -31,7 +31,11 @@ struct STARFORGE_API FSFThrusterSpec
 	UPROPERTY(EditAnywhere, Category = "Thruster")
 	double MaxThrustNewtons = 0.0;
 
-	/** Seconds to spool from zero to full. */
+	/**
+	 * The time constant of the spool's first-order lag, seconds: a throttle stepped from zero
+	 * reaches 63% of full after one ResponseTimeSeconds and 99.9% only after about 6.9 of them,
+	 * so it is not a time to full.
+	 */
 	UPROPERTY(EditAnywhere, Category = "Thruster")
 	double ResponseTimeSeconds = 0.05;
 };

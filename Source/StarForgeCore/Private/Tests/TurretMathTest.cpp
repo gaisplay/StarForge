@@ -347,8 +347,10 @@ bool FTurretStepAtTheStopIsNotOnTargetTest::RunTest(const FString& Parameters)
 	// The same on the left, which is where half the arc's stops are. The yaw test is on the
 	// bearing's magnitude: without the absolute value, -130 is under +120, the target reads
 	// as bearable, and the barrel parked on the -120 stop ten degrees off reports Slewing for
-	// ever instead. And the stop is a stop from both sides: the goal clamped only from above
-	// would take the barrel to -121.5 on this step.
+	// ever instead. And the stop is a stop from both sides, which StepAim makes twice: it clamps
+	// the goal to the stops and then the result. Either lower bound alone holds the barrel at
+	// -120 here -- with the goal clamped only from above the step aims at -121.5 and the result's
+	// clamp pulls it back -- so this assertion fails only when both are gone.
 	StarForge::Turret::FTurretAim LeftStop;
 	LeftStop.YawRad = -120.0 * Deg;
 	StarForge::Turret::FTurretAim LeftBearing;

@@ -192,7 +192,10 @@ private:
 	/** Where each throttle actually is, having spooled toward the target. */
 	TArray<double> LastThrottles;
 
-	/** Seconds to spool from zero to full, per surviving thruster by column, copied from the asset. */
+	/**
+	 * The spool's time constant in seconds, per surviving thruster by column, copied from the
+	 * asset: 63% of a step after one, 99.9% after about 6.9, so not a time to full.
+	 */
 	TArray<double> ResponseTimes;
 
 	/** Asset indices of the thrusters destroyed so far. Never cleared: see DestroyThruster. */

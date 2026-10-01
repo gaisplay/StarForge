@@ -387,9 +387,11 @@ bool FDockingNonFiniteApproachIsRefusedTest::RunTest(const FString& Parameters)
 
 	const StarForge::Docking::FDockingLimits Limits = MakeLimits();
 
-	// One non-finite field at a time, each named by the guard that has to catch it. Both
-	// paths into this are reachable: the speed is carried in from the caller's instrument
-	// untouched, and a port location that is not finite makes FVector::Dist return NaN.
+	// One non-finite field at a time, each named by the guard that has to catch it. Three
+	// paths lead into these fields, and all are reachable: the speed is carried in from the
+	// caller's instrument untouched, a port location that is not finite makes FVector::Dist
+	// return NaN, and a port rotation that is not finite comes out of ComputeDockingApproach
+	// as two NaN angles. The last is pinned from the transforms at the end of this test.
 	StarForge::Docking::FDockingApproach NoDistance = MakeGoodApproach();
 	NoDistance.Distance = NaN;
 	TestTrue(TEXT("a NaN distance is refused, and named as distance"),

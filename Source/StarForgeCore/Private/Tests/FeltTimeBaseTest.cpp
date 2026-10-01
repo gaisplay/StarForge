@@ -436,11 +436,11 @@ bool FFeltTimeBaseCaptureIsKinematicTest::RunTest(const FString& Parameters)
 	// The other half of "simulating at both samples", the let-go test's mirror: the start of a
 	// capture as USFDockingComponent writes it for sf.Dock and for sf.Dock 2's re-dock. The hull
 	// simulates at rest; then one pre-physics tick stops the simulation and, in the same tick, makes
-	// the run-in's first eased step (TickComponent polls the command and then advances the capture,
-	// SFDockingComponent.cpp 763-775). That step began simulating and ends kinematic, and its
-	// travel is the eased step, so it is kinematic: stamped at its middle. Four frames at rest
-	// before it are what Chaos integrates for a body at rest -- no travel -- so they are the
-	// kinematic fixture's still frames marked simulating.
+	// the run-in's first eased step (USFDockingComponent::TickComponent runs PollConsoleCommand,
+	// whose RequestDock enters the capture, and then AdvanceCapture). That step began simulating
+	// and ends kinematic, and its travel is the eased step, so it is kinematic: stamped at its
+	// middle. Four frames at rest before it are what Chaos integrates for a body at rest -- no
+	// travel -- so they are the kinematic fixture's still frames marked simulating.
 	const double Peak = 6.0 * ReleaseMetres / (CaptureSeconds * CaptureSeconds);
 	constexpr int32 StillFrames = 4;
 
@@ -496,9 +496,12 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FFeltTimeBaseLongFrameTest::RunTest(const FString& Parameters)
 {
-	// Case (2) of F4, predicted and never measured: a hull cruising at 200 m/s at 400 fps, and one
-	// 40 ms frame. Physics advances only 1/30 s of it (ChaosScene.cpp 344), so the hull covers 6.67 m
-	// in a frame 40 ms long. It is not accelerating, and must read zero on that frame and the next.
+	// Case (2) of F4, predicted here first and measured since: a hull cruising at 200 m/s at 400 fps,
+	// and one 40 ms frame. Physics advances only 1/30 s of it (ChaosScene.cpp 344), so the hull covers
+	// 6.67 m in a frame 40 ms long. It is not accelerating, and must read zero on that frame and the
+	// next. Dividing by the frame, one sf.Hitch 50 at cruise in an uncapped run read felt 1359.85 m/s2
+	// across a 51.1 ms frame and knocked a standing man down
+	// (evidence/2026-09-27-f4fix-control-feltbase0-hitch50-cruise-uncapped-1.log).
 	//
 	// Rounding: positions under 15 m, a few ulps over 2.5 ms twice, about 1e-9 m/s2; tolerance 1e-6.
 	constexpr double Cruise = 200.0;

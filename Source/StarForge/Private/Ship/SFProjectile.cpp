@@ -98,8 +98,8 @@ void ASFProjectile::Tick(float DeltaSeconds)
 	if (AActor* Shooter = FiredBy.Get()) { Params.AddIgnoredActor(Shooter); }
 
 	// By CHANNEL, not by object type. The ship's panels are ECC_WorldDynamic and the
-	// station's are ECC_WorldStatic (SFTestShip.cpp:404, SFTestStation.cpp:199); both call
-	// SetCollisionResponseToAllChannels(ECR_Block), so both block every trace channel. A
+	// station's are ECC_WorldStatic (ASFTestShip::AddBoxPanel, ASFTestStation::AddBoxPanel); both
+	// call SetCollisionResponseToAllChannels(ECR_Block), so both block every trace channel. A
 	// query filtered by object type would see that difference and miss half the world; a
 	// query by channel cannot see it at all. The ship's hull box is PhysicsOnly and is
 	// invisible to queries by design -- the panel is the skin, and the panel is what
