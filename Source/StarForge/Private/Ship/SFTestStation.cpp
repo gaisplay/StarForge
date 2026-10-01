@@ -3,6 +3,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/EngineTypes.h"
 #include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFInteriorVolumeComponent.h"
 #include "Ship/SFShipFrameComponent.h"
@@ -277,12 +278,37 @@ void ASFTestStation::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Read back from the panels rather than asserted: a hull meets this station only through them
+	// (AddBoxPanel says why they collide), so none of them physical is F1 itself.
+	int32 PhysicalPanels = 0;
+	for (const UStaticMeshComponent* Panel : Panels)
+	{
+		if (Panel && CollisionEnabledHasPhysics(Panel->GetCollisionEnabled()))
+		{
+			++PhysicalPanels;
+		}
+	}
+
+	const FString PanelText = PhysicalPanels > 0
+		? FString::Printf(TEXT("%d of %d panels are physics colliders"), PhysicalPanels, Panels.Num())
+		: FString::Printf(TEXT("NONE of %d panels is a physics collider -- a hull can fly into this station (F1)"), Panels.Num());
+
 	const FVector Location = GetActorLocation();
-	UE_LOG(LogStarForge, Display,
+	const FString Report = FString::Printf(
 		TEXT("Station at world (%.0f %.0f %.0f) cm: %.0f x %.0f x %.0f m box, hatch in the -Y wall, ")
-		TEXT("%.0f cm tunnel, frame %s, no physics body."),
+		TEXT("%.0f cm tunnel, frame %s, %s."),
 		Location.X, Location.Y, Location.Z,
 		Station::HalfXCm * 2.0 / Station::CubeEdgeCm, Station::HalfYCm * 2.0 / Station::CubeEdgeCm, Station::HalfZCm * 2.0 / Station::CubeEdgeCm,
 		Station::TunnelLengthCm,
-		Frame ? TEXT("present") : TEXT("MISSING"));
+		Frame ? TEXT("present") : TEXT("MISSING"),
+		*PanelText);
+
+	if (PhysicalPanels > 0)
+	{
+		UE_LOG(LogStarForge, Display, TEXT("%s"), *Report);
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Error, TEXT("%s"), *Report);
+	}
 }
