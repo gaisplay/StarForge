@@ -35,7 +35,9 @@ bool FThrusterWrenchOffAxisTest::RunTest(const FString& Parameters)
 {
 	// Two metres out along +Y, pushing along +X. The lever arm is r = (0,2,0) and
 	// the force F = (500,0,0), so r x F = (0*0 - 0*0, 0*500 - 0*0, 0*0 - 2*500)
-	// = (0, 0, -1000) newton-metres: it yaws the ship nose-right.
+	// = (0, 0, -1000) newton-metres: it yaws the ship nose-left. A positive turn about +Z
+	// carries +X onto +Y, which is the ship's right (FRotator(0, 90, 0) does the same), so
+	// -Z is to the left -- as it must be for a push forward on the right-hand side.
 	StarForge::FThrusterDef Thruster;
 	Thruster.Location = FVector(0.0, 2.0, 0.0);
 	Thruster.Direction = FVector(1.0, 0.0, 0.0);
