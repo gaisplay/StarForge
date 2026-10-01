@@ -5,6 +5,7 @@
 #include "Engine/HitResult.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
+#include "PhysicsEngine/PhysicsSettings.h"
 #include "Ship/SFDamageableComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "StarForgeLog.h"
@@ -54,12 +55,31 @@ void ASFProjectile::SetShotRecord(int32 InShotNumber, const FString& InTurretSta
 	TurretStateAtShot = InTurretStateAtShot;
 }
 
+double ASFProjectile::PhysicsStepSeconds(double FrameSeconds)
+{
+	// The engine's own rule: the settings PhysLevel.cpp 197-212 reads every frame, clamped the way
+	// FChaosScene::SetUpForFrame clamps them (ChaosScene.cpp 338-345). At any frame no longer than
+	// MaxPhysicsDeltaTime, 1/30 s by default, FMath::Min hands back the frame itself, so at 60 and
+	// 400 fps a shot steps exactly as it did when it was stepped by the frame.
+	const UPhysicsSettings* Physics = UPhysicsSettings::Get();
+	const double MaxSeconds = Physics->bSubstepping
+		? Physics->MaxSubsteps * Physics->MaxSubstepDeltaTime
+		: Physics->MaxPhysicsDeltaTime;
+	return MaxSeconds > 0.0 ? FMath::Min(FrameSeconds, MaxSeconds) : FrameSeconds;
+}
+
 void ASFProjectile::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// On the physics step, not the frame. Every hull this shot can meet advanced by that and no
+	// more, so on a frame longer than MaxPhysicsDeltaTime a shot stepped by the whole frame flew
+	// dt - h further than its target did: a hull holding station beside its shooter at 200 m/s
+	// moves 200 x (0.100 - 0.033) = 13.3 m off the shot's line in one 100 ms frame, and it is
+	// eight metres across. Only a target at rest in the world was immune: a straight line through
+	// fixed geometry has one hit point whichever clock walks it.
 	StarForge::Ballistics::FProjectileStep Step;
-	if (!StarForge::Ballistics::StepProjectile(State, DeltaSeconds, LifeSeconds, Step))
+	if (!StarForge::Ballistics::StepProjectile(State, PhysicsStepSeconds(DeltaSeconds), LifeSeconds, Step))
 	{
 		// The maths refused. It refuses only on figures nothing should have produced, so this
 		// is loud: a projectile that quietly stops stepping hangs in space forever, and the
