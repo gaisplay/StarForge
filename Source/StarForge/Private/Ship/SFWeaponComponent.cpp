@@ -156,13 +156,18 @@ void USFWeaponComponent::TickCadence(bool bTriggerDown, double DeltaSeconds)
 	}
 	const double SecondsBetweenShots = ShipData->SecondsBetweenShots;
 
+	// The hulls' clock, which is the shot's (ASFProjectile::PhysicsStepSeconds). Kept on the frame,
+	// one 0.3 s frame would put two shots out of the muzzle in the same tick, from the same pose at
+	// the same velocity, where the cadence wants them 200 m apart.
+	const double StepSeconds = ASFProjectile::PhysicsStepSeconds(DeltaSeconds);
+
 	// One clock since the press, and the count of shots taken from it. Shot n is due n intervals
 	// after the press, and that due time is computed rather than carried: no shot's timing
 	// descends from the one before it, so a whole run has the residual of a single interval.
 	// An accumulator with the interval subtracted off at each shot is the same arithmetic
 	// written backwards and was simulated frame-for-frame identical to this, down to the same
 	// 81-frame gap at shot 224; it reads, wrongly, as though the remainder were what kept time.
-	SecondsSinceTrigger += DeltaSeconds;
+	SecondsSinceTrigger += StepSeconds;
 	if (!bTriggerDown)
 	{
 		bTriggerWasHeld = false;
@@ -182,7 +187,7 @@ void USFWeaponComponent::TickCadence(bool bTriggerDown, double DeltaSeconds)
 		bTriggerWasHeld = true;
 	}
 
-	const double DueTolerance = WeaponCadence::ShotDueToleranceSeconds(DeltaSeconds, SecondsBetweenShots);
+	const double DueTolerance = WeaponCadence::ShotDueToleranceSeconds(StepSeconds, SecondsBetweenShots);
 	while (SecondsSinceTrigger >= (ShotsSincePress + 1) * SecondsBetweenShots - DueTolerance)
 	{
 		++ShotsSincePress;
