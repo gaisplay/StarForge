@@ -168,11 +168,22 @@ bool FUnitsDeadZoneTest::RunTest(const FString& Parameters)
 		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(2.0, 0.1), 1.0, 1e-12));
 
 	// A dead zone of 1.0 is what an operator types into the editor to mean "ignore this
-	// stick entirely". The Clamp to 0.99 is the only thing between that and a division by
-	// zero: without it the denominator is 0 and the axis returns NaN or infinity, which
-	// then propagates silently through the whole flight solve.
-	TestTrue(TEXT("a dead zone of one is clamped rather than dividing by zero"),
-		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(1.0, 1.0), 1.0, 1e-12));
+	// stick entirely", and it has to mean that at every input, the stop included. A zone
+	// clamped to 0.99 reads 0.5 at 0.995 and full deflection at 1.0, so a pad pushed to its
+	// stop flies the ship at full thrust. Over-range input is the case that would otherwise
+	// reach the rescale with a zero denominator: (2 - 1) / 0 is an infinity, which the
+	// output clamp would turn into full deflection rather than nothing.
+	TestTrue(TEXT("a dead zone of one ignores full deflection"),
+		StarForge::Units::ApplyDeadZone(1.0, 1.0) == 0.0);
+	TestTrue(TEXT("and the last hundredth of the travel"),
+		StarForge::Units::ApplyDeadZone(0.995, 1.0) == 0.0);
+	TestTrue(TEXT("and over-range input"),
+		StarForge::Units::ApplyDeadZone(2.0, 1.0) == 0.0);
+
+	// A zone between 0.99 and 1 is honoured to the last bit of it, not cut to 0.99: 0.992 is
+	// inside a zone of 0.995, where the clamped form read 0.2.
+	TestTrue(TEXT("a dead zone of 0.995 covers 0.992"),
+		StarForge::Units::ApplyDeadZone(0.992, 0.995) == 0.0);
 
 	// A zero dead zone must be a pass-through, so turning the feature off cannot
 	// itself distort the axis.
