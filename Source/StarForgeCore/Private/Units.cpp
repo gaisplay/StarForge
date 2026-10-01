@@ -29,9 +29,13 @@ namespace StarForge::Units
 
 	FWrench WrenchToUu(const FWrench& Si)
 	{
+		// Through the scalar conversions, component by component, so the factors live in one
+		// place. Bit for bit what the vector form computed: FVector's operator*(double) is one
+		// multiply per component, and (c * 100) * 100 is NewtonMetresToUu's own order.
 		FWrench Result;
-		Result.Force = Si.Force * CmPerMetre;
-		Result.Torque = Si.Torque * CmPerMetre * CmPerMetre;
+		Result.Force = FVector(NewtonsToUu(Si.Force.X), NewtonsToUu(Si.Force.Y), NewtonsToUu(Si.Force.Z));
+		Result.Torque = FVector(
+			NewtonMetresToUu(Si.Torque.X), NewtonMetresToUu(Si.Torque.Y), NewtonMetresToUu(Si.Torque.Z));
 		return Result;
 	}
 
