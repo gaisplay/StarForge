@@ -161,8 +161,18 @@ void USFInteriorVolumeComponent::TryHandover(ASFCharacter* Character)
 			// episode and is said again. The retry runs every tick in between, silently.
 			if (!RefusedOccupants.ContainsByPredicate(IsCharacter))
 			{
+				// The episode belongs to the carrier, not to one of its boxes: the station is a room
+				// and a tunnel, and a man refused at the tunnel mouth who walks on into the room is
+				// still the same refusal. Joined silently, so this box retries him too.
+				const bool bEpisodeOpen = IsRefusedByAnotherVolumeOfThisCarrier(Character);
+
 				RefusedOccupants.Add(Character);
 				SetComponentTickEnabled(true);
+
+				if (bEpisodeOpen)
+				{
+					return;
+				}
 
 				const FString FromName = From->GetOwner() ? From->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
 				const FString ToName = To->GetOwner() ? To->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
@@ -176,8 +186,45 @@ void USFInteriorVolumeComponent::TryHandover(ASFCharacter* Character)
 		}
 	}
 
-	RefusedOccupants.RemoveAll(IsCharacter);
+	ForgetRefusalOnEveryVolumeOfThisCarrier(Character);
 	Character->BindFrame(To);
+}
+
+bool USFInteriorVolumeComponent::IsRefusedByAnotherVolumeOfThisCarrier(const ASFCharacter* Character) const
+{
+	const AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return false;
+	}
+
+	TInlineComponentArray<USFInteriorVolumeComponent*> Volumes(Owner);
+	for (const USFInteriorVolumeComponent* Volume : Volumes)
+	{
+		if (Volume != this && Volume->RefusedOccupants.ContainsByPredicate(
+			[Character](const TWeakObjectPtr<ASFCharacter>& Entry) { return Entry.Get() == Character; }))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void USFInteriorVolumeComponent::ForgetRefusalOnEveryVolumeOfThisCarrier(const ASFCharacter* Character)
+{
+	const auto IsCharacter = [Character](const TWeakObjectPtr<ASFCharacter>& Entry) { return Entry.Get() == Character; };
+
+	// Every box of the carrier, this one included: a box still holding him would go on retrying a
+	// handover that has gone through.
+	if (const AActor* Owner = GetOwner())
+	{
+		TInlineComponentArray<USFInteriorVolumeComponent*> Volumes(Owner);
+		for (USFInteriorVolumeComponent* Volume : Volumes)
+		{
+			Volume->RefusedOccupants.RemoveAll(IsCharacter);
+		}
+	}
+	RefusedOccupants.RemoveAll(IsCharacter);
 }
 
 void USFInteriorVolumeComponent::TickComponent(

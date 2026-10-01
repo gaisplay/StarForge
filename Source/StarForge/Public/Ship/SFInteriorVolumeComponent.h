@@ -93,6 +93,12 @@ private:
 	 */
 	void TryHandover(ASFCharacter* Character);
 
+	/** Whether another interior volume on this volume's owner already holds Character refused. */
+	bool IsRefusedByAnotherVolumeOfThisCarrier(const ASFCharacter* Character) const;
+
+	/** Closes Character's refused episode on every interior volume of this volume's owner. */
+	void ForgetRefusalOnEveryVolumeOfThisCarrier(const ASFCharacter* Character);
+
 	UFUNCTION()
 	void HandleEndOverlap(
 		UPrimitiveComponent* OverlappedComponent,
