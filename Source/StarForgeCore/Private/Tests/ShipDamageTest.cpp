@@ -90,7 +90,7 @@ bool FShipDamageEachFaceIsItsOwnTest::RunTest(const FString& Parameters)
 
 		FShieldState State = MakeFullShields();
 		FHitOutcome Outcome;
-		TestTrue(Where + TEXT(" is applied"), ApplyHit(State, MakeLimits(), Face, 100.0, Outcome));
+		TestTrue(Where + TEXT(" is applied"), ApplyHit(State, Face, 100.0, Outcome));
 		TestTrue(Where + TEXT(" reports its face"), Outcome.Face == Case.Face);
 
 		// The ordinary hit, smaller than what the face holds. A caller takes the hit's effect from
@@ -169,7 +169,7 @@ bool FShipDamageOverflowGoesToHullExactlyTest::RunTest(const FString& Parameters
 	const FShieldLimits Limits = MakeLimits();
 
 	FHitOutcome First;
-	TestTrue(TEXT("a hit larger than the face is applied"), ApplyHit(State, Limits, EShipFace::XPos, 1600.0, First));
+	TestTrue(TEXT("a hit larger than the face is applied"), ApplyHit(State, EShipFace::XPos, 1600.0, First));
 	TestTrue(TEXT("and reports its face"), First.Face == EShipFace::XPos);
 	TestEqual(TEXT("the face absorbs all it holds"), First.AbsorbedByShield, 1000.0, 0.0);
 	TestEqual(TEXT("and the rest goes to the hull"), First.PassedToHull, 600.0, 0.0);
@@ -184,7 +184,7 @@ bool FShipDamageOverflowGoesToHullExactlyTest::RunTest(const FString& Parameters
 	// "Broken now" is an event. The game writes a line for it, and a second hit on a face that
 	// is already down must not write that line again.
 	FHitOutcome Second;
-	TestTrue(TEXT("a hit on the broken face is applied"), ApplyHit(State, Limits, EShipFace::XPos, 100.0, Second));
+	TestTrue(TEXT("a hit on the broken face is applied"), ApplyHit(State, EShipFace::XPos, 100.0, Second));
 	TestEqual(TEXT("a broken face absorbs nothing"), Second.AbsorbedByShield, 0.0, 0.0);
 	TestEqual(TEXT("and all of it goes to the hull"), Second.PassedToHull, 100.0, 0.0);
 	TestFalse(TEXT("and that hit did not break it again"), Second.bFaceBrokenNow);
@@ -209,7 +209,7 @@ bool FShipDamageRegenWaitsForTheDelayTest::RunTest(const FString& Parameters)
 	const int32 Face = IndexOf(EShipFace::ZPos);
 
 	FHitOutcome Hit;
-	TestTrue(TEXT("the hit is applied"), ApplyHit(State, Limits, EShipFace::ZPos, 500.0, Hit));
+	TestTrue(TEXT("the hit is applied"), ApplyHit(State, EShipFace::ZPos, 500.0, Hit));
 	TestEqual(TEXT("the face is down to 500"), State.Charge[Face], 500.0, 0.0);
 
 	TickShields(State, Limits, 2.9);
@@ -247,7 +247,7 @@ bool FShipDamageRegenIsFrameRateIndependentTest::RunTest(const FString& Paramete
 
 	FShieldState OneStep = MakeFullShields();
 	FHitOutcome Hit;
-	TestTrue(TEXT("the face is broken"), ApplyHit(OneStep, Limits, EShipFace::YNeg, 1000.0, Hit));
+	TestTrue(TEXT("the face is broken"), ApplyHit(OneStep, EShipFace::YNeg, 1000.0, Hit));
 	FShieldState ManySteps = OneStep;
 
 	TickShields(OneStep, Limits, 10.0);
@@ -278,9 +278,9 @@ bool FShipDamageRegenStopsAtCapacityTest::RunTest(const FString& Parameters)
 
 	// +X is 10 points short and its delay has run out; -X is 500 short and hit just now.
 	FHitOutcome Hit;
-	TestTrue(TEXT("the first hit is applied"), ApplyHit(State, Limits, EShipFace::XPos, 10.0, Hit));
+	TestTrue(TEXT("the first hit is applied"), ApplyHit(State, EShipFace::XPos, 10.0, Hit));
 	TickShields(State, Limits, 3.0);
-	TestTrue(TEXT("the second hit is applied"), ApplyHit(State, Limits, EShipFace::XNeg, 500.0, Hit));
+	TestTrue(TEXT("the second hit is applied"), ApplyHit(State, EShipFace::XNeg, 500.0, Hit));
 
 	// 2.9 s at 50 per second is 145 points into a face with room for 10. The 135 over are lost:
 	// not kept on +X above capacity, and not handed to -X, which is still inside its delay.
@@ -314,9 +314,9 @@ bool FShipDamageAHitResetsOnlyItsOwnFaceTimerTest::RunTest(const FString& Parame
 	const int32 Struck = IndexOf(EShipFace::YPos);
 
 	FHitOutcome Hit;
-	TestTrue(TEXT("-X is hit"), ApplyHit(State, Limits, EShipFace::XNeg, 500.0, Hit));
+	TestTrue(TEXT("-X is hit"), ApplyHit(State, EShipFace::XNeg, 500.0, Hit));
 	TickShields(State, Limits, 2.0);
-	TestTrue(TEXT("+Y is hit two seconds later"), ApplyHit(State, Limits, EShipFace::YPos, 100.0, Hit));
+	TestTrue(TEXT("+Y is hit two seconds later"), ApplyHit(State, EShipFace::YPos, 100.0, Hit));
 
 	// After this step -X is four seconds from its hit, one past the delay; +Y is two, still
 	// inside it.
@@ -392,7 +392,7 @@ bool FShipDamageNonFiniteIsRefusedTest::RunTest(const FString& Parameters)
 		double Tail[FaceCount] = {};
 	};
 
-	const auto ExpectHitRefused = [this, &Drained, &Limits](const TCHAR* What, EShipFace Face, double Damage)
+	const auto ExpectHitRefused = [this, &Drained](const TCHAR* What, EShipFace Face, double Damage)
 	{
 		FShieldsWithTail Held;
 		Held.State = Drained;
@@ -402,7 +402,7 @@ bool FShipDamageNonFiniteIsRefusedTest::RunTest(const FString& Parameters)
 		Out.PassedToHull = 7.0;
 		Out.bFaceBrokenNow = true;
 
-		TestFalse(FString(What) + TEXT(" is refused"), ApplyHit(Held.State, Limits, Face, Damage, Out));
+		TestFalse(FString(What) + TEXT(" is refused"), ApplyHit(Held.State, Face, Damage, Out));
 		TestTrue(FString(What) + TEXT(" leaves the shields untouched"), IsSameShieldState(Held.State, Drained));
 		TestTrue(FString(What) + TEXT(" leaves the outcome untouched"),
 			Out.Face == EShipFace::YNeg && Out.AbsorbedByShield == 7.0 && Out.PassedToHull == 7.0 && Out.bFaceBrokenNow);
