@@ -704,8 +704,7 @@ def write_report(out, plan, varplan, summary):
 
     rows = [x for x in (load(r["baseline"][:-4]) for r in plan) if x]
     varrows = [x for x in (load(r["baseline"][:-4]) for r in varplan) if x]
-    claims_shown = summary.get("claims_run", True) and not summary.get("stopped")
-    claimrows = [x for x in (load(c["name"]) for c in CLAIMS) if x] if claims_shown else []
+    claimrows = [x for x in (load(c["name"]) for c in CLAIMS) if x] if summary.get("claims_run", True) else []
     inv = summary.get("invocation", {})
     flags = " ".join(f for f, on in (("--skip-build", inv.get("skip_build")), ("--resume", inv.get("resume"))) if on)
     flags = (flags + (f" --only {inv['only']!r}" if inv.get("only") else "")).strip()
@@ -727,6 +726,11 @@ def write_report(out, plan, varplan, summary):
         if inv.get("skip_build") and build_failure(summary):
             md += [f"**That record is a failure, so these replays may describe other binaries: {build_failure(summary)}.**"]
     md += [""]
+    if summary.get("stopped"):
+        md += ["## Exit status", "", f"2: {summary['stopped']}."]
+        (out / "report.md").write_text("\n".join(md), "utf-8")
+        print(f"report: {out / 'report.md'}", flush=True)
+        return []
 
     p = summary.get("plan", {})
     kept = [r for r in rows + varrows + claimrows if taken(r, summary) != "this run"]
@@ -780,9 +784,7 @@ def write_report(out, plan, varplan, summary):
             seen = ("" if seen == "—" else seen + "; ") + f"not read: {r['invalid']}"
         md.append(f"| `{r['baseline']}` | {r['verdict']} | {len(r['baselines'])} | {seen} | {taken(r, summary)} |")
     md += ["", "## Documented controls with no headless evidence", ""]
-    if summary.get("stopped"):
-        md += ["Not run: the sweep stopped before any replay."]
-    elif not summary.get("claims_run", True):
+    if not summary.get("claims_run", True):
         md += ["Not run this time (--only); results on disk from an earlier invocation are not shown."]
     else:
         md += ["| Control | Verdict | What the guide says | Missing / present that must not be | Taken |", "|---|---|---|---|---|"]
@@ -793,11 +795,8 @@ def write_report(out, plan, varplan, summary):
             md.append(f"| `{r['claim']}` | {r['verdict']} | {r['doc']} | {bad} | {taken(r, summary)} |")
     md += ["", "## Not replayed", ""] + [f"- `{n}` — {w}" for n, w in summary.get("skipped", [])]
     failed = failures(rows, varrows, claimrows)
-    if summary.get("stopped"):
-        md += ["", "## Exit status", "", f"2: {summary['stopped']}."]
-    else:
-        md += ["", "## Exit status", ""] + ([f"1, because of {len(failed)}:"] + [f"- {f}" for f in failed] if failed else
-                                         ["0: no replay or claim INVALID, none CHANGED?, no red counter rose, no claim BROKEN."])
+    md += ["", "## Exit status", ""] + ([f"1, because of {len(failed)}:"] + [f"- {f}" for f in failed] if failed else
+                                     ["0: no replay or claim INVALID, none CHANGED?, no red counter rose, no claim BROKEN."])
     (out / "report.md").write_text("\n".join(md), "utf-8")
     print(f"report: {out / 'report.md'}", flush=True)
     return failed
