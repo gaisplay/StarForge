@@ -12,6 +12,7 @@
 #include "Ship/SFPilotStationComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTestShip.h"
+#include "Ship/SFTestStation.h"
 #include "Ship/SFThrusterArrayComponent.h"
 #include "Ship/SFTurretComponent.h"
 #include "ShipFrameMath.h"
@@ -355,7 +356,25 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	}
 	else if (!Docking->HasStation())
 	{
-		DrawLine(TEXT("dock    free -- NO STATION in this level"), Y, FLinearColor::Red);
+		// Red only where a station is there to be found. The spike and combat rigs have none by
+		// design, and a red line that is correct on two rigs of four is a red line the reader is
+		// taught to step over; the log has always said it in lower case.
+		const ASFTestStation* Present = nullptr;
+		for (TActorIterator<ASFTestStation> It(GetWorld()); It; ++It)
+		{
+			Present = *It;
+			break;
+		}
+
+		if (Present)
+		{
+			DrawLine(FString::Printf(TEXT("dock    free -- %s is in this level and the docking found NO STATION port"),
+				*Present->GetName()), Y, FLinearColor::Red);
+		}
+		else
+		{
+			DrawLine(TEXT("dock    free -- no station in this level"), Y);
+		}
 	}
 	else
 	{
@@ -443,24 +462,42 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 			bPoweredDown ? FLinearColor(1.0f, 0.45f, 0.0f) : FLinearColor::White);
 	}
 
-	if (Frame && Ship)
+	// Branched on whether he has a frame, not on whether its owner is a ship. A man on the
+	// station is bound to the station's frame, and branching on the ship declared him in world
+	// space, in red, with every figure above called meaningless -- on the one carrier the loop
+	// rig is built to hand him to.
+	if (Frame)
 	{
-		DrawLine(FString::Printf(TEXT("ship speed           %.1f m/s   [ceiling 400]"),
-			Ship->GetSpeedMetersPerSec()), Y);
-
 		const FVector Omega = Frame->GetAngularVelocityRadPerSec();
 
-		// The design's 180 deg/s is the roll ceiling alone, but the profile loads all
-		// three axes at once, so |omega| sits above it permanently and a correctly
-		// flown run read as forever over budget. Pitch and yaw sweep in quadrature and
-		// so contribute their full amplitude at every phase; the honest ceiling for a
-		// magnitude is the two combined.
-		const double CombinedCeilingDegPerSec = FMath::Sqrt(
-			FMath::Square(Ship->PeakPitchYawRateDegPerSec) +
-			FMath::Square(Ship->PeakRollRateDegPerSec));
+		if (Ship)
+		{
+			DrawLine(FString::Printf(TEXT("ship speed           %.1f m/s   [ceiling 400]"),
+				Ship->GetSpeedMetersPerSec()), Y);
 
-		DrawLine(FString::Printf(TEXT("angular rate         %.1f deg/s   [combined ceiling %.1f]"),
-			FMath::RadiansToDegrees(Omega.Size()), CombinedCeilingDegPerSec), Y);
+			// The design's 180 deg/s is the roll ceiling alone, but the profile loads all
+			// three axes at once, so |omega| sits above it permanently and a correctly
+			// flown run read as forever over budget. Pitch and yaw sweep in quadrature and
+			// so contribute their full amplitude at every phase; the honest ceiling for a
+			// magnitude is the two combined.
+			const double CombinedCeilingDegPerSec = FMath::Sqrt(
+				FMath::Square(Ship->PeakPitchYawRateDegPerSec) +
+				FMath::Square(Ship->PeakRollRateDegPerSec));
+
+			DrawLine(FString::Printf(TEXT("angular rate         %.1f deg/s   [combined ceiling %.1f]"),
+				FMath::RadiansToDegrees(Omega.Size()), CombinedCeilingDegPerSec), Y);
+		}
+		else
+		{
+			// Any other carrier has no design ceilings of its own, so its figures are read from
+			// its frame -- the same instrument the felt acceleration below is computed from.
+			DrawLine(FString::Printf(TEXT("carrier speed        %.1f m/s, accel %.2f m/s2   [%s, not a ship]"),
+				Frame->GetLinearVelocityMetersPerSec().Size(), Frame->GetLinearAccelMetersPerSecSq().Size(),
+				*Movement->GetFrameName()), Y);
+
+			DrawLine(FString::Printf(TEXT("angular rate         %.1f deg/s"),
+				FMath::RadiansToDegrees(Omega.Size())), Y);
+		}
 
 		// The figure the footing decision was taken on, not a second computation of it
 		// here: the screen has to show the number the mechanic saw, or the two can
