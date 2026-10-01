@@ -7,6 +7,7 @@
 #include "SFPlaceGameMode.generated.h"
 
 class ASFTestShip;
+class IConsoleVariable;
 
 /**
  * The place rig: one place, assembled from data on an empty map.
@@ -54,10 +55,17 @@ public:
 	 */
 	virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
 
-	/** Puts back the sf.ShipProfile StartPlay found. */
+	/** Puts back the sf.ShipProfile StartPlay found, and stops watching the place's variables. */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	/**
+	 * sf.PlaceOffsetM and sf.PlaceRadiusM are read once, in InitGame, and a change after it would
+	 * do nothing in silence -- typed mid-run, it looks like a control that was performed. Said once
+	 * per variable, as a warning.
+	 */
+	void OnPlaceVariableChanged(IConsoleVariable* Variable);
+
 	/**
 	 * Resolved in InitGame by path, guarded. The map is empty by design, so there is no placed
 	 * actor on which this could be authored; and the asset may not exist, so nothing may insist
@@ -98,4 +106,12 @@ private:
 
 	int32 ProfileBeforeRig = 1;
 	bool bRestoreProfile = false;
+
+	/** What the two variables read when the place was measured. */
+	FString OffsetRawAtMeasure;
+	FString RadiusRawAtMeasure;
+	bool bOffsetChangeReported = false;
+	bool bRadiusChangeReported = false;
+	FDelegateHandle OffsetChangedHandle;
+	FDelegateHandle RadiusChangedHandle;
 };

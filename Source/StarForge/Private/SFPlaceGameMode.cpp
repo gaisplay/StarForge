@@ -32,7 +32,8 @@ namespace
 	 * Read ONCE, when the rig assembles itself, which is before -ExecCmds is applied: set it
 	 * before the level starts, with "-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=..." on the
 	 * command line, or in the editor's console before Play. One -ini switch per variable: two
-	 * joined by a comma are not taken.
+	 * joined by a comma are not taken. A change after the measurement is watched for and said
+	 * once, as a warning, because it changes nothing and would otherwise say nothing.
 	 */
 	TAutoConsoleVariable<FString> CVarPlaceOffsetM(TEXT("sf.PlaceOffsetM"), TEXT(""),
 		TEXT("Metres to move the place along +X, on top of the authored origin. Empty: leave it alone.\n")
@@ -169,6 +170,7 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 
 	double OffsetM = 0.0;
 	const FString OffsetRaw = CVarPlaceOffsetM.GetValueOnGameThread();
+	OffsetRawAtMeasure = OffsetRaw;
 	if (!OffsetRaw.IsEmpty())
 	{
 		if (PlaceRig::ParseMetres(OffsetRaw, OffsetM))
@@ -189,6 +191,7 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 
 	double OverrideRadiusM = 0.0;
 	const FString RadiusRaw = CVarPlaceRadiusM.GetValueOnGameThread();
+	RadiusRawAtMeasure = RadiusRaw;
 	if (!RadiusRaw.IsEmpty())
 	{
 		if (PlaceRig::ParseMetres(RadiusRaw, OverrideRadiusM))
@@ -441,6 +444,15 @@ void ASFPlaceGameMode::StartPlay()
 
 	Super::StartPlay();
 
+	// Watched from here, on a refused place as on one that fits -- a radius typed mid-run to rescue
+	// a refusal is the likeliest change of all -- and from here because this mode has now begun
+	// play, so EndPlay is certain to take the watch off (AActor::RouteEndPlay calls EndPlay only on
+	// an actor that has begun).
+	OffsetChangedHandle = CVarPlaceOffsetM.AsVariable()->OnChangedDelegate().AddUObject(
+		this, &ASFPlaceGameMode::OnPlaceVariableChanged);
+	RadiusChangedHandle = CVarPlaceRadiusM.AsVariable()->OnChangedDelegate().AddUObject(
+		this, &ASFPlaceGameMode::OnPlaceVariableChanged);
+
 	if (!bPlaceFits)
 	{
 		// One line, and it does not borrow the healthy line's three states. "The ship is ADRIFT",
@@ -572,6 +584,11 @@ void ASFPlaceGameMode::StartPlay()
 
 void ASFPlaceGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	CVarPlaceOffsetM.AsVariable()->OnChangedDelegate().Remove(OffsetChangedHandle);
+	CVarPlaceRadiusM.AsVariable()->OnChangedDelegate().Remove(RadiusChangedHandle);
+	OffsetChangedHandle.Reset();
+	RadiusChangedHandle.Reset();
+
 	// At SetByCode, and only while nothing stronger holds the variable, for the reasons
 	// SFLoopGameMode.cpp's EndPlay gives. No line.
 	if (bRestoreProfile)
@@ -585,4 +602,31 @@ void ASFPlaceGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ASFPlaceGameMode::OnPlaceVariableChanged(IConsoleVariable* Variable)
+{
+	const bool bOffset = (Variable == CVarPlaceOffsetM.AsVariable());
+	if (!bOffset && Variable != CVarPlaceRadiusM.AsVariable())
+	{
+		return;
+	}
+
+	// The delegate fires on every Set, the same value included, and a value the place was measured
+	// with is not one it ignored. Said once per variable per world: the point is that the switch did
+	// nothing, and one line makes it.
+	bool& bReported = bOffset ? bOffsetChangeReported : bRadiusChangeReported;
+	const FString& AtMeasure = bOffset ? OffsetRawAtMeasure : RadiusRawAtMeasure;
+	const FString Now = Variable->GetString();
+	if (bReported || Now == AtMeasure)
+	{
+		return;
+	}
+	bReported = true;
+
+	UE_LOG(LogStarForge, Warning,
+		TEXT("Place rig: %s changed to '%s' after the place was measured with '%s' -- it is read once, ")
+		TEXT("before the local player logs in, so this world stays the place the size line describes ")
+		TEXT("until the level restarts."),
+		bOffset ? TEXT("sf.PlaceOffsetM") : TEXT("sf.PlaceRadiusM"), *Now, *AtMeasure);
 }

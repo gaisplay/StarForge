@@ -25,7 +25,8 @@ namespace
 	 *
 	 * Read once, when the rig assembles itself, and that is before -ExecCmds is applied: set it
 	 * before the level starts (in the editor's console before Play, or with an ini override on
-	 * the command line), or type it and restart the level.
+	 * the command line), or type it and restart the level. A change after the assembly is watched
+	 * for and said once, as a warning, because it changes nothing and would otherwise say nothing.
 	 */
 	TAutoConsoleVariable<int32> CVarPirate(TEXT("sf.Pirate"), 1,
 		TEXT("1: the combat rig spawns the pirate. 0: it does not, and the player's automation has no target.\n")
@@ -119,7 +120,8 @@ void ASFCombatGameMode::StartPlay()
 	}
 
 	UWorld* World = GetWorld();
-	const bool bPirateWanted = CVarPirate.GetValueOnGameThread() != 0;
+	PirateAtAssembly = CVarPirate.GetValueOnGameThread();
+	const bool bPirateWanted = PirateAtAssembly != 0;
 
 	// Player's ship at the origin, pirate 1000 m along +X and 150 m up, yawed 180 so its nose faces
 	// back. Both spawn with no target drone: the thing to aim at is the other ship.
@@ -146,6 +148,11 @@ void ASFCombatGameMode::StartPlay()
 	}
 
 	Super::StartPlay();
+
+	// Watched from here, where this mode has begun play and EndPlay is therefore certain to take
+	// the watch off again (AActor::RouteEndPlay calls EndPlay only on an actor that has begun).
+	PirateChangedHandle = CVarPirate.AsVariable()->OnChangedDelegate().AddUObject(
+		this, &ASFCombatGameMode::OnPirateChanged);
 
 	// After Super::StartPlay, because before it the components have not begun to live. A target
 	// set earlier would survive -- neither the automation's BeginPlay nor the hull's touches it
@@ -377,6 +384,9 @@ void ASFCombatGameMode::StartPlay()
 
 void ASFCombatGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	CVarPirate.AsVariable()->OnChangedDelegate().Remove(PirateChangedHandle);
+	PirateChangedHandle.Reset();
+
 	// At SetByCode, and only while nothing stronger holds the variable, for the reasons
 	// SFLoopGameMode.cpp's EndPlay gives. No line.
 	if (bRestoreProfile)
@@ -390,4 +400,21 @@ void ASFCombatGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ASFCombatGameMode::OnPirateChanged(IConsoleVariable* Variable)
+{
+	// The delegate fires on every Set, the same value included, and a value the rig was assembled
+	// with is not one it ignored. Said once per world: the point is that the switch did nothing,
+	// and one line makes it.
+	if (bPirateChangeReported || !Variable || Variable->GetInt() == PirateAtAssembly)
+	{
+		return;
+	}
+	bPirateChangeReported = true;
+
+	UE_LOG(LogStarForge, Warning,
+		TEXT("Combat rig: sf.Pirate changed to %d after the rig was assembled with %d -- it is read once, ")
+		TEXT("when the rig assembles itself, so nothing in this world changes until the level restarts."),
+		Variable->GetInt(), PirateAtAssembly);
 }
