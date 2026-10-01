@@ -229,11 +229,36 @@ void ASFCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	DropDestroyedSeat();
+
 	PollMovementInput();
 	PollLookInput(DeltaSeconds);
 	PollInteract();
 	PollDockInput();
 	PollBindFrameCommand();
+}
+
+void ASFCharacter::DropDestroyedSeat()
+{
+	USFShipboardMovementComponent* Movement = GetShipboardMovement();
+
+	// A seat goes with its carrier. Destroy marks it garbage at once, and the pointer held
+	// here is nulled only by the next garbage collection, about a minute later; until then
+	// he read as seated in a post that no longer existed, and after it the strap stayed on
+	// for good, since only standing up or this character's EndPlay ever took it off -- immune
+	// to the knockdown with the readout saying "(strapped in)". Nothing to vacate: the post
+	// is gone and its claim on him with it.
+	if (SeatedStation && !IsValid(SeatedStation))
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Seat LOST: the post he held was destroyed with its carrier. He is unstrapped where he was."));
+		SeatedStation = nullptr;
+	}
+
+	if (!SeatedStation && Movement && Movement->IsStrappedIn())
+	{
+		Movement->SetStrappedIn(false);
+	}
 }
 
 void ASFCharacter::BindFrame(USFShipFrameComponent* Frame)

@@ -174,22 +174,35 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	// Ahead of every number, because it is the one line that invalidates all of them:
 	// while the occupant was unbased the carry did not run, so nothing below advanced
 	// and the readout froze on stale values without going red anywhere else.
-	const int64 Skipped = Movement->GetSkippedCarryFrames();
+	//
+	// The session's count, not the binding's. The binding's is what the log's drift lines
+	// carry, and walking through the hatch starts a new binding: read from it, this line
+	// went out with the first handover after the failure it was reporting.
+	const int64 Skipped = Movement->GetTotalSkippedCarryFrames();
 	if (Skipped > 0)
 	{
+		const int64 SkippedThisBinding = Movement->GetSkippedCarryFrames();
 		DrawLine(
-			FString::Printf(TEXT("CARRY SKIPPED %lld ticks - the occupant came unattached"), Skipped),
+			SkippedThisBinding == Skipped
+				? FString::Printf(TEXT("CARRY SKIPPED %lld ticks - the occupant came unattached"), Skipped)
+				: FString::Printf(TEXT("CARRY SKIPPED %lld ticks this session, %lld since bound to %s - the occupant came unattached"),
+					Skipped, SkippedThisBinding, *Movement->GetFrameName()),
 			Y,
 			FLinearColor::Red);
 	}
 
 	// The counter above is incremented from inside the carry, so it can never report
-	// a gap that is still open. This is read from out here, every frame, and does.
-	const int64 FramesSinceCarry = Movement->GetFramesSinceLastCarry();
-	if (FramesSinceCarry > 1)
+	// a gap that is still open. This is read from out here, every frame, and does -- and
+	// so does a binding that has had no carry at all, which a count from the last carry
+	// cannot see.
+	if (Movement->IsCarryNotRunning())
 	{
+		const int64 FramesSinceCarry = Movement->GetFramesSinceLastCarry();
 		DrawLine(
-			FString::Printf(TEXT("CARRY NOT RUNNING - %lld frames since the occupant was carried"), FramesSinceCarry),
+			FramesSinceCarry > 1
+				? FString::Printf(TEXT("CARRY NOT RUNNING - %lld frames since the occupant was carried"), FramesSinceCarry)
+				: FString::Printf(TEXT("CARRY NOT RUNNING - bound to %s %.1f s ago and never carried"),
+					*Movement->GetFrameName(), Movement->GetSecondsBoundUncarried()),
 			Y,
 			FLinearColor::Red);
 	}
@@ -198,7 +211,20 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	// the carry failed; this one says the man was knocked down, and a slide under it is
 	// not a carry failure -- "drift" used to mean only the first. Yellow with the
 	// mechanic off, because that run is not comparable with one that has it.
-	if (!Movement->IsKnockdownEnabled())
+	//
+	// A man with no floor first, because the knockdown cannot take what he does not have:
+	// it is withheld from him, and the line used to read "intact". Orange through the spawn
+	// fall's window, red past it.
+	if (Movement->HasNoFloor())
+	{
+		const bool bStillFalling = !Movement->HasBeenCarriedSinceBinding() && !Movement->IsCarryNotRunning();
+		DrawLine(FString::Printf(TEXT("footing  NONE - mode %s, no floor under him%s   %s"),
+			*Movement->GetMovementName(),
+			Movement->IsKnockdownEnabled() ? TEXT("") : TEXT(", knockdown off (sf.Knockdown 0)"),
+			*Movement->DescribeFooting()),
+			Y, bStillFalling ? FLinearColor(1.0f, 0.45f, 0.0f) : FLinearColor::Red);
+	}
+	else if (!Movement->IsKnockdownEnabled())
 	{
 		DrawLine(TEXT("footing  KNOCKDOWN OFF (sf.Knockdown 0) - checkpoint 1's rig, not this plan's"), Y, FLinearColor::Yellow);
 	}
@@ -304,8 +330,8 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	// Who carries him, and what the last handover cost. Yellow until there has been one,
 	// because "no handover yet" and "a handover of zero centimetres" are the same text
 	// otherwise and mean opposite things. Red when the floor under him has belonged to
-	// somebody else for ten frames: that outranks every figure above it, since the carry
-	// is following the frame and the frame is wrong.
+	// somebody else for FrameMismatchThresholdSeconds, a sixth of a second: that outranks
+	// every figure above it, since the carry is following the frame and the frame is wrong.
 	// The same threshold the log uses, in the same unit, so the line does not go red on
 	// a crossing the log stayed silent about.
 	const bool bMismatch = Movement->IsFrameMismatchReported();
@@ -439,14 +465,18 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 		// The figure the footing decision was taken on, not a second computation of it
 		// here: the screen has to show the number the mechanic saw, or the two can
 		// disagree and nobody will know which to believe.
+		//
+		// Why a man over the limit is not down comes from the same decision: there are three
+		// reasons, and this line used to guess between two of them.
 		const FVector Felt = Movement->GetFeltAccelerationMetersPerSecSq();
 		const bool bOverLimit = StarForge::ShipFrame::ExceedsGravPlateLimit(Felt);
+		const FString Exemptions = Movement->DescribeKnockdownExemptions();
+		const FString OverLimitText = (bOverLimit && !Movement->IsKnockedDown() && !Exemptions.IsEmpty())
+			? FString::Printf(TEXT("   over the limit, not knocked down: %s"), *Exemptions)
+			: FString();
 		DrawLine(
 			FString::Printf(TEXT("felt acceleration    %.2f m/s2   [limit %.2f]%s"),
-				Felt.Size(), StarForge::ShipFrame::GravPlateLimitMetersPerSecSq,
-				(bOverLimit && !Movement->IsKnockedDown())
-					? TEXT("   over the limit, on his feet: strapped in or sf.Knockdown 0")
-					: TEXT("")),
+				Felt.Size(), StarForge::ShipFrame::GravPlateLimitMetersPerSecSq, *OverLimitText),
 			Y,
 			Movement->IsKnockedDown()
 				? FLinearColor(1.0f, 0.45f, 0.0f)
@@ -455,7 +485,10 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 	else
 	{
 		DrawLine(
-			TEXT("NO SHIP FRAME BOUND - the occupant is standing in world space"),
+			Movement->GetLostFrameName().IsEmpty()
+				? FString(TEXT("NO SHIP FRAME BOUND - the occupant is standing in world space"))
+				: FString::Printf(TEXT("NO SHIP FRAME BOUND - %s, his carrier, was destroyed under him; he is in world space"),
+					*Movement->GetLostFrameName()),
 			Y,
 			FLinearColor::Red);
 		DrawLine(

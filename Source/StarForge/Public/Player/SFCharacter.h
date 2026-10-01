@@ -67,6 +67,9 @@ private:
 	/** Tries to take the nearest station within reach, or leaves the current one. */
 	void ToggleSeat();
 
+	/** Stands him up, unstrapped, when the post he holds has been destroyed under him. */
+	void DropDestroyedSeat();
+
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<UCameraComponent> Camera;
 

@@ -85,9 +85,17 @@ public:
 	double GetBestCompletedPeakJitterCm() const { return BestCompletedPeakJitterCm; }
 
 	/**
-	 * Engine ticks on which the carry could not run because the occupant had no
-	 * movement base. Anything but zero means the instrument stopped instrumenting
-	 * for a stretch, and is the single most important thing it can report.
+	 * Ticks of this component on which the carry could not run because the occupant had
+	 * no movement base, since the frame was last bound. Anything but zero means the
+	 * instrument stopped instrumenting for a stretch, and is the single most important
+	 * thing it can report.
+	 *
+	 * This component's ticks, not engine frames. GFrameCounter goes on counting while the
+	 * world is paused (LaunchEngineLoop.cpp 6131) and through a HighResShot's run-up
+	 * (UnrealClient.cpp 1604), and nothing ticks in either: counted in engine frames, ten
+	 * seconds of `pause` at 60 fps banked 600 skipped carries and turned every later verdict
+	 * to CARRY FAILED for a carry that never failed. A component that ticks without being
+	 * carried is still counted, so a base genuinely lost is counted exactly as before.
 	 *
 	 * Counted internally as uint64 but reported as int64, because Blueprint has no
 	 * unsigned 64-bit type and this figure has to reach the readout.
@@ -96,7 +104,15 @@ public:
 	int64 GetSkippedCarryFrames() const { return SkippedCarryFrames; }
 
 	/**
-	 * Engine frames since the carry last ran, or zero before the first one.
+	 * The same count over the whole session. No binding resets it: a handover used to erase
+	 * the only record of a carry failure, because the count above belongs to one binding and
+	 * walking through the hatch starts a new one. The readout's red line reads this.
+	 */
+	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
+	int64 GetTotalSkippedCarryFrames() const { return TotalSkippedCarryFrames; }
+
+	/**
+	 * This component's ticks since the carry last ran, or zero before the first one.
 	 *
 	 * The counter above cannot report a base loss that never ends, because it is
 	 * incremented inside the very function the engine stops calling once the
@@ -104,6 +120,57 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	int64 GetFramesSinceLastCarry() const;
+
+	/**
+	 * Seconds since the last binding with no carry at all, zero once he has been carried.
+	 *
+	 * The count above is blind here by construction: it measures from the last carry, and
+	 * after a binding there has not been one. A man bound in mid-air who never reaches a
+	 * deck is the case it cannot see -- recorded on the spike rig at 400 fps under full
+	 * thrust along -Z, where the floor outruns his spawn fall and he is never carried in
+	 * eighty seconds while every instrument stays calm.
+	 */
+	double GetSecondsBoundUncarried() const { return bHasCarriedOnce ? 0.0 : SecondsBoundUncarried; }
+
+	/** Whether the carry has run at all since the frame was last bound. */
+	bool HasBeenCarriedSinceBinding() const { return bHasCarriedOnce; }
+
+	/**
+	 * How long a binding may go without a first carry before it is a finding.
+	 *
+	 * Every rig places the man with the foot of his capsule 2 cm above the deck -- its centre
+	 * 100 cm above the floor plate's mid-plane, a half-height of 88, and the plate's top face
+	 * 10 cm above its mid-plane -- and the fall takes sqrt(2 x 0.02 / 9.81) = 64 ms. Measured
+	 * as the first carry after the binding: 5 frames at 60 fps (83 ms) and 27 at 400
+	 * (67.5 ms).
+	 *
+	 * The bound is not the fall alone. He lands during one world step and, on a simulating
+	 * hull, the first carry is the post-physics one of the step after it, which runs after
+	 * this clock is read; and a world step is clamped at 0.4 s (MaxUndilatedFrameTime,
+	 * BaseGame.ini 199), the length an uncapped run's first frames after the map load come
+	 * close to. So a man who lands has been carried within 0.064 + 2 x 0.4 = 0.864 s at the
+	 * very worst, at any frame rate. A second clears that by 136 ms. In a second under one g
+	 * a man falls 4.9 m, more than half the cabin: one still uncarried then is not finishing
+	 * a 2 cm fall.
+	 */
+	static constexpr double NeverCarriedThresholdSeconds = 1.0;
+
+	/**
+	 * Whether the carry is reported as not running: two ticks since the last carry, or a
+	 * binding older than NeverCarriedThresholdSeconds with no carry in it. The readout's
+	 * red line and the log's Warning are both decided here, so the two cannot disagree.
+	 */
+	bool IsCarryNotRunning() const;
+
+	/**
+	 * Bound to a frame and standing on nothing. The knockdown cannot take a man's footing
+	 * when he has none, so without this the verdict fell through to "footing intact" for a
+	 * man drifting in the cabin with no carry at all.
+	 */
+	bool HasNoFloor() const;
+
+	/** The carrier he was bound to when it was destroyed under him; empty otherwise. */
+	const FString& GetLostFrameName() const { return LostFrameName; }
 
 	/** Current position in the ship's coordinates, in centimetres. */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
@@ -204,11 +271,25 @@ public:
 	FVector GetKnockdownPushMetersPerSecSq() const { return PushMetersPerSecSq; }
 
 	/**
+	 * Why the last footing decision could not knock him down, whatever the felt figure:
+	 * "strapped in", "sf.Knockdown 0", "no floor under him", or several of them joined.
+	 * Empty when nothing exempted him.
+	 *
+	 * Taken from the decision itself, not re-derived for the readout. The readout used to
+	 * name two of the three and recompute the rest on its own, so a man falling with no
+	 * base under an over-limit manoeuvre was told he was strapped in or the mechanic was
+	 * off, and neither was true.
+	 */
+	FString DescribeKnockdownExemptions() const;
+
+	/**
 	 * What the drift figure means right now, in words, for the log and the HUD alike:
-	 * the carry failed, or the man was knocked down, or neither. The number alone
-	 * cannot say, and it used to mean only the first.
+	 * the carry failed, or his carrier is gone, or he has no floor under him, or he was
+	 * knocked down, or none of those. The number alone cannot say, and it used to mean
+	 * only the first.
 	 */
 	FString DescribeFooting() const;
+
 
 	/** False while knocked down: a man who is down does not land. See the cpp. */
 	virtual bool IsValidLandingSpot(const FVector& CapsuleLocation, const FHitResult& Hit) const override;
@@ -262,8 +343,25 @@ private:
 	 * results form is half what it claims; and a negative control that used to fall
 	 * silent now goes on measuring, which means something is still calling this
 	 * after the occupant has left the deck.
+	 *
+	 * Called by every carry with bFromCarry, and once a tick from TickComponent without it,
+	 * before the engine's own tick. The carry alone could never print the line it was
+	 * written for: the engine stops calling UpdateBasedMovement the moment the base is gone,
+	 * so "base none" was never logged and the diagnostic simply went quiet. From the tick
+	 * it prints a change of state and nothing else; the once-a-second line stays the
+	 * carry's.
 	 */
-	void LogDiagnostics(float DeltaSeconds);
+	void LogDiagnostics(float DeltaSeconds, bool bFromCarry);
+
+	/**
+	 * Clears a binding whose carrier no longer exists, once, and says so. A destroyed hull
+	 * invalidates the weak pointer below in the same frame, and that used to look exactly
+	 * like never having been bound: the carry fell through to the stock path, the footing
+	 * froze, the strap stayed on and Carry NOT RUNNING went quiet at the very moment the
+	 * carry had stopped for good. Measured on the KillZ control at 60 fps: 22 s of a man
+	 * still in the world with not one line about him.
+	 */
+	void ReleaseLostFrame();
 
 	/**
 	 * Decides whether he keeps his feet this frame and acts on it: enters falling with
@@ -290,6 +388,10 @@ private:
 	/** This occupant's own view of where the ship was last tick. */
 	FTransform LastFrameTransform = FTransform::Identity;
 
+
+	/** See GetLostFrameName. */
+	FString LostFrameName;
+
 	/** Baseline the drift is measured against, re-taken whenever the player moves. */
 	FVector DriftReferenceLocal = FVector::ZeroVector;
 
@@ -313,10 +415,20 @@ private:
 	 */
 	uint64 LastMeasuredFrame = TNumericLimits<uint64>::Max();
 
-	/** Diagnostic state for LogDiagnostics; meaningless unless sf.DriftDebug is on. */
+	/**
+	 * Diagnostic state for LogDiagnostics; meaningless unless sf.DriftDebug is on.
+	 *
+	 * The line prints the calls of the last whole frame, not the running count of the frame
+	 * it is printed in. The running count is 1 on the first call of every frame, and the
+	 * once-a-second line is always printed on a first call, so every periodic line read
+	 * "calls/frame 1" on a hull the carry runs on twice a frame -- the doubled call the field
+	 * exists to show, hidden by when it was read.
+	 */
 	uint64 DebugLastFrame = 0;
 	int32 DebugCallsThisFrame = 0;
+	int32 DebugCallsLastFrame = 0;
 	int32 DebugCallsPerFramePeak = 0;
+	uint64 DebugThrottleFrame = 0;
 	double DebugSecondsSinceLog = 0.0;
 	FString DebugLastState;
 
@@ -340,11 +452,33 @@ private:
 	double BestCompletedPeakDriftCm = 0.0;
 	double BestCompletedPeakJitterCm = 0.0;
 
-	/** Engine frame the carry last ran on, used to spot gaps in it. */
-	uint64 LastCarryFrame = 0;
+	/**
+	 * This component's ticks, counted at the top of TickComponent and so before either of the
+	 * engine's carry calls in the frame. What the carry gap is measured in; see
+	 * GetSkippedCarryFrames for why it is not GFrameCounter.
+	 */
+	uint64 OwnTickCount = 0;
 
-	/** Total carry ticks missed because the occupant was not attached to the ship. */
+	/** OwnTickCount at the carry's last run, used to spot gaps in it. */
+	uint64 LastCarryTick = 0;
+
+	/** Carry ticks missed because the occupant was not attached to the ship, this binding. */
 	int64 SkippedCarryFrames = 0;
+
+	/** The same, over the session; no binding resets it. */
+	int64 TotalSkippedCarryFrames = 0;
+
+	/** See GetSecondsBoundUncarried. Advanced in LogOpenCarryGap, so a paused world adds nothing. */
+	double SecondsBoundUncarried = 0.0;
+	bool bNeverCarriedReported = false;
+
+	/**
+	 * Whether a frame was bound, and by what name, so a binding whose carrier has since been
+	 * destroyed can be told from no binding at all. The weak pointer cannot: it reads null
+	 * either way.
+	 */
+	bool bBoundToFrame = false;
+	FString BoundFrameName;
 
 	/** False until a baseline has been taken against a live capsule. */
 	bool bBaselineValid = false;
@@ -360,6 +494,11 @@ private:
 
 	/** Set while he holds a seat. Strapped in, he is never knocked down. */
 	bool bStrappedIn = false;
+
+	/** The exemptions behind the last footing decision; see DescribeKnockdownExemptions. */
+	bool bLastDecisionKnockdownOff = false;
+	bool bLastDecisionStrappedIn = false;
+	bool bLastDecisionNoBase = false;
 
 	/** Knocked-down time in the current settled interval; reset with the peaks. */
 	double KnockedDownSeconds = 0.0;
