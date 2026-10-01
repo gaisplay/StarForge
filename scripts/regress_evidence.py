@@ -205,6 +205,17 @@ def collect():
     return plan, skipped
 
 
+def hidden():
+    """Keep every launch off the desktop. `-log` makes the engine open a console window of its
+    own, and a sweep of a hundred runs opens one a minute on a machine somebody is working at."""
+    if sys.platform != "win32":
+        return {}
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = 0  # SW_HIDE
+    return {"startupinfo": si}
+
+
 def run_engine(cmd):
     """Run one headless command verbatim and return the text of the log it wrote, or None."""
     for stale in ("StarForge.log", "StarForge_2.log"):
@@ -216,7 +227,7 @@ def run_engine(cmd):
                 pass  # held by a running editor; the command-line check below will catch it
     full = f'"{EDITOR}" "{UPROJECT}" {cmd}'
     subprocess.run(full, cwd=ROOT, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                   stderr=subprocess.DEVNULL)
+                   stderr=subprocess.DEVNULL, **hidden())
     for name in ("StarForge.log", "StarForge_2.log"):
         f = LOGS / name
         if f.exists():
@@ -247,7 +258,7 @@ def first_difference(a, b):
 def build_and_test(out):
     res = {}
     r = subprocess.run(f'"{REBUILD}" StarForgeEditor Win64 Development -Project="{UPROJECT}" -WaitMutex',
-                       cwd=ROOT, capture_output=True, text=True, errors="replace")
+                       cwd=ROOT, capture_output=True, text=True, errors="replace", **hidden())
     (out / "rebuild.log").write_text(r.stdout + r.stderr, "utf-8")
     log = r.stdout + r.stderr
     res["build"] = {
@@ -258,7 +269,7 @@ def build_and_test(out):
     }
     subprocess.run(f'"{EDITOR_CMD}" "{UPROJECT}" -ExecCmds="Automation RunTests StarForge.Core;Quit" '
                    f'-unattended -nopause -nullrhi -nosplash -log', cwd=ROOT, stdin=subprocess.DEVNULL,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **hidden())
     t = (LOGS / "StarForge.log").read_text("utf-8", errors="replace")
     shutil.copy(LOGS / "StarForge.log", out / "tests.log")
     fails = re.findall(r"Result=\{Fail\} Name=\{([^}]+)\}", t)
