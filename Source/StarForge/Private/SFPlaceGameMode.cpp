@@ -360,6 +360,15 @@ void ASFPlaceGameMode::StartPlay()
 
 			SpawnedCarriers.Add(Spawned);
 
+			// The name the actor GOT, which is the one every later line about it carries -- the
+			// handover line above all. Requested mode hands out another when the asked-for name is
+			// taken or none was asked for, and a line naming the request would then describe an
+			// actor nobody else's line mentions. The request is added only when the two differ.
+			const FString SpawnedName = Spawned->GetName();
+			const FString AskedText = (Spawned->GetFName() == Carrier.CarrierName)
+				? FString()
+				: FString::Printf(TEXT(" (asked for '%s')"), *Carrier.CarrierName.ToString());
+
 			// What actually makes an actor a carrier is the frame facade: it is what answers
 			// "where is this frame" and what the carry composes against. An actor without one
 			// looks like a carrier on screen and is not one, and the only other way to find out
@@ -370,13 +379,13 @@ void ASFPlaceGameMode::StartPlay()
 				UE_LOG(LogStarForge, Warning,
 					TEXT("Place carrier: '%s' of class %s has no USFShipFrameComponent, so nobody ")
 					TEXT("can stand in its frame."),
-					*Carrier.CarrierName.ToString(), *Carrier.CarrierClass->GetName());
+					*SpawnedName, *Carrier.CarrierClass->GetName());
 			}
 
 			UE_LOG(LogStarForge, Display,
-				TEXT("Place carrier: '%s' of class %s in place '%s' at place-local (%.1f %.1f %.1f) m, ")
+				TEXT("Place carrier: '%s'%s of class %s in place '%s' at place-local (%.1f %.1f %.1f) m, ")
 				TEXT("world (%.6e %.6e %.6e) cm, frame %s -- motionless (%s)."),
-				*Carrier.CarrierName.ToString(), *Carrier.CarrierClass->GetName(),
+				*SpawnedName, *AskedText, *Carrier.CarrierClass->GetName(),
 				*PlaceName.ToString(),
 				Carrier.LocationInPlaceMetres.X, Carrier.LocationInPlaceMetres.Y, Carrier.LocationInPlaceMetres.Z,
 				WorldCm.X, WorldCm.Y, WorldCm.Z,
