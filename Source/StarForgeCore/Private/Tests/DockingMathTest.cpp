@@ -350,6 +350,17 @@ bool FDockingCapturePoseIsExactAtItsEndsTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("and half way in rotation"),
 		FMath::IsNearlyEqual(Half.GetRotation().Rotator().Yaw, 30.0, 1e-3));
 
+	// Half way cannot tell which end the run-in starts from: Lerp and Slerp are symmetric
+	// there, so a capture run backwards -- from the target to the start -- passes the line
+	// above. In play that hull would jump almost onto the target on the first frame, be
+	// dragged back towards where it started, and be snapped across the window at the end. A
+	// quarter of the way is a quarter from the start.
+	const FTransform Quarter = StarForge::Docking::CapturePose(Start, Target, 0.25);
+	TestTrue(TEXT("a quarter of the way is a quarter from the start in position"),
+		Quarter.GetLocation().Equals(FVector(50.0, 0.0, 0.0), 1e-6));
+	TestTrue(TEXT("and in rotation"),
+		FMath::IsNearlyEqual(Quarter.GetRotation().Rotator().Yaw, 25.0, 1e-3));
+
 	return true;
 }
 
