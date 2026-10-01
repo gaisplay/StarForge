@@ -268,9 +268,12 @@ void USFShipFrameComponent::TickComponent(
 		//    makes the long frame.
 		// So a simulated step is divided by h and stamped at its end, any other by the
 		// frame and stamped at its middle, and the second difference is taken between the
-		// stamps. A step counts as simulated only if the root simulated at both samples: the
-		// frame the release lets go on snaps the hull and switches simulation on in one
-		// pre-physics tick, and its travel is the snap. At a fixed step no longer than the
+		// stamps. A step counts as simulated only if the root simulated at both samples. That
+		// was written for a let-go that snapped the hull to its target and switched simulation
+		// on in one pre-physics tick, whose travel was the snap. The let-go now waits a tick
+		// (USFDockingComponent::AdvanceRelease): the snap is a kinematic step of its own, and
+		// the step that switches simulation on starts from rest on the target, so its travel
+		// is one physics step's and nothing written. At a fixed step no longer than the
 		// physics maximum every figure is bit-identical to dividing by the frame except on
 		// the frame or two either side of such a switch; ShipFrameMath.cpp says why.
 		//

@@ -97,8 +97,9 @@ public:
 
 	/**
 	 * How long the run-in takes, in seconds. The release takes the same time, being the
-	 * run-in played backwards; unlike the run-in it moves in a straight line with no turn,
-	 * and its peak 6d/T^2 is logged and checked against the grav-plate ceiling when it starts.
+	 * run-in played backwards, and lets go on the tick after it arrives; unlike the run-in it
+	 * moves in a straight line with no turn, and its peak 6d/T^2 is logged and checked
+	 * against the grav-plate ceiling when it starts.
 	 *
 	 * The run-in is eased, so its peak acceleration is 6d/T^2 -- an order of magnitude
 	 * below a linear run-in, which would step the velocity from zero to full inside one
@@ -302,7 +303,8 @@ private:
 	/**
 	 * sf.Dock 2 asked for a re-dock and the ship is still releasing. The countdown starts
 	 * when it is free, not at the command: counted from the command, a one-second release
-	 * and a one-second countdown would ask for the dock on the release's last frame.
+	 * and a one-second countdown would ask for the dock on the release's arrival tick, one
+	 * before the let-go, and be ignored as releasing.
 	 */
 	bool bAutoDockAfterRelease = false;
 };

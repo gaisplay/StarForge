@@ -204,7 +204,7 @@ void USFDockingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	//
 	// ECVF_SetByConsole, because the console and -ExecCmds both write at that priority and Set
 	// refuses anything lower, keeping the old value with a LogConsoleManager warning
-	// (ConsoleManager.cpp 274-308). -ExecCmds applies on the first frame, after BeginPlay, so a
+	// (ConsoleManager.cpp 275-312). -ExecCmds applies on the first frame, after BeginPlay, so a
 	// headless sf.Dock 0 or 2 still arrives as a change.
 	if (EndPlayReason == EEndPlayReason::EndPlayInEditor || EndPlayReason == EEndPlayReason::LevelTransition)
 	{
