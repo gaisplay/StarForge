@@ -95,7 +95,10 @@ non-zero when the build or the tests fail, a replay is `INVALID`, or a red count
 not always a fault: on the 2026-10-01 sweep eight rose, every one by design -- the never-carried
 watchdog on the −Z flights, `Frame LOST` when `KillZ` destroys the hull under him, and
 `sf.PlaceOffsetM=.` now refused -- and the record of that sweep, family by family against the
-pre-review baseline, is in `docs/superpowers/notes/2026-10-01-review.md`. Launches are hidden.
+pre-review baseline, is in `docs/superpowers/notes/2026-10-01-review.md`. Its 102 fixed-step
+replays are the baselines from then on, as `notes/evidence/2026-10-01-review-rebase-*.log` (the
+`Physics:` line changed in every one of them); the script takes the most recently opened good log
+of each command, so they are chosen by their timestamps, not by their names. Launches are hidden.
 
 **The drift line carries knocked-down time and a verdict.** `Shipboard drift: … skipped
 carries N, knocked down S s -- <verdict>`, where the verdict is `footing intact`,
