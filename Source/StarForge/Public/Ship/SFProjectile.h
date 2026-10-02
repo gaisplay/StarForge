@@ -57,6 +57,13 @@ public:
 	 */
 	void SetShotRecord(int32 InShotNumber, const FString& InTurretStateAtShot);
 
+	/**
+	 * The seconds Chaos integrates in a frame of FrameSeconds: the frame itself, unless it is
+	 * longer than the engine lets one physics frame be. A shot flies on this clock and the weapon
+	 * keeps its cadence on it, because every hull a shot can meet moves on it.
+	 */
+	static double PhysicsStepSeconds(double FrameSeconds);
+
 	/** The sphere swept along each step, in centimetres. */
 	static constexpr double RadiusCm = 5.0;
 

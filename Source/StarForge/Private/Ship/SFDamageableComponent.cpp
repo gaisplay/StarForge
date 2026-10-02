@@ -183,7 +183,7 @@ void USFDamageableComponent::ReceiveHit(const FVector& HitWorldCm, double Damage
 	}
 
 	FHitOutcome Outcome;
-	if (!ApplyHit(Shields, Limits, Face, Damage, Outcome))
+	if (!ApplyHit(Shields, Face, Damage, Outcome))
 	{
 		UE_LOG(LogStarForge, Error,
 			TEXT("Hit on [%s] %s face: the shield maths refused %.1f damage -- not a finite non-negative number, ")
@@ -300,9 +300,13 @@ void USFDamageableComponent::PowerDown()
 		return;
 	}
 
-	// The same two calls docking makes, in the same order: locked so nothing can command the
-	// hull, cleared so the readout stops printing the last demand in this frame rather than the
-	// next. Not a second mechanism -- see PowerDown's declaration for what this lock does not hold.
+	// The same two calls docking makes, in the same order, and only the second still does
+	// anything. The lock is already on: bPoweredDown, set on this function's first line, is what
+	// the array's IsLocked asks, so every ApplyDemand from that instant refuses. SetLocked(true)
+	// is redundant and harmless -- the docking bool is read by IsLocked alone, and an undock that
+	// clears it leaves the power-down standing (see PowerDown's declaration). ClearDemand is what
+	// stops the readout printing the last demand, and zeroes the spooled throttles, in this frame
+	// rather than the next.
 	Thrusters->SetLocked(true);
 	Thrusters->ClearDemand();
 

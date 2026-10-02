@@ -1,6 +1,7 @@
 #include "Misc/AutomationTest.h"
 #include "ShipFrameMath.h"
 
+#include <cmath>
 #include <limits>
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -116,6 +117,38 @@ bool FShipFrameCentripetalTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameFeltSumsThrustAndSpinTest,
+	"StarForge.Core.ShipFrame.FeltSumsThrustAndSpin",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameFeltSumsThrustAndSpinTest::RunTest(const FString& Parameters)
+{
+	// The fixture above passes no linear acceleration, so a felt figure that dropped the
+	// ship's own thrust and kept only the spin passed it. Here neither half knocks him down
+	// alone and the two together do: full forward thrust on the spike rig, 800 kN on 50 t,
+	// is 16 m/s2 along +X; a full roll, pi rad/s, with him 1.5 m out along +Y is
+	// pi^2 * 1.5 = 14.80 m/s2 toward the axis, along -Y. Each is under 19.62, and the sum
+	// is 21.80 long.
+	const FVector Thrust(16.0, 0.0, 0.0);
+	const FVector Roll(UE_DOUBLE_PI, 0.0, 0.0);
+	const FVector Offset(0.0, 1.5, 0.0);
+
+	const FVector Felt = StarForge::ShipFrame::ComputeFeltAcceleration(Thrust, Roll, Offset);
+
+	const double Centripetal = UE_DOUBLE_PI * UE_DOUBLE_PI * 1.5;
+	TestTrue(TEXT("the felt acceleration is the thrust plus the centripetal term"),
+		Felt.Equals(FVector(16.0, -Centripetal, 0.0), 1e-9));
+	TestFalse(TEXT("the thrust alone keeps him standing"),
+		StarForge::ShipFrame::ExceedsGravPlateLimit(Thrust));
+	TestFalse(TEXT("and so does the roll alone"),
+		StarForge::ShipFrame::ExceedsGravPlateLimit(FVector(0.0, -Centripetal, 0.0)));
+	TestTrue(TEXT("but together they knock him down"),
+		StarForge::ShipFrame::ExceedsGravPlateLimit(Felt));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FShipFrameGravPlateLimitTest,
 	"StarForge.Core.ShipFrame.GravPlateLimit",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
@@ -129,6 +162,19 @@ bool FShipFrameGravPlateLimitTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("20.0 m/s^2 exceeds compensation"),
 		StarForge::ShipFrame::ExceedsGravPlateLimit(FVector(20.0, 0.0, 0.0)));
+
+	// The interval above holds any ceiling in [19, 20), and every test that reads the
+	// constant agrees with whatever the constant says. So the spec's 19.62 is spelled here,
+	// and pinned from both sides on the one double where it matters: exactly at it he
+	// stands, because the plates absorb up to and including the limit, and one double above
+	// it he is down. A ceiling of 19.9 passes the interval and fails the second; a `>=`
+	// fails the first. Along one axis the length is the component itself -- sqrt(x * x)
+	// rounds back to x -- so neither figure is moved by the norm.
+	constexpr double SpecLimit = 19.62;
+	TestFalse(TEXT("exactly 19.62 m/s^2 stays within compensation"),
+		StarForge::ShipFrame::ExceedsGravPlateLimit(FVector(SpecLimit, 0.0, 0.0)));
+	TestTrue(TEXT("and the next double above it does not"),
+		StarForge::ShipFrame::ExceedsGravPlateLimit(FVector(std::nextafter(SpecLimit, 20.0), 0.0, 0.0)));
 
 	return true;
 }
@@ -201,6 +247,37 @@ bool FShipFrameLookPitchOnRolledDeckTest::RunTest(const FString& Parameters)
 		FVector::DotProduct(Forward, DeckUp) > 0.4);
 	TestTrue(TEXT("pitch rotates about the view's own right axis, leaving it fixed"),
 		Result.GetRightVector().Equals(RightBefore, 1e-6));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameLookYawOnRolledDeckTest,
+	"StarForge.Core.ShipFrame.LookYawOnRolledDeck",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameLookYawOnRolledDeckTest::RunTest(const FString& Parameters)
+{
+	// The other half of the stage-2a defect. LookYawTurnsAboutDeck stands on a level deck,
+	// where the deck normal and the world's vertical are one axis, so a yaw about the world
+	// vertical passed it. Rolled +90 about X the two are a quarter turn apart: the deck
+	// normal points along -Y and the occupant's right along +Z. A quarter turn to the right
+	// about the deck swings the view onto his right, +Z, still level with the deck; about the
+	// world vertical it would swing the view onto +Y, straight down into the floor.
+	const FQuat Rolled = FQuat(FVector::ForwardVector, FMath::DegreesToRadians(90.0));
+	const FVector DeckUp = Rolled.RotateVector(FVector::UpVector);
+	const FVector RightBefore = Rolled.GetRightVector();
+	TestTrue(TEXT("the fixture's deck normal points along -Y"), DeckUp.Equals(FVector(0.0, -1.0, 0.0), 1e-12));
+	TestTrue(TEXT("and his right along +Z"), RightBefore.Equals(FVector(0.0, 0.0, 1.0), 1e-12));
+
+	const FQuat Result = StarForge::ShipFrame::ApplyLookStep(Rolled, DeckUp, 90.0, 0.0);
+
+	TestTrue(TEXT("a right turn on a rolled deck swings the view onto his right"),
+		Result.GetForwardVector().Equals(RightBefore, 1e-6));
+	TestTrue(TEXT("and leaves it level with the deck"),
+		FMath::IsNearlyZero(FVector::DotProduct(Result.GetForwardVector(), DeckUp), 1e-6));
+	TestTrue(TEXT("with his head still along the deck normal"),
+		Result.GetUpVector().Equals(DeckUp, 1e-6));
 
 	return true;
 }
@@ -388,6 +465,47 @@ bool FShipFrameFootingRelapseRestartsTheDelayTest::RunTest(const FString& Parame
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FShipFrameFootingDelayIsInSecondsTest,
+	"StarForge.Core.ShipFrame.FootingDelayIsInSeconds",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FShipFrameFootingDelayIsInSecondsTest::RunTest(const FString& Parameters)
+{
+	// The two tests above step at 1/60 s, where half a second is thirty frames, so a delay
+	// counted in frames passed both of them. At 400 fps the same half second is two hundred
+	// frames, and thirty would stand him up after 75 ms. 199 frames is 0.4975 s and 201 is
+	// 0.5025 s, either side of 200 for the reason the 60 fps test steps over 30.
+	StarForge::ShipFrame::FFootingState AtFourHundred;
+	AtFourHundred.Update(true, 1.0 / 400.0, 0.5);
+	for (int32 i = 0; i < 199; ++i)
+	{
+		AtFourHundred.Update(false, 1.0 / 400.0, 0.5);
+	}
+	TestTrue(TEXT("at 400 fps still down after 199 frames, 0.4975 s"), AtFourHundred.bDown);
+
+	AtFourHundred.Update(false, 1.0 / 400.0, 0.5);
+	AtFourHundred.Update(false, 1.0 / 400.0, 0.5);
+	TestFalse(TEXT("and up after 201, 0.5025 s"), AtFourHundred.bDown);
+
+	// And on a step that varies, which is what an uncapped frame rate hands the game: frames
+	// alternating 1/400 and 1/60 s are 19.17 ms a pair, so 26 pairs are 0.4983 s -- 52 frames
+	// and still down -- and one more 1/400 s frame is 0.5008 s and up, on the 53rd.
+	StarForge::ShipFrame::FFootingState Varying;
+	Varying.Update(true, 1.0 / 60.0, 0.5);
+	for (int32 Pair = 0; Pair < 26; ++Pair)
+	{
+		Varying.Update(false, 1.0 / 400.0, 0.5);
+		Varying.Update(false, 1.0 / 60.0, 0.5);
+	}
+	TestTrue(TEXT("on a varying step still down after 0.4983 s"), Varying.bDown);
+
+	Varying.Update(false, 1.0 / 400.0, 0.5);
+	TestFalse(TEXT("and up at 0.5008 s"), Varying.bDown);
+
+	return true;
+}
+
 /**
  * The handover guard's arithmetic, lifted out of USFInteriorVolumeComponent so it can be
  * pinned. The component keeps the decision -- who is handed to whom, and under what limit --
@@ -469,6 +587,17 @@ bool FShipFrameHandoverTranslationTest::RunTest(const FString& Parameters)
 		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(Pirate, Player, FVector(1.0, 0.0, 0.0), Reversed));
 	TestTrue(TEXT("swapping the carriers changes nothing"), FMath::IsNearlyEqual(Reversed, Speed, 1e-12));
 
+	// Every pair above flies along one line, where the length of the difference and the
+	// difference of the lengths are one number. They part as soon as the hulls cross: the
+	// player's ship at 106 m/s along +Y and the pirate at 106 along -X are 106 * sqrt(2) apart,
+	// far outside the limit, where a difference of speeds reads zero and hands the man over.
+	Player.LinearVelocityMetresPerSec = FVector(0.0, 106.0, 0.0);
+	Speed = -1.0;
+	TestTrue(TEXT("crossing hulls give a speed"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(Player, Pirate, FVector(1.0, 0.0, 0.0), Speed));
+	TestTrue(TEXT("the length of the difference, not the difference of the lengths"),
+		FMath::IsNearlyEqual(Speed, 106.0 * FMath::Sqrt(2.0), 1e-9));
+
 	return true;
 }
 
@@ -511,6 +640,39 @@ bool FShipFrameHandoverSpinTest::RunTest(const FString& Parameters)
 		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(Still, Rolling, FVector(4000.0, 0.0, 0.0), AlongTheAxis));
 	TestTrue(TEXT("a point on the axis does not move"),
 		FMath::IsNearlyEqual(AlongTheAxis, 0.0, 1e-12));
+
+	// Every carrier above that turns sits on the world origin and does nothing else, so the
+	// two things the arithmetic does with a spin went unasked: that r is measured from the
+	// carrier's own origin, and which way round w x r is taken. A hull centred 100 m out,
+	// turning at 1 rad/s about Z, moves its deck at 1 m/s a metre from its centre -- not at
+	// the 101 m/s that w x P reads from the world origin, which the loop rig's hull, 12.93 m
+	// off it, and every place moved by sf.PlaceOffsetM would carry.
+	StarForge::ShipFrame::FCarrierMotion OffCentre;
+	OffCentre.OriginMetres = FVector(100.0, 0.0, 0.0);
+	OffCentre.AngularVelocityRadPerSec = FVector(0.0, 0.0, 1.0);
+
+	double FromItsOwnCentre = -1.0;
+	TestTrue(TEXT("a hull turning away from the origin gives a speed"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(
+			Still, OffCentre, FVector(101.0, 0.0, 0.0), FromItsOwnCentre));
+	TestTrue(TEXT("its deck moves at w x r from its own centre"),
+		FMath::IsNearlyEqual(FromItsOwnCentre, 1.0, 1e-12));
+
+	// And a hull that rolls and translates at once, chosen so the two cancel where he stands:
+	// rolling at pi rad/s, the deck 3 m out along +Y moves at 3 pi along +Z, and the hull
+	// flies at 3 pi along -Z, so that point is at rest -- as the contact point of a wheel is.
+	// With the cross product taken the other way round the two add instead, 6 pi = 18.85 m/s,
+	// and a man the guard should hand over is refused.
+	StarForge::ShipFrame::FCarrierMotion RollingAndFlying;
+	RollingAndFlying.LinearVelocityMetresPerSec = FVector(0.0, 0.0, -3.0 * RollRadPerSec);
+	RollingAndFlying.AngularVelocityRadPerSec = FVector(RollRadPerSec, 0.0, 0.0);
+
+	double WhereTheyCancel = -1.0;
+	TestTrue(TEXT("a hull rolling and translating gives a speed"),
+		StarForge::ShipFrame::RelativeSpeedAtPointMetresPerSec(
+			Still, RollingAndFlying, FVector(0.0, 3.0, 0.0), WhereTheyCancel));
+	TestTrue(TEXT("v + w x r, which is zero where the two cancel"),
+		FMath::IsNearlyEqual(WhereTheyCancel, 0.0, 1e-12));
 
 	return true;
 }

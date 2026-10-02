@@ -108,6 +108,23 @@ bool FInertiaRotationIsHonouredTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("the principal-axis rotation is applied both ways"),
 		Result.Equals(FVector(2.0, 0.0, 0.0), 1e-9));
 
+	// Ninety degrees cannot tell which way round the rotation goes: R and its inverse differ
+	// there by a half turn, which commutes with a diagonal tensor, so swapping RotateVector
+	// and UnrotateVector gives the same (2, 0, 0). At 45 degrees they part. The principal
+	// axes are the ship's carried by InertiaRotation, so a vector along one of them must
+	// come back scaled by that axis's moment alone: principal X, ship (1, 1, 0) / sqrt 2,
+	// by 1, and principal Y, ship (-1, 1, 0) / sqrt 2, by 2. Swapped, the first reads twice
+	// itself and the second once.
+	Mass.InertiaRotation = FRotator(0.0, 45.0, 0.0).Quaternion();
+	const FVector PrincipalX = Mass.InertiaRotation.RotateVector(FVector(1.0, 0.0, 0.0));
+	const FVector PrincipalY = Mass.InertiaRotation.RotateVector(FVector(0.0, 1.0, 0.0));
+	TestTrue(TEXT("the fixture's principal X lies along ship (1, 1, 0)"),
+		PrincipalX.Equals(FVector(1.0, 1.0, 0.0) / FMath::Sqrt(2.0), 1e-9));
+	TestTrue(TEXT("at 45 degrees a vector along principal X comes back times its moment of 1"),
+		Mass.TransformByInertia(PrincipalX).Equals(PrincipalX, 1e-9));
+	TestTrue(TEXT("and one along principal Y times its moment of 2"),
+		Mass.TransformByInertia(PrincipalY).Equals(2.0 * PrincipalY, 1e-9));
+
 	// With identity rotation the same call must be a plain componentwise scale, so
 	// the rotation branch cannot be quietly wrong in the common case either.
 	Mass.InertiaRotation = FQuat::Identity;
@@ -168,11 +185,22 @@ bool FUnitsDeadZoneTest::RunTest(const FString& Parameters)
 		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(2.0, 0.1), 1.0, 1e-12));
 
 	// A dead zone of 1.0 is what an operator types into the editor to mean "ignore this
-	// stick entirely". The Clamp to 0.99 is the only thing between that and a division by
-	// zero: without it the denominator is 0 and the axis returns NaN or infinity, which
-	// then propagates silently through the whole flight solve.
-	TestTrue(TEXT("a dead zone of one is clamped rather than dividing by zero"),
-		FMath::IsNearlyEqual(StarForge::Units::ApplyDeadZone(1.0, 1.0), 1.0, 1e-12));
+	// stick entirely", and it has to mean that at every input, the stop included. A zone
+	// clamped to 0.99 reads 0.5 at 0.995 and full deflection at 1.0, so a pad pushed to its
+	// stop flies the ship at full thrust. Over-range input is the case that would otherwise
+	// reach the rescale with a zero denominator: (2 - 1) / 0 is an infinity, which the
+	// output clamp would turn into full deflection rather than nothing.
+	TestTrue(TEXT("a dead zone of one ignores full deflection"),
+		StarForge::Units::ApplyDeadZone(1.0, 1.0) == 0.0);
+	TestTrue(TEXT("and the last hundredth of the travel"),
+		StarForge::Units::ApplyDeadZone(0.995, 1.0) == 0.0);
+	TestTrue(TEXT("and over-range input"),
+		StarForge::Units::ApplyDeadZone(2.0, 1.0) == 0.0);
+
+	// A zone between 0.99 and 1 is honoured to the last bit of it, not cut to 0.99: 0.992 is
+	// inside a zone of 0.995, where the clamped form read 0.2.
+	TestTrue(TEXT("a dead zone of 0.995 covers 0.992"),
+		StarForge::Units::ApplyDeadZone(0.992, 0.995) == 0.0);
 
 	// A zero dead zone must be a pass-through, so turning the feature off cannot
 	// itself distort the axis.

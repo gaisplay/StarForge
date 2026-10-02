@@ -29,8 +29,8 @@ namespace StarForge
 		}
 
 		// Gram matrix B * B^T, always 6x6 however many thrusters there are. The
-		// damping term keeps it invertible when the array is merely near-degenerate
-		// rather than exactly so.
+		// damping term adds lambda to every eigenvalue, so it is invertible whatever
+		// the subset spans, degenerate or not.
 		FMatrix6 Gram = FMatrix6::Zero();
 		for (int32 Row = 0; Row < 6; ++Row)
 		{
@@ -206,6 +206,10 @@ namespace StarForge
 				}
 			}
 
+			// Every thruster pinned: what is still missing lies wholly where no throttle
+			// can move. Reachable on a layout that builds -- Build checks linear span, and
+			// a +X/+Y/+Z-only array asked for -X-Y-Z pins every thruster closed on the
+			// first pass.
 			if (Free.Num() == 0)
 			{
 				break;
@@ -219,7 +223,18 @@ namespace StarForge
 			{
 				if (!ComputeResponseRows(Columns, Free, Lambda, FreeRows))
 				{
-					// The survivors cannot span six axes. Keep what is already
+					// Not "the free set cannot span six axes": a set that cannot still
+					// inverts, damped. Free is not empty here, so this is elimination
+					// meeting a pivot under 1e-8, and in exact arithmetic it never does.
+					// Every eigenvalue of the damped Gram matrix is at least lambda, no
+					// block left to eliminate has a singular value under that, so the
+					// column partial pivoting chooses from is at least lambda long and its
+					// largest entry at least lambda / sqrt(6): 4.1e-3 at the 0.01 every
+					// caller passes. Rounding is what is left, and it grows with the square
+					// of the thrust. On the rig's 200 kN the Gram entries reach 2.56e12, and
+					// a replica of this elimination lands within 1e-4 of the exact pivots of
+					// its rank-deficient subsets, 0.018-0.045; ten times the thrust puts the
+					// rounding at about lambda itself, so the branch stays. Keep what is already
 					// allocated rather than discarding a partial answer.
 					break;
 				}

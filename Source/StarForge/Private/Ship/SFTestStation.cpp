@@ -3,6 +3,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/EngineTypes.h"
 #include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFInteriorVolumeComponent.h"
 #include "Ship/SFShipFrameComponent.h"
@@ -141,29 +142,49 @@ ASFTestStation::ASFTestStation()
 	DockingPort->SetRelativeLocation(FVector(0.0, -Station::HalfYCm - Station::TunnelLengthCm, TunnelPortZ));
 	DockingPort->SetRelativeRotation(FRotator(0.0, -90.0, 0.0));
 
-	// The box plus the tunnel: Y from -600 (the tunnel's outboard mouth) to +400, so the
-	// centre is at -100 and the half-extent 500. X and Z reach the inner faces of the
-	// walls. The volume is wider than the tunnel along X and Z, which costs nothing --
-	// the extra is inside solid panels, where a pawn cannot be.
+	// Two boxes on the one frame: the room and the tunnel's bore. It used to be one box, Y from
+	// the tunnel's mouth at -600 to +400 and as wide and tall as the room, on the argument that
+	// the extra was inside solid panels where a pawn cannot be. Inside the room it was; outside
+	// the -Y wall it was open space -- 4.7 m past each tunnel wall (590 - 120) and 5.1 m over the
+	// tunnel's roof (390 - (-120)), 1.9 m deep. A hull at rest against that wall beside the
+	// tunnel, or on its roof, has part of its cabin inside that space, and two carriers at rest
+	// hand a man over on their relative speed alone
+	// (USFInteriorVolumeComponent::TryHandover): bound to the station while standing on his own
+	// deck, finding F1 with no hull inside the station.
 	//
-	// It does not touch the ship's. Docked, the ship's cabin ends at station-local -610
-	// and this begins at -600: ten centimetres of wall, deliberately unclaimed.
-	// The span runs from the tunnel's outboard mouth at -600 to the far wall at +400, so it
-	// is 2*HalfYCm + TunnelLengthCm long -- a thousand centimetres, half-extent 500, centred
-	// at -100. Writing it as (HalfYCm + TunnelLengthCm)/2 gives 300 and looks close enough to
-	// pass a reading; it leaves the whole tunnel and two metres of the station's own deck
-	// inside no volume at all, which is a man who stays bound to the ship for four metres
-	// after walking out of it.
-	const double InteriorHalfYCm = (2.0 * Station::HalfYCm + Station::TunnelLengthCm) * 0.5;  // 500
-	const double InteriorCentreYCm = Station::HalfYCm - InteriorHalfYCm;                      // -100
+	//   - the room: out to the walls' inner faces, 590 x 390 x 390 about the root;
+	//   - the tunnel: its bore, X +-100 and Z from the deck's top at -390 to the hatch top at
+	//     -140, and Y from the mouth at -600 to the -Y wall's inner face at -390, so the opening
+	//     through that wall is the tunnel's and the two boxes meet on one plane.
+	//
+	// The tunnel still begins on the port plane at -600, and docked the ship's cabin ends at
+	// station-local -610: ten centimetres of wall, deliberately unclaimed, and a man walking out
+	// of the hatch meets the station's volume on the same plane and in the same frame as he met
+	// the one box. Inside the station the two never hand him over to each other: entering either
+	// binds him to this frame, which he already has.
+	const double WallInnerOffsetCm = Station::PanelThickness * Station::CubeEdgeCm * 0.5;     // 10
 
 	Interior = CreateDefaultSubobject<USFInteriorVolumeComponent>(TEXT("Interior"));
 	Interior->SetupAttachment(Root);
-	Interior->SetRelativeLocation(FVector(0.0, InteriorCentreYCm, 0.0));
+	Interior->SetRelativeLocation(FVector::ZeroVector);
 	Interior->SetBoxExtent(FVector(
-		Station::HalfXCm - Station::PanelThickness * Station::CubeEdgeCm * 0.5,
-		InteriorHalfYCm,
-		Station::HalfZCm - Station::PanelThickness * Station::CubeEdgeCm * 0.5));
+		Station::HalfXCm - WallInnerOffsetCm,                                                 // 590
+		Station::HalfYCm - WallInnerOffsetCm,                                                 // 390
+		Station::HalfZCm - WallInnerOffsetCm));                                               // 390
+
+	const double TunnelMouthYCm = -Station::HalfYCm - Station::TunnelLengthCm;                  // -600
+	const double TunnelInnerEndYCm = -Station::HalfYCm + WallInnerOffsetCm;                     // -390
+
+	TunnelInterior = CreateDefaultSubobject<USFInteriorVolumeComponent>(TEXT("TunnelInterior"));
+	TunnelInterior->SetupAttachment(Root);
+	TunnelInterior->SetRelativeLocation(FVector(
+		0.0,
+		(TunnelMouthYCm + TunnelInnerEndYCm) * 0.5,                                           // -495
+		TunnelPortZ));                                                                        // -265
+	TunnelInterior->SetBoxExtent(FVector(
+		Station::HatchHalfWidthCm,                                                            // 100
+		(TunnelInnerEndYCm - TunnelMouthYCm) * 0.5,                                           // 105
+		Station::HatchHeightCm * 0.5));                                                       // 125
 
 	InteriorLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("InteriorLight"));
 	InteriorLight->SetupAttachment(Root);
@@ -257,12 +278,37 @@ void ASFTestStation::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Read back from the panels rather than asserted: a hull meets this station only through them
+	// (AddBoxPanel says why they collide), so none of them physical is F1 itself.
+	int32 PhysicalPanels = 0;
+	for (const UStaticMeshComponent* Panel : Panels)
+	{
+		if (Panel && CollisionEnabledHasPhysics(Panel->GetCollisionEnabled()))
+		{
+			++PhysicalPanels;
+		}
+	}
+
+	const FString PanelText = PhysicalPanels > 0
+		? FString::Printf(TEXT("%d of %d panels are physics colliders"), PhysicalPanels, Panels.Num())
+		: FString::Printf(TEXT("NONE of %d panels is a physics collider -- a hull can fly into this station (F1)"), Panels.Num());
+
 	const FVector Location = GetActorLocation();
-	UE_LOG(LogStarForge, Display,
+	const FString Report = FString::Printf(
 		TEXT("Station at world (%.0f %.0f %.0f) cm: %.0f x %.0f x %.0f m box, hatch in the -Y wall, ")
-		TEXT("%.0f cm tunnel, frame %s, no physics body."),
+		TEXT("%.0f cm tunnel, frame %s, %s."),
 		Location.X, Location.Y, Location.Z,
 		Station::HalfXCm * 2.0 / Station::CubeEdgeCm, Station::HalfYCm * 2.0 / Station::CubeEdgeCm, Station::HalfZCm * 2.0 / Station::CubeEdgeCm,
 		Station::TunnelLengthCm,
-		Frame ? TEXT("present") : TEXT("MISSING"));
+		Frame ? TEXT("present") : TEXT("MISSING"),
+		*PanelText);
+
+	if (PhysicalPanels > 0)
+	{
+		UE_LOG(LogStarForge, Display, TEXT("%s"), *Report);
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Error, TEXT("%s"), *Report);
+	}
 }

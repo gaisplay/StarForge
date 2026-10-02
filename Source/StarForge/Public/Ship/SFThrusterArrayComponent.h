@@ -8,6 +8,7 @@
 #include "SFThrusterArrayComponent.generated.h"
 
 class UPrimitiveComponent;
+class USFDamageableComponent;
 class USFShipDataAsset;
 
 /**
@@ -133,10 +134,24 @@ public:
 	 * The array refuses, not the post and not the operator: the post asks whether its
 	 * engines are locked, and neither it nor whoever holds it has to know that docking
 	 * exists. Same shape as the scripted-profile lock one level up.
+	 *
+	 * This is the docking lock, and undocking clears it. A powered-down ship is held by the
+	 * second lock IsLocked asks after, which this does not touch.
 	 */
 	void SetLocked(bool bInLocked);
 
-	bool IsLocked() const { return bLocked; }
+	/**
+	 * Whether either lock holds: the docking lock above, or the owner's power-down, asked of its
+	 * USFDamageableComponent. What ApplyDemand, every post and the scripted profile ask before
+	 * commanding.
+	 *
+	 * Two locks because they are released by different things. PowerDown writes SetLocked(true),
+	 * and every undock writes SetLocked(false) unconditionally, so while that was the only lock a
+	 * ship powered down while docked flew again the moment it undocked, while IsPoweredDown still
+	 * read true. Asked rather than copied into a flag here: the power state has one owner, and
+	 * nothing in this project powers a ship back up, so this half never releases.
+	 */
+	bool IsLocked() const;
 
 	/** The most this array can produce on each axis. What assist-off is a fraction of. */
 	StarForge::FWrench GetArrayCapability() const { return Capability; }
@@ -177,7 +192,10 @@ private:
 	/** Where each throttle actually is, having spooled toward the target. */
 	TArray<double> LastThrottles;
 
-	/** Seconds to spool from zero to full, per surviving thruster by column, copied from the asset. */
+	/**
+	 * The spool's time constant in seconds, per surviving thruster by column, copied from the
+	 * asset: 63% of a step after one, 99.9% after about 6.9, so not a time to full.
+	 */
 	TArray<double> ResponseTimes;
 
 	/** Asset indices of the thrusters destroyed so far. Never cleared: see DestroyThruster. */
@@ -194,6 +212,10 @@ private:
 
 	bool bReady = false;
 
-	/** True while something has locked the array. See SetLocked. */
+	/** True while docking holds the array. See SetLocked. */
 	bool bLocked = false;
+
+	/** The owner's damage model, resolved once at BeginPlay; absent, only the docking lock holds. See IsLocked. */
+	UPROPERTY()
+	TObjectPtr<USFDamageableComponent> Damageable;
 };

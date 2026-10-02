@@ -35,7 +35,9 @@ bool FThrusterWrenchOffAxisTest::RunTest(const FString& Parameters)
 {
 	// Two metres out along +Y, pushing along +X. The lever arm is r = (0,2,0) and
 	// the force F = (500,0,0), so r x F = (0*0 - 0*0, 0*500 - 0*0, 0*0 - 2*500)
-	// = (0, 0, -1000) newton-metres: it yaws the ship nose-right.
+	// = (0, 0, -1000) newton-metres: it yaws the ship nose-left. A positive turn about +Z
+	// carries +X onto +Y, which is the ship's right (FRotator(0, 90, 0) does the same), so
+	// -Z is to the left -- as it must be for a push forward on the right-hand side.
 	StarForge::FThrusterDef Thruster;
 	Thruster.Location = FVector(0.0, 2.0, 0.0);
 	Thruster.Direction = FVector(1.0, 0.0, 0.0);
@@ -72,6 +74,36 @@ bool FThrusterWrenchRespectsCentreOfMassTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("moving the centre of mass onto the line of action kills the torque"),
 		Wrench.Torque.IsNearlyZero(1e-9));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FThrusterWrenchNormalisesTheDirectionTest,
+	"StarForge.Core.Thruster.WrenchNormalisesTheDirection",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FThrusterWrenchNormalisesTheDirectionTest::RunTest(const FString& Parameters)
+{
+	// Every other fixture's direction is already a unit axis, where normalising changes
+	// nothing. The layout comes from an editable asset, and a direction typed as (0, 3, 4)
+	// is five units long: unnormalised it would push with 5000 N where the asset says 1000,
+	// and turn the ship five times harder with it. The thrust is the asset's MaxThrust
+	// whatever the direction's length, along (0, 0.6, 0.8).
+	StarForge::FThrusterDef Thruster;
+	Thruster.Location = FVector(2.0, 0.0, 0.0);
+	Thruster.Direction = FVector(0.0, 3.0, 4.0);
+	Thruster.MaxThrust = 1000.0;
+
+	const StarForge::FWrench Wrench =
+		StarForge::ComputeThrusterWrench(Thruster, FVector::ZeroVector);
+
+	TestTrue(TEXT("the force is MaxThrust along the direction, not MaxThrust times its length"),
+		Wrench.Force.Equals(FVector(0.0, 600.0, 800.0), 1e-9));
+
+	// r x F with r = (2, 0, 0) and F = (0, 600, 800): (0*800 - 0*600, 0*0 - 2*800, 2*600 - 0*0).
+	TestTrue(TEXT("and the torque is the lever arm crossed into that force"),
+		Wrench.Torque.Equals(FVector(0.0, -1600.0, 1200.0), 1e-9));
 
 	return true;
 }
