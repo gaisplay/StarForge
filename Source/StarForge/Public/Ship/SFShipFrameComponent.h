@@ -48,7 +48,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	FVector GetAngularVelocityRadPerSec() const;
 
-	/** Linear velocity of this frame in metres per second, world space. */
+	/**
+	 * Linear velocity of this frame in metres per second, world space.
+	 *
+	 * On a carrier with no body it is the mean over the last frame, which belongs to that frame's
+	 * middle rather than its end; StarForge::ShipFrame::EstimateStepVelocity says why.
+	 */
 	UFUNCTION(BlueprintPure, Category = "StarForge|Frame")
 	FVector GetLinearVelocityMetersPerSec() const { return LinearVelocityMetersPerSec; }
 
@@ -57,10 +62,11 @@ public:
 	 *
 	 * The felt-acceleration figure of spec 6 is this plus the centripetal term from
 	 * the angular velocity above, and the knockdown is decided on it. It is derived
-	 * here, by differencing the transform, so that the movement component reads both
-	 * halves of the figure off one component: the ship used to compute this one from
-	 * its Chaos velocity, which meant the movement component would have had to know
-	 * the test ship's class to read it.
+	 * here, by differencing the transform on the time base of whatever moved it
+	 * (TickComponent says what that is; sf.FeltTimeBase 0 undoes it), so that the
+	 * movement component reads both halves of the figure off one component: the ship
+	 * used to compute this one from its Chaos velocity, which meant the movement
+	 * component would have had to know the test ship's class to read it.
 	 *
 	 * One component, but no longer one sampling. On a simulating hull the angular half
 	 * is the body's instantaneous rate and this half is a second difference over two
@@ -89,6 +95,18 @@ private:
 	FVector LinearVelocityMetersPerSec = FVector::ZeroVector;
 	FVector LinearAccelMetersPerSecSq = FVector::ZeroVector;
 
+	/** Where in its frame the velocity above belongs, as an offset from that frame's end. */
+	double LastVelocityStampOffsetSeconds = 0.0;
+
 	/** False until there is a velocity to difference; the first two ticks report zero acceleration. */
 	bool bHasVelocitySample = false;
+
+	/** Whether Chaos was simulating the root at the last sample: half of what makes a step simulated. */
+	bool bLastSampleSimulating = false;
+
+	/** The sf.FeltTimeBase the velocity above was estimated under, so no difference spans a change of it. */
+	bool bLastVelocityOnTimeBase = true;
+
+	/** Async physics or substepping has been reported for this carrier. */
+	bool bWarnedPhysicsStepping = false;
 };

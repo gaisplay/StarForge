@@ -19,12 +19,14 @@ class USFTurretComponent;
  * already has one, and the two would differ the first time anything is attached to anything.
  *
  * On zero hull strength the ship is POWERED DOWN, not destroyed: the thruster array is locked
- * with the same SetLocked docking uses, the turret with a lock of the same shape, and both posts
- * stand aside without being told why; every shield face drops to zero and stays there, because
- * an unpowered shield is no shield; the hull coasts on its momentum, and a person inside stays
- * aboard and stays bound. Nothing is destroyed, on either ship. The handoff for this stage is
- * explicit that a damaged thruster, a powered-down ship and a hull taken by a pirate are all the
- * same lock, and that stage 4 must use it rather than grow a second one.
+ * by the power state itself, which USFThrusterArrayComponent::IsLocked asks of this component,
+ * the turret by a lock of its own, and both posts stand aside without being told why; every
+ * shield face drops to zero and stays there, because an unpowered shield is no shield; the hull
+ * coasts on its momentum, and a person inside stays aboard and stays bound. Nothing is
+ * destroyed, on either ship. The handoff for this stage asked for one lock for a damaged
+ * thruster, a powered-down ship and a hull taken by a pirate, and stage 4 first used docking's
+ * SetLocked for the power-down. That bool is released by every undock, so since the review of
+ * 2026-10-01 the power-down is a lock of its own that nothing clears (see PowerDown).
  */
 UCLASS(ClassGroup = (StarForge), meta = (BlueprintSpawnableComponent))
 class STARFORGE_API USFDamageableComponent : public UActorComponent
@@ -113,12 +115,13 @@ private:
 	 * pilot's: a powered-down ship that went on aiming and firing would be powered down in its
 	 * log line only. Docking never touches that lock, so it holds through a dock and an undock.
 	 *
-	 * The lock is NOT exclusive, and nothing here pretends it is. SetLocked is a single bool
-	 * with no owner and no reason attached: USFDockingComponent::Undock calls SetLocked(false)
-	 * unconditionally, so a ship powered down while docked gets its engines back the moment it
-	 * undocks, while IsPoweredDown still reads true. Lock reasons are deferred by the stage-4
-	 * plan (item 7 of its closing list), and no rig in this stage can damage a docked ship.
-	 * Until they exist, whichever caller of SetLocked writes last is the one that wins.
+	 * The array's lock is the power state, not SetLocked. SetLocked is docking's bool, and
+	 * USFDockingComponent::LetGo, which every undock ends in, writes it false unconditionally;
+	 * while it was the power-down's lock too, a ship powered down while docked got its engines
+	 * back the moment it undocked, with IsPoweredDown still reading true. Since 2026-10-01
+	 * USFThrusterArrayComponent::IsLocked reads the docking bool OR IsPoweredDown, and nothing
+	 * clears bPoweredDown, so the power-down holds through a dock and an undock as the turret's
+	 * lock does. No rig in this stage can damage a docked ship, so no recorded figure moved.
 	 */
 	void PowerDown();
 

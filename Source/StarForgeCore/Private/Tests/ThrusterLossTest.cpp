@@ -273,6 +273,22 @@ bool FThrusterLossLosingOneForwardThrusterCostsExactlyAQuarterTest::RunTest(cons
 	TestEqual(TEXT("so its ceiling on longitudinal acceleration is exactly 12.0 m/s^2"),
 		Damaged.GetAxisAchievable(0) / LossRigMassKg, 12.0, 0.0);
 
+	// The mirror, sf.KillThruster 1: the -X thruster at (2, 2, 0) gone, and astern is now the
+	// weak side -- 800 kN can still push forward and 600 kN back. The figure is the smaller of
+	// the two whichever side lost, so a stick pulled fully astern asks for what astern can
+	// give. Above, the forward sum and the smaller one are the same 600 kN, and an accessor
+	// that returned the forward sum would pass it; here it would read 800 kN, and with assist
+	// off the last quarter of the stick's astern travel would ask for thrust that is not
+	// there, while the loss line printed fore-and-aft thrust unchanged.
+	TestTrue(TEXT("the thruster removed next pushes along -X"), Layout[1].Direction.Equals(FVector(-1.0, 0.0, 0.0), 0.0));
+
+	FThrustAllocator Astern;
+	TestTrue(TEXT("the array without index 1 builds"),
+		Astern.Build(PickThrusters(Layout, IndicesExcept(Layout.Num(), { 1 })), FVector::ZeroVector));
+	TestEqual(TEXT("without it the array achieves exactly 600 kN along X, the astern side"),
+		Astern.GetAxisAchievable(0), 600000.0, 0.0);
+	TestEqual(TEXT("and its X capability sum is exactly 1400 kN"), Astern.GetAxisCapability(0), 1400000.0, 0.0);
+
 	return true;
 }
 

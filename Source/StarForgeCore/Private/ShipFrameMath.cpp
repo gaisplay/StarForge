@@ -157,4 +157,87 @@ namespace StarForge::ShipFrame
 
 		return true;
 	}
+
+	// FIXED-STEP IDENTITY. At a fixed step no longer than the physics maximum, a run of steps of one
+	// kind reads bit for bit what dividing both differences by the frame read, so every rig line
+	// recorded before 2026-09-27 stands, except on the frame or two either side of a switch between
+	// simulated and kinematic. Three things make it exact rather than close:
+	//  - FMath::Min(dt, max) hands back dt itself whenever dt <= max;
+	//  - the kinematic spacing is (dt - dt/2) + dt/2, and each operation in it is exact: halving a
+	//    double, dt - dt/2 (Sterbenz), and dt/2 + dt/2, which is a doubling;
+	//  - both divisions are written the way the frame component always wrote them -- the velocity
+	//    component by component, the acceleration through FVector's operator/, which multiplies by
+	//    the reciprocal (Vector.h 324-328) and so differs from a component-wise division in the last
+	//    bit. Swapping either form for the other moves every figure.
+	// It holds under /fp:precise, which the editor target compiles with (VCToolChain.cs 1322-1346,
+	// BuildSettingsVersion.V7), and every rig runs in the editor binary. /fp:fast, the default for a
+	// Game target, licenses the compiler to reassociate the spacing.
+
+	bool EstimateStepVelocity(const FFrameStep& Step, double MaxPhysicsStepSeconds, FFrameVelocity& Out)
+	{
+		// Negated, so a NaN fails the guard instead of falling through it.
+		if (!(Step.FrameSeconds > 0.0))
+		{
+			return false;
+		}
+
+		// Both ends, and each half of that is a switch the docking component makes. Simulating at
+		// the end alone is the release's let-go, a tick after its last eased pose, whose travel is
+		// what Chaos integrated from rest; the header says what the rule still guards there.
+		// Simulating at the start alone is the capture's first frame, whose travel is the run-in's
+		// first eased step: judged by its start it would be stamped at its end, the next kinematic
+		// middle half a frame later, and a capture from rest would read about twice its own
+		// 6d/T^2 -- 33.99 m/s2 at 60 fps against a 17.58 peak for the tests' 2.93 m (the rig's
+		// standoff is 2.928 m, peak 17.57), on every capture.
+		//
+		// Judged correctly, that first frame is, at a fixed step, the one frame spaced by less than
+		// the frame -- half of it -- and so the one that reads more than dividing by the frame did.
+		// The run-in starts from rest whatever the hull was doing, so a capture begun at speed steps
+		// the velocity at the frame's start, and the half-frame spacing reads the step at twice the
+		// old figure. That is the step, not the
+		// spacing: an impulse has no finite reading at any spacing, and only a run-in that starts
+		// from the hull's own velocity removes it.
+		const bool bSimulated = Step.bSimulatingAtStart && Step.bSimulatingAtEnd;
+
+		const double DivisorSeconds = (bSimulated && MaxPhysicsStepSeconds > 0.0)
+			? FMath::Min(Step.FrameSeconds, MaxPhysicsStepSeconds)
+			: Step.FrameSeconds;
+
+		Out.VelocityMetresPerSec = FVector(
+			Step.DisplacementMetres.X / DivisorSeconds,
+			Step.DisplacementMetres.Y / DivisorSeconds,
+			Step.DisplacementMetres.Z / DivisorSeconds);
+		Out.StampOffsetSeconds = bSimulated ? 0.0 : -0.5 * Step.FrameSeconds;
+
+		return true;
+	}
+
+	bool EstimateStepAcceleration(
+		const FFrameVelocity& Previous,
+		const FFrameVelocity& Current,
+		double CurrentFrameSeconds,
+		FVector& OutAccelMetresPerSecSq)
+	{
+		// Left to right, as the identity above needs.
+		const double SpacingSeconds =
+			(CurrentFrameSeconds + Current.StampOffsetSeconds) - Previous.StampOffsetSeconds;
+
+		// Two estimates made by EstimateStepVelocity over positive frames are never closer than half
+		// the later frame -- a kinematic step after a simulated one -- so a spacing of zero or less
+		// means the two are out of order or were stamped by different rules. Divided by, it would put
+		// an infinity, or an acceleration of the wrong sign, straight into the knockdown. The caller
+		// keeps the figure it had, as it does for a frame of no length.
+		if (!(SpacingSeconds > 0.0))
+		{
+			return false;
+		}
+
+		// On a simulated step clamped by the physics maximum the velocity changed by a h, not a dt,
+		// so this reads a h / dt there: an under-read, which can miss a knockdown that frame deserved
+		// and cannot invent one. The spacing stays dt_n by the fix's definition -- both stamps are the
+		// ends of their frames on the game clock.
+		OutAccelMetresPerSecSq = (Current.VelocityMetresPerSec - Previous.VelocityMetresPerSec) / SpacingSeconds;
+
+		return true;
+	}
 }

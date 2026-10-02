@@ -12,10 +12,24 @@ Design docs are in Russian under `docs/superpowers/`; code, comments and commit 
 - `docs/superpowers/plans/` — implementation plans, task-by-task with checkboxes.
 - `docs/superpowers/notes/` — checkpoint runbooks and result forms for manual measurements.
 - `docs/superpowers/source/` — the novel the design was originally argued from, read and
-  digested. **Background reading, not a source of requirements.** Development follows the
-  spec and the plans; where the two disagree, the spec wins and the disagreement is not a
-  defect to fix. Its own reconciliation section lists five places the design departs from
-  the book on purpose. Do not open it to plan work.
+  digested. **Its standing changed on 2026-09-17, and the old rule is kept below because the
+  reason for it still holds inside the slice.**
+
+  *During the slice* it was background reading and not a source of requirements: the spec was
+  the authority, §1–§13 said what to build and why, and opening the novel to plan work could
+  only introduce requirements the spec had already weighed and rejected. That rule did its job.
+
+  *After the slice* there is no "why" left to follow — §13 ends at "Точка проверки 4. Срез
+  готов." and names no stage after it. The second-phase spec is therefore argued **from the
+  novel again**, deliberately and by the owner's decision. The order still stands: novel →
+  spec → plan → code. Nothing is built from the novel directly, and no plan cites it.
+
+  **The six deliberate departures in its own §9.2 stay departures**, and one of them carries a
+  number worth knowing before reading anything else: the source's combat speeds are 1–5 km/s
+  against §7's 200/400 m/s. That is not a seventh disagreement — it is the arithmetic of the
+  third, which records that nobody walks the ship during combat in the source. Walking is this
+  project's own idea, and 200/400 is what walking costs. Section §10 of the digest lists what
+  was thrown out on purpose; do not bring it back.
 
 Read the spec before changing anything structural. Most non-obvious code here is a deliberate answer to a documented failure mode, not an accident.
 
@@ -59,9 +73,40 @@ session that never ticked.
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=25 -ExecCmds="sf.FlightLog 1, sf.ShipProfile 0, sf.Intent.X 1" -log
 ```
 
+**A fixed step cannot fail on a whole class of defect, so run the same check with a variable step
+too.** Finding F4 (2026-09-27) passed every `-benchmark` run and knocked the owner down four times
+in one docking cycle by hand, because at a fixed step a one-frame second difference of a pose
+written from time is exact and under a varying one it is not. Drop `-benchmark` and `-fps` and
+keep `-seconds=N`: the run still ends cleanly, on real time (`LaunchEngineLoop.cpp` 4709,
+5692-5695). Uncapped and headless, the world step floors at 0.5 ms (`MinUndilatedFrameTime`) with
+sporadic longer frames, which is the regime such a defect shows in; `t.MaxFPS` paces the frames
+evenly and is no better than `-benchmark` for this. **Launch every background run hidden**
+(`Start-Process ... -WindowStyle Hidden` from PowerShell; `STARTUPINFO` with `SW_HIDE` from Python,
+because `-log` opens a console window), and give every wait loop a deadline and a condition the
+job itself is certain to write.
+
+**Replaying the evidence.** `python scripts/regress_evidence.py` rebuilds, runs the unit tests and
+replays every headless log in `notes/evidence` whose command line it can still run, comparing the
+project's lines with the timestamp and frame number stripped and nothing else normalised. Since
+2026-10-01 its fixed-step plan is 102 commands (four order-only duplicates merged, seven logs of a
+throwaway DIAG build excluded), plus 10 variable-step commands replayed twice and judged on their
+red counters alone (`STEADY` when the two agree), plus the nine claims of this file. It exits
+non-zero when the build or the tests fail, a replay is `INVALID`, or a red counter rose. A rise is
+not always a fault: on the 2026-10-01 sweep eight rose, every one by design -- the never-carried
+watchdog on the −Z flights, `Frame LOST` when `KillZ` destroys the hull under him, and
+`sf.PlaceOffsetM=.` now refused -- and the record of that sweep, family by family against the
+pre-review baseline, is in `docs/superpowers/notes/2026-10-01-review.md`. Its 102 fixed-step
+replays are the baselines from then on, as `notes/evidence/2026-10-01-review-rebase-*.log` (the
+`Physics:` line changed in every one of them); the script takes the most recently opened good log
+of each command, so they are chosen by their timestamps, not by their names. Launches are hidden.
+
 **The drift line carries knocked-down time and a verdict.** `Shipboard drift: … skipped
 carries N, knocked down S s -- <verdict>`, where the verdict is `footing intact`,
-`KNOCKED DOWN: …`, `CARRY FAILED: …` or `knockdown off (sf.Knockdown 0)`. Under the
+`KNOCKED DOWN: …`, `CARRY FAILED: …` or `knockdown off (sf.Knockdown 0)`, and since 2026-10-01
+also `NO FOOTING: …` (bound, with no floor under him -- until then this read `footing intact`) or
+`FRAME LOST: …` (the carrier he was bound to no longer exists). The two new ones can end only an
+interval-complete line written at a rebinding; a periodic line is written inside the carry, where
+there is always a base. Under the
 recipe above it reads `knocked down 0.0 s -- footing intact`: 800 kN on 50 t is 16 m/s²,
 under the 19.62 limit. The scripted profile (`sf.ShipProfile 1`) is over the limit almost
 continuously — 314 m/s² of linear acceleration at its peaks — so a standing occupant is
@@ -88,7 +133,7 @@ MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unr
 rewrites an argument that starts with `/` as a Windows path — `/Game/Maps/L_Loop` reaches the
 engine as `C:/Program Files/Git/Game/Maps/L_Loop` — and the engine then finds no map, brings
 up no world and sits in an empty level for the whole run: no station, no `Loop rig:` line,
-`dock free -- NO STATION in this level`, and an exit code of 0. Measured on 2026-09-13; the
+`Dock: [Ship] free -- no station`, and an exit code of 0. Measured on 2026-09-13; the
 tell in the log is `LogInit: Command Line: "C:/Program Files/Git/Game/Maps/L_Loop" …` with no
 `Bringing World` line at all. From cmd or PowerShell the plain form is fine. The URL form
 below was not rewritten in any recorded run.
@@ -122,7 +167,9 @@ in it read back:
 `Combat rig: scripted profile off; the player's ship is crewed and holds fire until sf.Fire 1; the pirate is automated and armed; the man stands in the cabin; separation 1011.2 m.`
 An upper-case word in it is a state that did not hold, and the line goes out as an `Error`. Two
 cases make it a `Warning` by design: `sf.Pirate 0`, and a pilot's seat left free by
-`sf.ConsoleOperator 0` set before `StartPlay`.
+`sf.ConsoleOperator 0` set before `StartPlay`. Since 2026-10-01 "holds fire until sf.Fire 1" is
+read back from `sf.Fire` and the ship's weapons-free state rather than asserted, so a value left
+from an earlier PIE session or set by `-ini` shows in the line.
 
 By map, once `L_Combat.umap` exists:
 
@@ -149,13 +196,67 @@ line. With it, none of the next 23 did.
 The mode reads it in `StartPlay`, before `-ExecCmds` applies. Use one `-ini` switch per variable:
 two variables joined by a comma in one switch were not taken.
 
-**Three lines that are red on the other rigs are correct here.** Checkpoint 7's runbook lists
-them with the condition under which each becomes a finding again:
+**Two lines that are red on the other rigs are correct here, and a third that used to be red.**
+Checkpoint 7's runbook lists all three with the condition under which each becomes a finding
+again:
 
-- `dock free -- NO STATION in this level` — there is no station;
+- `dock    free -- no station in this level` **on the panel** — there is no station. Until
+  2026-10-01 the panel drew it red and upper-case, `NO STATION`, on the spike rig as well; it is
+  now drawn white wherever no `ASFTestStation` exists, and red, naming the station, only where one
+  is in the level and the docking found no port on it — which is a finding on any rig;
 - `Frame handover REFUSED` when the hulls touch;
 - `thruster array NOT built` with its `Error`, once hits have left the survivors on two corners.
   The `Error` repeats on every later destruction.
+
+**The first line is a panel line, not a log line, and on 2026-09-18 it was struck off this list
+by mistake** (it was red then; the account is kept for the lesson in its last sentence). The check that struck it read the log alone: forty seconds of the combat rig produce
+zero `LogStarForge` lines at `Warning` or `Error`, and what the log says about having no station is
+two lower-case lines — `Docking: [Ship] no station in this level, …` once at `Display` and `Dock:
+[Ship] free -- no station` once a second at `Log`. The panel draws the upper-case form in red, and
+has since 2026-09-11. Restored on 2026-09-23 when the whole-project review read the HUD source.
+"Red" in this guide means red on the panel or `Warning`/`Error` in the log; a check of one is not a
+check of the other.
+
+**The place rig is a fourth map, and none of the other three moved.** `ASFPlaceGameMode` on
+`Content/Maps/L_Place` — an empty level whose one setting is a `GameMode Override` of
+`SFPlaceGameMode`, created by hand in the editor (step 0 of checkpoint 8's runbook). Here the
+world stops being what a game mode's constructor says it is: the mode reads a **place** —
+`USFPlaceDataAsset`, carrying a kind, an origin, a radius, a system and a list of carriers —
+**measures whether it fits in the world before assembling any of it**, prints that measurement
+whether it fits or not, and only then builds. At its authored defaults it assembles exactly what
+the loop rig does, and its figures were compared against the loop's line for line.
+
+The measurement is `StarForge::Place::MeasurePlace` in `StarForgeCore`, under nine headless
+tests, and it returns a reason and six numbers rather than a verdict. Two ceilings bound
+different lengths and are checked separately: the engine's bounds the **reach**, meaning the
+distance from the world origin to the furthest point of the place, and the crossing budget
+bounds the place's own **diameter**.
+
+By map, once `L_Place.umap` exists:
+
+```bash
+MSYS_NO_PATHCONV=1 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" /Game/Maps/L_Place -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log < /dev/null
+```
+
+By the URL, which needs no map. The first argument is quoted, for the same reason as the loop's.
+Every figure stage 5 recorded was taken this way, because the map did not exist yet.
+
+```bash
+"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject" "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFPlaceGameMode" -game -nullrhi -unattended -nosplash -benchmark -fps=60 -seconds=70 -ExecCmds="sf.FlightLog 1" -log < /dev/null
+```
+
+**Two lines are red on this rig legitimately, and only under a stated condition.**
+`Place size: … -- REFUSED. Reason: …` and `Place rig: … NOTHING WAS ASSEMBLED`, both `Error`,
+are correct **only when `sf.PlaceOffsetM` or `sf.PlaceRadiusM` is on the command line** — that
+is, in a negative control. **Without such a key either one is a finding**, and the condition
+matters more than usual here: a red line that fires when the mechanism succeeds is the worst
+kind of false finding, because it looks exactly like a real one. A refused place assembles
+nothing at all, so its run carries no `Place carrier:`, no `Dock:`, no `Shipboard drift` and no
+`Frame [` line anywhere.
+
+A third line, `Place rig: … a place written in code`, is a `Warning` and is legitimate only
+while `Content/Places/DA_Place_OpenSpace.uasset` does not exist. Once it does, that warning is
+a finding: it means the asset was not found where it is supposed to be.
 
 Console variables the rig understands:
 
@@ -172,18 +273,25 @@ Console variables the rig understands:
 | `sf.DriftDebug` | 0 | 1 logs carry calls per frame, movement mode, base and ship-local position |
 | `sf.TargetDrone` | 1 | 0 withdraws the rig's target drone; the turret must then report no target rather than aim at the origin |
 | `sf.AutomationOperator` | 1 | 1 the ship's automation holds the gunner's seat; 0 leaves it free. The gunner's post is what tests spec §4's claim that the ship cannot tell who holds a post, so it is held by something that is not a person by default |
-| `sf.Dock` | -1 | Docking from the console, the headless twin of the `F` key. `1` docks if the approach is inside the window, `0` undocks, `-1` is no command. Acted on when the value **changes**, not on its level. `2` is the headless cycle — undock now and dock again one capture later — and it exists because `-ExecCmds` applies its whole list at startup, so `sf.Dock 0, sf.Dock 1` leaves only the last value and "docked → free → docked" cannot be asked for in one run at all |
-| `sf.BindFrame` | *(empty)* | `ship` or `station`: binds the occupant to that carrier's frame **wherever he is standing**. The negative control for the handover, and the same trick as `sf.ShipGravity 0` for the carry. Docked, it is a legitimate handover and everything stays quiet; undocked and under thrust it is knowingly wrong, and the cross-check must warn within ten frames and the carry must stop about a second later; bound the other way round — to the moving ship from the station's floor — the `Frame handover` line must show one frame of the ship's travel, never zero |
+| `sf.Dock` | -1 | Docking from the console, the headless twin of the `F` key. `1` docks if the approach is inside the window, `0` undocks, `-1` is no command. Acted on when the value **changes**, not on its level. `2` is the headless cycle — undock now and dock again one capture after the release ends — and it exists because `-ExecCmds` applies its whole list at startup, so `sf.Dock 0, sf.Dock 1` leaves only the last value and "docked → free → docked" cannot be asked for in one run at all. Since 2026-09-25 undocking is a one-second **release** (F3's fix, below): `releasing, 2.93 m …` at the command, `undocked.` a second later. Put back to `-1` when the world ends, with one `Display` line saying so, because a value left by one PIE session used to undock the next session's docked ship on its first tick; `-ExecCmds` runs on the first tick, after `BeginPlay`, so no headless run is touched |
+| `sf.DockRelease` | 1 | 1: undocking eases the hull 2.93 m out along the port's axis over `CaptureSeconds` before it simulates, the fix for checkpoint 8's F3. 0: let go at the docked pose, as before 2026-09-25 — the negative control, and a sideways undock under it reproduces F3's evidence line for line (122 of 122 lines at 60 fps, 118 of 118 at 400). Read at the undock command |
+| `sf.BindFrame` | *(empty)* | `ship` or `station`: binds the occupant to that carrier's frame **wherever he is standing**. The negative control for the handover, and the same trick as `sf.ShipGravity 0` for the carry. Docked, it is a legitimate handover and everything stays quiet; undocked and under thrust it is knowingly wrong, and the cross-check must warn after a sixth of a second (`FrameMismatchThresholdSeconds`; the first line reads `(0.17 s)`, then one a second) and the carry must stop about a second later; bound the other way round — to the moving ship from the station's floor — the `Frame handover` line must show one frame of the ship's travel, never zero. Asking for the frame he is already bound to rebinds nothing and says so as a `Warning` (`the control did not run`). Cleared when the world ends, so a value left by one PIE session does not act on the next session's first tick; a value typed between sessions still acts at the next Play |
 | `sf.Fire` | -1 | The player's trigger, as a latch rather than a held key. `-1`: the trigger is whatever the gunner post's operator asks for, on a weapons-free hull. `0`: hold fire. `1`: hold the trigger down. It replaces the operator's trigger, never the operator, so an empty or locked gunner's post does not fire under it (0 shots measured with `sf.AutomationOperator 0`). Every ship on the spike and loop rigs, and the player's ship on the combat rig, is weapons-hold (`bWeaponsFree = false`), so nothing fires until `sf.Fire 1`. Ignored by an automated hull |
 | `sf.WeaponDebug` | 0 | 1 logs one line per shot: `Weapon: [Ship] shot N at t … s from muzzle …, turret <state> …`. Hits are logged whatever it says, because a hit is an event, not a stream. Counting shots needs it. Acts on every hull, and each line names the ship that fired |
 | `sf.ProjectileSweep` | 1 | 0 replaces each projectile's swept segment with a zero-length test at the end of its step. This is the tunnelling control, and it must miss: 0 hits at 60 and 400 fps where the sweep hits every on-target shot. Acts on every projectile in the world |
-| `sf.AimAt` | *(empty)* | `station` or `ship`: what the gunner's automation tracks instead of what the rig gave it. `ship` means another ship, never its own. Empty is the rig's target: the drone on both measurement rigs, the pirate on the combat rig. Acted on when the value changes. A miss is a `Warning` and leaves the gunner with no target. Ignored by an automated hull |
+| `sf.AimAt` | *(empty)* | `station` or `ship`: what the gunner's automation tracks instead of what the rig gave it. `ship` means another ship, never its own. Empty is the rig's target: the drone on both measurement rigs, the pirate on the combat rig. Acted on when the value changes. A miss is a `Warning` and leaves the gunner with no target. Ignored by an automated hull. Cleared when the world ends, like `sf.BindFrame` |
 | `sf.Shields` | 1 | 0 sends every hit straight to the hull, and each hit says so: `Hit on [X] +X face: shields OFF (sf.Shields 0), 100.0 straight to hull.` Face charges are left untouched, so only `hull` falls in the `Combat:` line. **A named exception** to the rule that an automated hull answers no `sf.*` variable: it acts on every hull, so on the combat rig both ships lose their shields. Checkpoint 7's control C1 turns off the pirate's |
-| `sf.Pirate` | 1 | 0: the combat rig spawns no pirate. The player's automation has no target, and the rig line goes out as a `Warning`. **Read once in `StartPlay`, before `-ExecCmds` applies**, so it has to be set before the level starts: `"-ini:Engine:[ConsoleVariables]:sf.Pirate=0"` on the command line, or in the editor's console before Play. Typed mid-run, it does nothing until the level restarts |
+| `sf.Pirate` | 1 | 0: the combat rig spawns no pirate. The player's automation has no target, and the rig line goes out as a `Warning`. **Read once in `StartPlay`, before `-ExecCmds` applies**, so it has to be set before the level starts: `"-ini:Engine:[ConsoleVariables]:sf.Pirate=0"` on the command line, or in the editor's console before Play. Typed mid-run, it does nothing until the level restarts, and says so once as a `Warning` |
 | `sf.PirateAI` | 1 | 0: the pursuit operator declines the pirate's pilot post. It returns `false`, not a zeroed intent, which with assist on would brake the ship. The pirate coasts, the distance does not change (1011.2 m for 40 s at 60 and 400 fps), and it keeps firing. Read live. **A named exception**: only automated hulls read it, because only they seat this operator |
-| `sf.KillThruster N [DelaySeconds]` | *(a command)* | Not a variable. Destroys thruster `N`, by its index in the ship data asset, on the player's ship (never an automated one), and rebuilds the array over the survivors. Runs once per entry, so twelve entries in one `-ExecCmds` list are twelve kills. The optional second argument delays the kill by that many seconds of game time, because every `-ExecCmds` entry runs on the first frame, before anything has spooled. Refuses with a `Warning` a thruster already destroyed, an index out of range, a malformed argument or a negative delay |
+| `sf.KillThruster N [DelaySeconds]` | *(a command)* | Not a variable. Destroys thruster `N`, by its index in the ship data asset, on the player's ship (never an automated one), and rebuilds the array over the survivors. Runs once per entry, so twelve entries in one `-ExecCmds` list are twelve kills. The optional second argument delays the kill by that many seconds of game time, because every `-ExecCmds` entry runs on the first frame, before anything has spooled. Refuses with a `Warning` a thruster already destroyed, an index out of range, a malformed argument or a negative delay. Both arguments are read by `StarForge::Parse` (`TryParseWholeNumber`, `TryParseFiniteNumber`): until 2026-10-01 a bare `-`, `+` or `.` read as zero and destroyed thruster 0 |
+| `sf.PlaceOffsetM` | *(empty)* | Metres the place rig moves its place along `+X`, on top of the authored origin. **A string variable, not a numeric one**: a `float` at 4.3e10 rounds in steps of about four kilometres, a quarter of the rig place's own extent. **Read once in `InitGame`, before the local player logs in and before `-ExecCmds` applies**, so it has to arrive as `"-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=45000000000"`, one `-ini` switch per variable. A value that does not parse is a `Warning` and the authored origin stands -- parsed through `StarForge::Parse::TryParseFiniteNumber`, which needs a digit in the mantissa and in any exponent. Never through `Atod`, which answers zero for a string with no number in it and cannot say so, and no longer through `FDefaultValueHelper::ParseDouble`, whose grammar makes every part optional, so `.`, `-` and `e10` passed and moved the place by zero metres (fixed 2026-10-01). Changed during play, it says once as a `Warning` that it takes effect only when the level restarts |
+| `sf.PlaceRadiusM` | *(empty)* | Metres of extent, **replacing** the authored radius rather than adding to it, because a control that could only grow a place could never ask for a smaller one. A second variable is needed because the two ceilings break on different inputs: the engine's on distance and the crossing budget on extent, and a control able to break only one cannot tell the two refusals apart |
+| `sf.FeltTimeBase` | 1 | 1: the felt acceleration is differenced on the motion's own time base -- a step simulated at both ends over the physics step, min(dt, `MaxPhysicsDeltaTime`); any other step between the middles of its frames (finding F4's fix, 2026-09-27). 0: both differences divided by the frame, exactly as before -- the negative control, with one `Warning` saying so. Under 0 the uncapped headless `sf.Dock 2` cycle knocks a standing man down again (5 of 5 runs), and so does one 50 ms frame at cruise (`felt 1359.85`). At a fixed step 0 and 1 print the same lines: 113 of 113 evidence commands compared. Read live |
+| `sf.Hitch <ms> [DelaySeconds]` | *(a command)* | Not a variable. Stalls the game thread once for that many milliseconds, after that many seconds of game time, so a run **without** `-benchmark` gets one long frame -- the only way to put a single frame longer than the physics step's 1/30 s among ordinary ones into a headless run (`-benchmark -fps=20` makes every frame that long). One line when it fires, reporting the frame that actually came out and the physics step it got. Under `-benchmark` the step stays fixed and the stall changes no figure; the line says so. Runs once per entry; refuses a malformed, non-positive or over-1000 ms value and a negative delay with a `Warning` |
+| `sf.FeltDebug` | 0 | 1: one `Felt debug [Ship]:` line per ship per frame with everything the felt acceleration was estimated from -- frame, clock, dt, divisor, the simulating flags at both ends, step kind, root to 1e-9 cm, displacement in µm, velocity and its stamp, spacing, acceleration, whether it was recomputed, and the body's own velocity -- so any step can be recomputed by hand. It found the let-go frame's lost snap (below). About 2000 lines a second at an uncapped rate: a diagnostic, never a default. The station is never logged. Read live |
+| `WorldBounds.DisableChecks` | 1 *(set by the project in `DefaultEngine.ini`)* | **The engine's own variable, not an `sf.*` one.** 1: nothing is destroyed at `KillZ` (−10 485.75 m) or outside the ±2⁴² cm world box. 0: both are back, so a hull flown 10.49 km down is destroyed without a word, and the `World bounds:` line goes out as an `Error` with `checks ON`. Read live by the engine at every `CheckStillInWorld`, and the line reports each change, so it can be typed mid-run. The entry below on `WorldBounds.DisableChecks` says why it is off |
 
-**Open the editor** (launch this binary directly; the launcher's `UnrealVersionSelector` may show a spurious engine-conversion prompt):
+**Open the editor** (launch this binary directly; until 2026-10-01 the project's `EngineAssociation` was a GUID no engine here is registered under, and the launcher's `UnrealVersionSelector` showed a spurious engine-conversion prompt; it is now `"5.8"`, which the launcher lists as `UE_5.8`):
 
 ```bash
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge/StarForge.uproject"
@@ -228,7 +336,7 @@ These are spec constants, not tuning knobs. Changing one invalidates the measure
 
 | Quantity | Value | Source |
 |---|---|---|
-| Manoeuvring speed | 200 m/s (walking free) | §7 |
+| Manoeuvring speed | 200 m/s (walking free) — the length of the velocity, not a limit per axis (owner, 2026-10-01) | §7 |
 | Boost speed | 400 m/s (walking free) | §7 |
 | Pitch / yaw rate | 120°/s | §7 |
 | Roll rate | 180°/s | §7 |
@@ -263,12 +371,116 @@ Use the `unreal-mcp` skill for editor-driving tasks. Tools are reached through t
 
 ## Current state
 
-**The vertical slice is finished. Stage 4 — combat and the pirate — is merged: `main` is at
-merge commit `a256a02`, fifty-one commits over the branch point.** 88 headless tests, a build
-from nothing with no warnings, and all three rigs green at 60 and 400 fps on the merged result.
-Spec §13 ends at "Точка проверки 4. Срез готов." — there is no stage the spec names after this
-one, and **the next step is a spec, not a plan.** Start from
-`docs/superpowers/notes/2026-09-17-handoff-stage-5.md`.
+**The vertical slice is finished and the second phase has begun. Stage 5 — the place as data —
+is written and measured on `feat/place-as-data`, its map and asset are made and accepted, and
+checkpoint 8 is ready to be taken by hand.** 122 headless tests (112 until the 2026-10-01 review's fixes, 105 until F4's fix added seven, 97 until F3's added eight), a clean rebuild with no warnings,
+and all four rigs green at 60 and 400 fps — the fourth now by its own map as well as by URL.
+
+**A whole-project review ran on 2026-10-01, and its fixes are on `fix/review-2026-10-01`, not yet
+merged.** The record is `docs/superpowers/notes/2026-10-01-review.md`: 35 findings from 83
+confirmations, every one put to two independent skeptics, and the 50 findings of 2026-09-23
+re-checked against the code (47 were still open). The fixes that need no design decision are
+made (batch A of the record); the rest wait for stages with a baseline of their own (C) or were
+the owner's (B), and his answers are in the record. Of the answers: the roll keys are as he means
+them -- `Q` clockwise, `R` standing in for `E` counter-clockwise, arrows for pitch and yaw -- and
+the checkpoint-4 runbook's "крен влево/вправо" was the wording at fault; spec §7's 200 m/s is the
+length of the velocity; Chaos now integrates the gyroscopic torque. **The −Z loss below is
+explained by the review and deliberately not fixed yet**: an occupant who has not landed is held
+in a moving cabin only by depenetration (Н3), and when he lands, his first carry maps him through
+the ship's pose at binding, however old (Н1) -- at 60 fps a 309 m teleport at frame 376. Fixing
+the second alone would turn a loud loss into a man silently carried on the hull's roof, so both
+go to the stage that decides how an unbased occupant inside a carrier is treated.
+
+**Stage 5 itself changed no existing file** — seven files added, none modified, none removed.
+Checkpoint 8's two fixes then did: F1 changed `SFTestStation.cpp` and `SFTestShip.cpp`, F2 changed
+`SFPlaceGameMode` (a stage-5 file). Before those fixes the three old rigs were re-run and compared against a baseline taken before any of it was
+written: fourteen families of log line, 1625 lines, with the timestamp and frame number stripped
+and nothing else normalised. Nothing differs. Both records are in
+`docs/superpowers/notes/2026-09-18-stage-5-baseline.md`.
+
+**What stage 5 added.** A place — a continuous volume with a kind, an origin, an extent, a system
+and a list of carriers — as a `UDataAsset` rather than as lines in a game mode's constructor; a
+size predicate in `StarForgeCore` that answers with a reason and six numbers rather than a
+boolean, and refuses before anything is assembled; the fourth rig, `ASFPlaceGameMode` on
+`L_Place`, which at its authored defaults builds exactly the world the loop rig builds and was
+compared against it line for line; and four negative controls on the size, run at both frame
+rates.
+
+**What is left of stage 5.** Checkpoint 8, by hand, from
+`docs/superpowers/notes/2026-09-18-checkpoint-8-runbook.md`. Step 0 of it — `L_Place.umap`,
+`DA_Place_OpenSpace.uasset` and, by the owner's decision, the `L_Combat.umap` this guide had
+described for a stage and a half without its existing — was done on 2026-09-19. The asset's
+acceptance is that its size line equals the code-written place's size line character for
+character, and it does, at both rates. The asset was first saved with `Carriers` empty, before the
+populate button was pressed; a `UDataAsset` serialises nothing that equals its class defaults, so
+an empty array leaves a 1.2 KB file that looks finished. **After the button, save.**
+
+**Checkpoint 8 opened by hand on 2026-09-20 and found F1 before its first re-docking:** a ship
+flown slowly into a station hands its pilot to the station and leaves him in space. Fixed on
+2026-09-22 at the root, by the owner's choice of three options -- the station is now a physical
+body and a hull cannot be inside one. The entry on the hull's collision channels below carries
+the account, the two measured consequences, and the evidence. Run A is not yet counted: it
+stopped at A5, and A6–A9 and B2 in a window remain the owner's. Two smaller fixes were declined
+for now and are recorded in the form: refusing to hand over a seated occupant, and requiring the
+target carrier's floor under him -- the second would move the hatch-crossing figures and needs
+a stage of its own.
+
+**Run A was then taken in full on 2026-09-22 and passes**, including a real docking through the 3.0 m
+window and the hand twin of F1 — the hull stops at the station's wall. It surfaced two more things.
+The station, bumped on the docking approach -- first at about 3.4 m/s, then at 0.6–1.5 m/s --
+knocked the owner down five times at ~345 fps, `felt 1044.44 m/s2` at the worst, on the first
+strike — the frame-rate shape of contact resolution. He was **standing**, not seated: each
+knockdown comes 0.4 to 3.4 seconds after `Station 'pilot' … left by player` (2.3 and 3.4 s in the
+first episode, 0.4, 1.6 and 3.1 s in the second), with the post reading `flown by unoccupied`, so
+the unpiloted ship coasted into the wall under him. (The spot he stands up on is the seat's own ship-local position, `(0 0 -300)`, which is
+how the first account of this run got it wrong.) Every approach to a physical station touches, so
+this goes to whichever stage next hardens what a person feels. And **F2**: a pawn does spawn on a refused place, because the local
+player logs in and is restarted **before** `StartPlay`, so nulling `DefaultPawnClass` there is too late
+— and the rig's refusal line said `no pawn` without reading it. Present in every refused run since
+stage 5's task 3; fixed the same day — the measurement moved to `InitGame` and the line reads the pawn
+back. The entry below on `InitGame` says why that hook and no other.
+
+**F3 was found on 2026-09-23, by replaying every headless log in `notes/evidence` with
+`scripts/regress_evidence.py`, and fixed on 2026-09-25.** Fix (c) of F1 had made the tunnel's end
+faces physical, and a sideways undock dragged the flush hull across them: a standing man knocked
+down at both rates, and B1 failing. Of four fixes the owner chose an automatic release along the
+port axis; spec §8 carries the amendment, and the entry below on `ReleaseStandoff` the derivation.
+B1, taken again headless on the fixed build at 60 and 400 fps, passes every gate
+(`notes/evidence/2026-09-25-f3fix-*.log`).
+
+**The world was found to have a floor on 2026-09-26, and the checks that enforce it were switched
+off the same day.** `KillZ` sits at −10.49 km by the engine's default. A simulating hull flown
+there is destroyed with no line from anyone, about 58.7 s into a full-thrust dive at 60 and
+400 fps. The owner turned the engine's world-bounds checks off globally with
+`WorldBounds.DisableChecks=1`, choosing that over lowering `KillZ` or teaching `MeasurePlace`
+about the floor. Spec §4, §12 and §13 carry the amendment, including a new risk due before
+checkpoint 9: superlight through a place reaches 2⁴² in 7–15 s, and past it nothing has been
+measured. The two entries below, on 2⁴² and on `WorldBounds.DisableChecks`, carry the account.
+**The same runs found something else, still open:** at 60 fps the man comes off the ship about
+6.3 s into a −Z flight at 16 m/s², below the knockdown limit. At 400 fps neither the drift gauge
+nor the carry watchdog said anything until 2026-10-01; the never-carried watchdog now does. The
+checks play no part in it: the runs behave the same with them on and off. The mechanism is in
+the 2026-10-01 review (Н1 and Н3, and the paragraph above).
+
+**F4 was found by hand on 2026-09-27 and fixed the same day, and a second defect it uncovered on
+2026-09-28.** The owner, standing in the cabin at about 420 fps, was knocked down four times in
+one `sf.Dock 2` cycle -- at each end of the release and of the re-capture, `felt 20.22`-`23.74`
+against a true peak of 17.6 -- by the F3 fix's own eased moves. The felt figure divided the
+difference of two step-mean velocities by one frame instead of by the spacing of their middles,
+which over-reads a pose written from time by (1 + dt_prev/dt)/2; a physics body was always read
+exactly, except across a frame longer than 1/30 s, which read `felt 1359.85` at cruise once
+measured. The owner chose to put the instrument on the motion's own time base. The entry below on
+the time base says what it does; the let-go entry says what the per-frame instrument then found.
+Evidence `notes/evidence/2026-09-26-owner-R-release-by-hand.log` (the hand run, taken on the 27th
+and named -26 by its guide), `2026-09-27-f4-*` and `-f4fix-*`, `2026-09-28-letgo-*`; the account is
+in checkpoint 8's results form. **Still open from that run:** its R2, the sideways undock under
+thrust **standing**, was not taken by hand -- typed from the pilot's seat, `sf.Intent` is
+overridden by the seated player's stick.
+
+**Read `docs/superpowers/specs/2026-09-17-world-as-a-graph-of-places.md` before anything
+structural in the second phase**, and note that its §10.4 folds two ceilings into one comparison
+where §5 derives them as bounds on different lengths; the entry below on the two ceilings says
+what the code does instead and why.
 
 **What stage 4 added.** Ballistics and damage maths in `StarForgeCore` under tests; a projectile
 with a swept path and a muzzle on the turret; shields per face whose regeneration integrates over
@@ -283,9 +495,10 @@ stage 2's gunner automation in the other. There is no AI ship. The rig is `ASFCo
 `docs/superpowers/notes/2026-09-14-checkpoint-7-results.md`, filled from eleven logs in
 `notes/evidence/`: six controls counted, `skipped carries 0` in every line of every log, no carry
 that stopped, no handover without a refusal, two hulls colliding with momentum conserved to the
-last digit at both rates. Eight of nine by-eye rows are still empty and go forward as open
-observations; the one that is filled says the cabin is a blind cube — a hit on the hull is felt by
-nothing inside it.
+last digit at both rates. Six of the ten by-eye rows are answered and four go forward as open
+observations. Two of the answers are findings in their own right: the cabin is a blind cube — «буквально
+бой я не вижу, только по панели» — and the collision reads as getting stuck, «как будто застрял
+прижатым к потолку», where in truth the man is knocked down and carried throughout.
 
 **The main risk of §12 is closed.** Motion decomposition survived four manual checkpoints (1, 4/5,
 6, 7); plans B and C were never needed. What the slice carried forward is not in the mechanism but
@@ -422,7 +635,8 @@ Things in the code that look like mistakes and are not:
   on every carrier, deliberately: a location passes through that round trip as the doubles it
   already was, and differencing the root keeps *v* the velocity of the frame origin, which is
   what the handover maths composes ω against — `GetPhysicsLinearVelocity` would hand back the
-  centre of mass instead. And the two halves are now sampled differently, so on the frame of a
+  centre of mass instead, and nothing at all for a teleported kinematic hull. **What it is
+  divided by changed on 2026-09-27** (F4): see the entry on the time base below. And the two halves are now sampled differently, so on the frame of a
   collision `Footing LOST` reports the body's instantaneous turn in the hundreds of deg/s while
   the once-a-second `Flight:` line, sampled between impacts, reports tens. Both are right.
 
@@ -447,8 +661,9 @@ Things in the code that look like mistakes and are not:
   form gives 350 both ways. Measured in C++, the two agree to 4.4e-12, and the test holds them
   to 1e-9. The simple form was run as a mutant and fails three tests:
   `RegenIsFrameRateIndependent`, `RegenWaitsForTheDelay` and `AHitResetsOnlyItsOwnFaceTimer`.
-- **The hull box blocks `ECC_WorldDynamic`.** It is one `SetCollisionResponseToChannel` in
-  `ASFTestShip`'s constructor, and it looks unrelated to people. Without it two hulls overlap
+- **The hull box blocks `ECC_WorldDynamic` and, since 2026-09-22, `ECC_WorldStatic`.** Two
+  `SetCollisionResponseToChannel` lines in `ASFTestShip`'s constructor, and they look unrelated
+  to people. Without it two hulls overlap
   and pass through each other. On the first combat run a powered-down pirate coasting at
   106 m/s flew through the player's cabin, and its interior volume bound the man
   (`Frame handover: Ship -> Pirate`). How he was lost was not even repeatable. At 60 fps he fell
@@ -457,8 +672,65 @@ Things in the code that look like mistakes and are not:
   Blocking, the hulls collide the way §5 says a real physical body should. Contact comes at
   15.07 s (60) and 14.88 s (400); the pirate goes 79.6 → 28.5 m/s and the player's ship
   0 → 51.1 m/s at 60 fps, 81.2 → 23.5 and 0 → 57.7 at 400, so momentum is conserved to the last
-  digit at both rates. No handover, 0 skipped carries. Nothing else physical in the project
-  answers that channel, and both old rigs are line-for-line identical.
+  digit at both rates. No handover, 0 skipped carries.
+
+  **The `ECC_WorldStatic` block and the station's query-and-physics panels are finding F1 of
+  checkpoint 8.** Until 2026-09-22 the station's panels were query only and the hull blocked
+  other hulls alone, on the argument that a lone ship met nothing else. It met the inside of the
+  station. The owner flew into one by hand, nose-first and off the docking axis at under 5 m/s;
+  the station's interior volume covered the pilot in his seat, `TryHandover` -- which asks one
+  question, relative speed against 1.0 m/s, and asks neither `IsSeated()` nor whose floor is
+  under him -- handed him to the station once the carriers were within the limit, and when he
+  flew off the hatch passed over the body he had left behind (`Carry NOT RUNNING … He has come
+  off the ship`, 15 times). Reproduced headless at 60 and 400 with `sf.Dock 0, sf.Intent.Y
+  0.004`: handover accepted on the first frame inside, nine metres of drift, the man pushed
+  through the station by his own cabin wall
+  (`notes/evidence/2026-09-22-checkpoint-8-F1-slow-intrusion-*.log`).
+
+  With the station physical, the same command stops the hull at the wall: 0 handovers, 0
+  cross-check warnings, `0.000 cm` of drift at 60 fps
+  (`notes/evidence/2026-09-22-physics-F1-slow-intrusion-*.log`). Each panel is its own
+  kinematic collider, safe because the station has no simulating body to weld them into; the
+  interior volumes stay query-only and answer pawns alone, so they do not become hulls. The
+  docking capture is untouched -- `sf.Dock 2` reads `undocked f1 → capturing 0.0 m, 0.0 m/s →
+  docked` at both rates exactly as before -- and the spike, loop, combat and place rigs at their
+  defaults are line-for-line identical. **Two things changed, both physically honest.**
+  - The roll-after-undock control on the loop rig: the hull's port face lies in the plane of the
+    tunnel's end faces when docked, and rolling about X swings that face into them. The first
+    three seconds are a contact that pushes the hull clear at about 1 m/s -- `41.2 → 167.6 →
+    179.7` at 400 fps, `36.9 → 163.2 → 179.6` at 60 -- and from the fourth second roll is
+    exactly `180.0` to the end at both rates, with pitch and yaw at `0.0` or `-0.0` (the sign of a
+    zero is left over from the contact and changes nothing), `0.000 cm` of drift. The control still proves what
+    it was written for. Its old figures, `154.8 → 179.4 → 180.0`, described a hull rolling inside
+    the plane of its dock, which is not a state a hull can be in.
+  - Bumping the station at 0.8 m/s knocks a standing man down at 400 fps and not at 60:
+    `Footing LOST … felt 38.39 m/s2 over the 19.62 limit`, 0.5 s down, carry intact, 0.777 cm of
+    drift. The stop resolves over fewer, shorter steps at the higher rate, and the felt figure is
+    a second difference of position. Same class as the tumble below; an open observation, not a
+    red line -- none of the run's red lines fired.
+  - **A third, found on 2026-09-23 by replaying the evidence (finding F3 of checkpoint 8), is not
+    benign.** The ship's docking port is on its +Y face, so `sf.Dock 0, sf.Intent.X 1` leaves
+    **sideways**, dragging the docked face across the tunnel's end faces, which are now physical.
+    A standing man is knocked down at both rates -- `felt 25.48 m/s2` at 60, `1285.82` at 400 --
+    the hull leaves `fwd 0.2 deg, up 0.1 deg` off axis, and checkpoint 8's B1 no longer passes
+    (`4.965 cm` of drift). Backing straight off the port, `sf.Intent.Y -1`, touches nothing:
+    `0.000 cm`, `footing intact`, at both rates. The sweep above had no sideways undock in it --
+    its only undocks under thrust were the roll, run with `sf.Knockdown 0` so no knockdown could
+    show, and F1's 0.004 push into the station -- which is why it said two.
+
+    **F3 was fixed on 2026-09-25 by the owner's choice: undocking became a release.** The entry
+    below on `ReleaseStandoff` says what it does and why each number is derived. With it the
+    sideways, vertical and straight undocks are clean at both rates -- `footing intact`, `0.000
+    cm`, `fwd 0.0 deg, up 0.0 deg` -- B1 passes again, and two figures this entry quotes above
+    moved, both back towards what a hull clear of its dock should do. `sf.Dock 2` now reads
+    `releasing f1 → undocked f61/f402 → capturing 2.9 m, 0.0 m/s → docked` (f60/f401 until the
+    let-go learned to wait a tick on 2026-09-28; see the entry on it below). Roll after undock
+    starts 2.93 m out and touches nothing: `154.8 → 179.4 → 180.0` at 400 fps with pitch and yaw
+    at `0.0` (`155.1` until the let-go waited a tick on 2026-09-28: the spin starts one frame
+    later), the pre-(c) series. The F1 slow-intrusion control now begins 2.93 m out and flies
+    back into the tunnel at 0.8 m/s: the hull still stops at the wall with no handover to the
+    station, and the bump knocks a standing man down (0.5 s at 60 fps, 1.4 s at 400), which is
+    O2's class and protocol, not a gate.
 
   **What the collision does not do is repeat itself across frame rates, and that is not a
   defect.** Two boxes meeting at 30 m/s resolve on a contact manifold the step size decides, so
@@ -486,7 +758,50 @@ Things in the code that look like mistakes and are not:
   `Frame handover REFUSED` is a `Warning`, said once per episode, and it is legitimate during a
   docking capture and whenever hulls collide. A refused man is retried every tick while he stays
   inside, so one refused during a capture binds to the station once it settles. The 1.0 is a
-  literal: editing the docking window does not move it.
+  literal: editing the docking window does not move it. The episode belongs to the carrier, not
+  to one box of it: since 2026-10-01 the station's interior is two volumes on one frame, a room
+  and the tunnel (the single box reached 2 m outside the room's −Y wall across the whole face),
+  and a man refused at the tunnel mouth who walks on into the room is the same refusal.
+- **Leaving the volume of the frame he is bound to, while another carrier's volume still holds
+  him, binds him to that carrier** (`USFInteriorVolumeComponent::HandleEndOverlap`). It looks like
+  it breaks the rule that leaving never unbinds. It is what that rule needs for a capsule: a
+  volume binds at the capsule's edge, and docked, the two volumes are 10 cm apart against a 34 cm
+  radius, so across a 58 cm band of the doorway he is inside both. Without it a man who stepped
+  far enough into the hatch to be bound to the station and turned back stayed the station's
+  anywhere in his own cabin -- not carried, `E` unable to find the pilot's seat, and since the F3
+  release dropped by the undock as the deck slid out from under him. The no-unbind rule still
+  holds wherever no other volume claims him, which is the 10 cm gap. Through `TryHandover`, so
+  the 1.0 m/s gate applies. Found by the 2026-10-01 review (Н2); the loop rig's replays are line
+  for line unchanged, because no headless run walks.
+- **`bGyroscopicTorqueEnabled = true` on the hull.** It looks like a physics nicety for long thin
+  bodies. The flight controller feeds `ω × Iω` forward in both modes (spec §5), which is right
+  only on a plant with Euler dynamics, and Chaos integrates that part only for a body with this
+  flag, off by default. Without it the feed-forward was a disturbance that no figure showed,
+  because the rig's hull is a cube and `ω × Iω` of a cube is zero: a 20 × 8 × 8 m hull asked for
+  full roll and pitch would have settled at 180 / 76 / 58 deg/s instead of 180 / 120 / 0. The
+  owner chose on 2026-10-01 to make the plant agree with the controller rather than drop the
+  term. On the cube it moves nothing but rounding, and that was measured, not assumed: Chaos takes
+  ω into the body's axes and back for its Newton step, so in the ten combat replays and the two
+  F1-intrusion replays the sign of a zero and the last printed digit move (`720.747` → `720.746`
+  cm, `felt 168.65` → `168.64`), with every shot, face and hit unchanged. The same replays built
+  with the flag off differ from the pre-review baseline in none of those lines.
+- **The view is written absolute on every carry, from the ship's rotation and a ship-local view
+  quaternion (`LocalView`), never composed onto what the controller holds.** It looks like it
+  fights the engine's own control rotation. `AController::SetControlRotation` skips any write
+  within 1e-3° of the current value, and `FQuat::Rotator()` snaps to ±90° of pitch near the pole,
+  so a view carried by increments lost whatever the dead band swallowed, more at higher frame
+  rates (modelled, not measured: a stop from 120 deg/s lost 0.016° at 60 fps, 0.109° at 400,
+  0.544° at 2000), and never got it back. Written absolute, a skipped write costs at most one frame. It is what makes "view
+  direction is stored in ship coordinates" literally true.
+- **The carry-gap instrument counts this component's own ticks, not `GFrameCounter`.** The engine
+  frame counter advances while the world is paused and the movement component does not tick, so
+  a three-second `pause` was banked as 179 skipped carries at 60 fps and turned every later drift
+  line into `CARRY FAILED`. The once-per-frame latches that only ask "same frame or not" stay on
+  `GFrameCounter`. A second watchdog covers the interval before the first carry, which the first
+  one could not see: `Carry NOT RUNNING: bound to … <t> s ago and never carried since` after
+  `NeverCarriedThresholdSeconds` = 1.0 s (the spawn fall of 2 cm takes 0.064 s; the bound is
+  0.064 + 2 × 0.4 s for a landing in one clamped world step whose carry runs post-physics in the
+  next). On the −Z spike flights it now speaks at 400 fps, where nothing did before.
 - **CCD thresholds in `Config/DefaultEngine.ini` that do not bound penetration.** The two lines
   `p.Chaos.CCD.EnableThresholdBoundsScale=0.01` and `p.Chaos.CCD.AllowedDepthBoundsScale=0.005`
   come with a comment full of arithmetic, and they read like a promise that hulls never overlap
@@ -570,9 +885,187 @@ Things in the code that look like mistakes and are not:
   Measured in the duel at 60 and 400 fps: `Combat: … shields +X 0 … powered down`,
   `Turret: … (standing down) … UNCOMMANDED`, and 0 shots after the event. The turret's lock is
   its own, and only `PowerDown` sets it, so the docked loop rig still reads `ON TARGET` and is
-  line-for-line identical. The thruster lock is still one bool shared by every reason: undocking
-  clears it unconditionally, so a ship powered down while docked would fly again after undocking.
-  No rig can do that to a ship this stage.
+  line-for-line identical. Until 2026-10-01 the thruster lock was one bool shared by every reason,
+  and undocking cleared it unconditionally, so a ship powered down while docked would have flown
+  again after undocking. `USFThrusterArrayComponent::IsLocked()` now reads
+  `bLocked || Damageable->IsPoweredDown()`: `SetLocked` is the docking lock alone, and the
+  power-down is a lock of its own that nothing clears.
+
+- **Two size ceilings checked separately, where the spec states one comparison against the
+  smaller of them.** `StarForge::Place::MeasurePlace` compares reach against the engine's
+  ceiling and diameter against the crossing budget, each with its own refusal reason, and §10.4
+  of the second-phase spec asks for "extent plus distance from the origin against
+  min(4.398·10¹² cm, the time ceiling of §5)". That reads like one line of arithmetic the
+  predicate declined to write.
+
+  It bounds two different lengths. §5 derives the time ceiling from `D ≤ v·T` where `D` is the
+  **diameter of a place**, not the distance to it; the engine's bounds how far from the world
+  origin a simulating body may be. Taken literally, the spec's single comparison refuses a
+  place a kilometre wide sitting 2·10¹⁰ m out **because it cannot be crossed** — a crossing
+  that in fact takes seven microseconds. A refusal with the wrong reason is worse than no
+  refusal: it sends whoever reads it to shrink a place that needed moving. Operationally the
+  spec's "smaller ceiling" still holds, because a place violating either is refused.
+
+  What holds it: the test `TheTighterCeilingIsTheOneThatBinds` in `StarForgeCore`, and
+  checkpoint 8's control П3, which asks for a 2·10¹⁰ m radius at the origin and requires
+  `Reason: crossing time.` — where `Reason: engine reach.` would be the finding.
+
+- **`ASFPlaceGameMode` measures the place in `InitGame` and assembles it in `StartPlay`.** The split
+  looks like tidiness; it is the order a standalone `-game` session runs in. `UEngine::LoadMap` calls
+  `InitializeActorsForPlay`, which calls the mode's `InitGame` (`World.cpp` 6034); then it logs the
+  local player in through `SpawnPlayActor` (`UnrealEngine.cpp` 16647) — `PostLogin`,
+  `HandleStartingNewPlayer`, `RestartPlayer`, and the pawn is spawned — and only then calls
+  `World->BeginPlay`, which calls `StartPlay` (`World.cpp` 6174). Stage 5's first form measured in
+  `StartPlay` and nulled `DefaultPawnClass` there to keep a refused place empty; that was already too
+  late, every refused run carried an `ASFCharacter` warning about standing in world space under a rig
+  line that said `no pawn`, and it was found by hand at checkpoint 8 (F2). The engine's guard that
+  skips the spawn on a null class (`GameModeBase.cpp` 1291) works only if the class is null at login,
+  so the mode measures in `InitGame` and answers `GetDefaultPawnClassForController` with `nullptr`
+  while the place stands refused. The rig line reads the pawn back rather than asserting it: `no pawn:
+  the pawn class was withdrawn before the local player logged in` is the norm and `a PAWN STANDS in
+  the empty world` is a finding. Measured: `Place size:` is written two log lines before
+  `FindPlayerStart` at both rates, and the accepted place's lines are unchanged to the character.
+
+- **2⁴² cm is both quoted and measured, and since 2026-09-26 it marks the edge of measured
+  territory, not a fuse.** The world-size ceiling in `Place.h` reads `4.398046511104e10` metres.
+  It is the engine's `HALF_WORLD_MAX`: `WORLD_MAX * 0.5`, where
+  `WORLD_MAX = UE_LARGE_WORLD_MAX = 8796093022208.0`
+  (`Engine/Source/Runtime/Engine/Public/EngineDefines.h:41-57`). An earlier version of this entry
+  said no such constant survives in 5.8. That search looked only in `Runtime/Core` and Chaos, and
+  for the literal `4398046511104`, which never appears because the half is written as a product.
+
+  The ship vanished at 4.50·10¹² cm through `AActor::CheckStillInWorld` → `OutsideWorldBounds`
+  (`Actor.cpp:2333-2345`), and that was not silent. The BROKEN log carries
+  `LogActor: Warning: Ship is outside the world bounds!` at line 1683, and the same line about
+  the man at 1680; only `LogStarForge` said nothing. The docked run at 10¹⁴ cm kept its hull but
+  lost its man on the first frame (`SFCharacter_0 is outside the world bounds!`, line 1678).
+  Nothing checks a kinematic hull; CharacterMovement checks the person. The bracket stays valid
+  evidence and now agrees with the citation: the loop rig flies at 4.30·10¹² cm and is gone at
+  4.50·10¹². The logs are kept: `notes/evidence/2026-09-17-worldsize-*.log`.
+
+  With the world-bounds checks off (next entry), nothing destroys an actor at 2⁴², so the number
+  no longer marks where the engine acts. It marks how far the instruments are known to hold:
+  `0.000 cm` of drift inside it at 60 and 400 fps, and nothing measured beyond. `MeasurePlace`
+  still refuses past it, with the same reason, `engine reach`. Raising it needs a run beyond 2⁴²
+  with the checks off. The default is asserted by `TheDefaultLimitsAreTheSpecsNumbers`, which
+  exists because every other test in that file spells its own limits. Written as `e12` instead
+  of `e10`, the default left all the other tests green.
+
+- **`WorldBounds.DisableChecks=1` in `Config/DefaultEngine.ini`, and a `World bounds:` line from
+  `USFWorldBoundsSubsystem` in every game world.** It looks like switching off a safety net. What
+  it switches off is a trap door.
+  - `AWorldSettings` puts `KillZ` at `-UE_OLD_HALF_WORLD_MAX1` = −1 048 575 cm
+    (`WorldSettings.cpp:116`). This is a UE4 leftover that the engine itself marks
+    `LWC_TODO: HALF_WORLD_MAX1? Something else?`.
+  - `CheckStillInWorld` destroys any simulating body below it through `FellOutOfWorld`, which
+    logs nothing at all. Chaos calls the check after every physics sync of a simulating body, and
+    CharacterMovement calls it for people.
+  - Measured on 2026-09-26: the spike rig flown at full thrust along −Z loses its hull after the
+    58th `Flight:` line at 60 and 400 fps, 10 436 and 10 440 m down by the summed speeds, with no
+    line from the engine or the project. Along +Z it lives the full 80 s.
+  - None of the four maps overrides `KillZ`: the name is absent from every `.umap`, while
+    `DefaultGameMode` is present in exactly the three that carry a `GameMode Override`.
+
+  So the world was never a sphere of radius 2⁴² cm. It was a ±2⁴² cm cube with a floor 10.49 km
+  down, and `MeasurePlace` knew nothing of the floor.
+  - **Why a global variable, not the map flag and not `KillZ`.** `AreWorldBoundsChecksEnabled()`
+    is `bEnableWorldBoundsChecks && !GDisableWorldBoundsChecks` (`WorldSettings.cpp:55-59`,
+    `726-729`), so no map can switch the checks back on. The map flag is not `config` and lives
+    in every binary `.umap`. `KillZ` is `config`, but a map with an explicit value silently beats
+    an ini default. The owner chose this over lowering `KillZ` and over teaching `MeasurePlace`
+    the floor.
+  - **What it costs.** 2⁴² becomes the edge of measured territory and loses its one engine line
+    (entry above). Superlight through a place reaches it in 7–15 s: spec §12 has this as a risk
+    due before checkpoint 9.
+  - **The line reads the state back from the world rather than asserting it.** Today it reads
+    `World bounds: checks off (WorldBounds.DisableChecks 1, map flag on) -- nothing is destroyed at KillZ -10485.75 m or outside 2^42 cm in this world.`
+    It is written at begin-play and again on every change of the variable. With the checks on,
+    it goes out as an `Error` saying `checks ON`.
+  - **It is a world subsystem, not a game-mode line**, because the four rigs share no base class,
+    and a future map has to get the line without anyone remembering to add it.
+  - **Negative control.** `WorldBounds.DisableChecks 0` in the console, or headless
+    `-ExecCmds="WorldBounds.DisableChecks 0, sf.FlightLog 1, sf.ShipProfile 0, sf.Intent.Z -1"`
+    on the spike rig. It must produce the `Error` and lose the hull after about 58.7 s:
+    12.5 s and 1250 m to reach 200 m/s at 16 m/s², then 46.2 s at 200 m/s to 10 485.75 m.
+  - Evidence: `notes/evidence/2026-09-26-killz-fly-*.log` (the floor, its +Z control, and the
+    mechanism measured from the command line before the fix) and
+    `notes/evidence/2026-09-26-worldbounds-*.log` (the fixed build and its negative control).
+
+- **Undocking is a one-second release to a standoff measured on the two bodies,
+  `StarForge::Docking::ReleaseStandoff`, not a let-go at the docked pose.** It looks like a
+  manoeuvre bolted onto what used to be one line. It is finding F3's fix, chosen by the owner.
+  Docked, the hull's physics face lies flush on the tunnel's end faces. Chaos gives the
+  dynamic hull a collision margin of `min(2 * 400 * 0.05, 10)` = 10 cm, which rounds its
+  edges, and when a panel's end face passes the rounded trailing edge during a sideways slide
+  it reports a false edge-edge penetration of up to 2.26 cm and pushes the hull out in one
+  step. Measured, not only argued: with `p.Chaos.Collision.MarginMax=2` the knockdown moved
+  from frame 261 to 264 exactly as predicted, a docked gap of 2.0 cm still knocked the man
+  down and 2.5 cm did not, against a derived bound of 2.07 cm
+  (`notes/evidence/2026-09-25-f3-mechanism-*-BEFORE-FIX.log`).
+  - **A sphere, not the box**, round the hull's physics box, so the answer does not depend on
+    which way the pilot turns first. That is why roll after undock is contact-free again.
+  - **The station's physics colliders, boxed in the station's own frame.** World bounds grow
+    with the station's yaw, and a place can yaw it: three degrees asked 3.26 m where 2.93 is
+    enough, outside the window. The interior volumes are query only and do not count.
+  - **Over `CaptureSeconds`, with no constant of its own**: the release is the capture played
+    backwards. Its peak, 6d/T² = 17.6 m/s², is under the 19.62 ceiling, and the line
+    `Dock: [Ship] releasing, 2.93 m along the port axis over 1.0 s, peak 17.6 m/s2.` prints it.
+    A standoff outside the docking window or a peak at the ceiling is a `Warning`.
+  - **2.93 m is inside the 3.0 m window**, so a released ship can dock again without flying
+    anywhere, which spec §8 and `sf.Dock 2` rely on.
+  - `sf.DockRelease 0` lets go at the docked pose, and a sideways undock with it reproduces
+    `2026-09-23-review-undock-sideways-*.log` line for line. Two paths skip a run on purpose:
+    that control, and `DockImmediately`.
+  - A side effect worth knowing: a headless undock happens on the first frame, before the pawn
+    has landed after spawning, and a downward thrust used to outrun his fall so that he never
+    found the floor. The release gives him that second.
+
+- **The felt acceleration is differenced on the motion's own time base, not over one frame:
+  `StarForge::ShipFrame::EstimateStepVelocity` / `EstimateStepAcceleration`.** A step whose root
+  simulated at *both* its samples is divided by the physics step, min(dt, `MaxPhysicsDeltaTime`),
+  and stamped at its end; any other step -- a pose the code writes from time, and both switches,
+  the release's let-go and the capture's first frame -- is divided by dt and stamped at its middle;
+  the acceleration is the velocity change over the spacing of the stamps. It looks like two
+  estimators where one did. The one did not: `(v_n - v_(n-1)) / dt_n` is exact for a Chaos body,
+  which steps once a frame by semi-implicit Euler (`V += a h, X += V h`,
+  `PBDRigidsEvolutionGBF.cpp` 915-980), and wrong for a pose written from time, whose `dx/dt` is a
+  step's mean centred at its middle: it over-reads by (1 + dt_prev/dt)/2, and the release and
+  capture peak 10 % under the 19.62 limit, so one frame with dt_prev/dt above 1.23 knocks a man
+  down. Finding F4:
+  four knockdowns in one cycle by hand, knockdowns in 12 of 12 uncapped headless runs with a
+  release in them, 0 of 14 at a fixed or capped step. It is exact for a body only while physics steps in the frame's own dt: a frame
+  longer than 1/30 s is clamped (`ChaosScene.cpp` ~344), and the old form read one 50 ms stall at
+  cruise as `felt 1359.85` (`sf.Hitch 50`).
+  - **Bit for bit at a fixed step**, for steps of one kind: `FMath::Min(dt, max)` hands back dt,
+    `(dt - dt/2) + dt/2` is exact, and both divisions are written the old way. Holds under
+    `/fp:precise`, the editor target's setting. So `sf.FeltTimeBase 0` and `1` print the same
+    lines on all 113 headless evidence commands. What does move: the frame after a let-go (spaced
+    1.5 dt) and a capture's first frame (spaced dt/2), which now reads its true 6d/T² where it read
+    half. A capture begun **at speed** reads twice the old step, 2 v0/dt: the run-in starts from
+    rest whatever the approach speed, so that step is real, and only a run-in that starts from the
+    hull's own velocity removes it.
+  - Not the tool for impulses: a contact still decides a knockdown on one frame (O2), and the felt
+    figure still has no α × r term.
+  - Every check of a moving carrier must now also be run with a **variable** step; see the recipe
+    under the headless command near the top of this file.
+- **The release's last pose is written past the scene component's dead band, and the let-go waits
+  a tick: `TeleportDetachedRootExactly` and `bReleaseArrived` in `SFDockingComponent.cpp`.** A
+  helper that follows `SetActorTransform` with `SetRelativeLocation_Direct` looks like a workaround
+  nobody needed. `InternalSetWorldLocationAndRotation` changes nothing -- not the actor, not the
+  body -- when the new location `Equals` the old one per axis within `UE_KINDA_SMALL_NUMBER`,
+  1e-4 cm, and the rotation is unchanged (`SceneComponent.cpp` 3315-3317, `Vector.h` 371,
+  1599-1602). An eased move's last step is that
+  small at an uncapped ~2000 fps: `sf.FeltDebug` showed six releases of twelve losing it, 0.01-0.55
+  µm short, the other six moving 1.04-2.00 µm onto the target, and a path that loses its last step
+  loses its last deceleration -- one run read `felt 20.00` at the let-go. (Chaos's own 1 µm
+  leniency, the first suspect, only serves the rewind's desync test.) The helper finishes a
+  declined step with the two calls the engine makes after its test; it is used for the release's
+  final pose and for the capture's, before the attachment. The let-go then waits a tick so the
+  switch to simulation never shares a tick with a move. After it every uncapped release ended on
+  `-1292.820323028` cm and every cycle docked on `-1000.000000000`, max |a| 17.56. **What it moved:**
+  `undocked.` one frame later (f61 for f60 at 60 fps, f402 for f401 at 400) and `sf.Dock 2`'s
+  re-capture with it; 26 undock runs of 113 changed by exactly that shift and no red counter moved,
+  and their replays are the new baselines `notes/evidence/2026-09-28-letgo-rebase-*.log`.
 
 When reading the checkpoint HUD: **check the measured-time line before the drift
 figure.** A drift of zero is what both a perfect minute and a dead instrument look

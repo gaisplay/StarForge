@@ -70,6 +70,12 @@ namespace StarForge::Docking
 		Up
 	};
 
+	/**
+	 * The approach between two ports, measured. Nothing in it is refused here: a figure that
+	 * cannot be computed comes back not finite, and CanDock refuses it. That includes the
+	 * angles, which come back NaN for a port rotation that is not finite rather than the zero
+	 * -- nose-on, decks parallel -- that clamping its dot product would make of it.
+	 */
 	STARFORGECORE_API FDockingApproach ComputeDockingApproach(
 		const FTransform& ShipPortWorld,
 		const FTransform& StationPortWorld,
@@ -117,4 +123,59 @@ namespace StarForge::Docking
 	 * large acceleration.
 	 */
 	STARFORGECORE_API FTransform CapturePose(const FTransform& Start, const FTransform& Target, double Alpha);
+
+	/**
+	 * How far the hull has to be eased out along AwayDirection before it is clear of the
+	 * station: the smallest t >= 0 such that a sphere of HullRadius about
+	 * HullCentre + t * AwayDirection keeps at least HullRadius from StationBounds at t AND
+	 * at every larger t. Zero when the whole ray is already clear, when the direction is
+	 * zero, and when StationBounds is invalid -- a station with nothing physical in it has
+	 * nothing to be cleared of.
+	 *
+	 * Why this exists (finding F3 of checkpoint 8): docked, the hull's port face lies flush
+	 * on the tunnel's end faces, and a hull let go there and thrust sideways drags that face
+	 * across them. Chaos keeps a collision margin on the dynamic hull, and the edge-edge
+	 * contact it reports as a panel passes the rounded trailing edge is a false penetration
+	 * it resolves in one step -- a jump of a centimetre that knocks a standing man down. A
+	 * hull that starts clear has nothing to drag across.
+	 *
+	 * A sphere rather than the box, so the answer does not depend on which way the pilot
+	 * turns first. "Every larger t" and not merely "at t", because a ray that starts clear
+	 * can still pass through the station; the answer is then the far side, not zero.
+	 *
+	 * StationBounds is axis-aligned in the frame the hull is given in; for a station that is
+	 * not aligned with that frame, the overload below.
+	 *
+	 * AwayDirection is normalised here, so its length is irrelevant. Lengths are
+	 * unit-agnostic like the rest of this file; the game passes metres, because the answer
+	 * is compared against DistanceMetres and turned into an acceleration.
+	 */
+	STARFORGECORE_API double ReleaseStandoff(
+		const FVector& HullCentre, double HullRadius, const FVector& AwayDirection, const FBox& StationBounds);
+
+	/**
+	 * The same standoff, with the station's box given in the station's own frame and the
+	 * hull in the world's. The box above is axis-aligned in whatever frame the hull is given
+	 * in, and a station's panels are axis-aligned in the station's frame, not the world's: a
+	 * world-aligned box round a yawed station grows with the yaw, and so would the standoff,
+	 * for the same geometry. Round the rig's station yawed three degrees it asks 3.26 m where
+	 * 2.93 is enough, which is outside the 3.0 m window. A place asset can yaw its station
+	 * (FSFPlaceCarrier::Rotation), so the hull is taken into the station's frame instead and
+	 * the box is left tight.
+	 *
+	 * StationFrame's scale is ignored: StationLocalBounds must be in the hull's lengths,
+	 * measured along the frame's rotated axes from its origin. The answer is a length along
+	 * AwayDirection, the same in either frame.
+	 */
+	STARFORGECORE_API double ReleaseStandoff(
+		const FVector& HullCentre, double HullRadius, const FVector& AwayDirection,
+		const FTransform& StationFrame, const FBox& StationLocalBounds);
+
+	/**
+	 * The peak acceleration of a smoothstep path of Distance covered in Seconds: 6d/T^2,
+	 * reached at both ends of the path. A positive distance in a non-positive or non-finite
+	 * duration is a jump in one frame and answers the largest double, so it reads as over
+	 * any limit; zero distance answers zero. Distance's unit per second squared comes out.
+	 */
+	STARFORGECORE_API double SmoothstepPeakAcceleration(double Distance, double Seconds);
 }

@@ -6,6 +6,8 @@
 #include "Engine/World.h"
 #include "FlightController.h"
 #include "HAL/IConsoleManager.h"
+#include "PBDRigidsSolver.h"
+#include "Physics/Experimental/PhysScene_Chaos.h"
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "Ship/SFAutomationOperatorComponent.h"
 #include "Ship/SFConsoleOperatorComponent.h"
@@ -158,12 +160,22 @@ ASFTestShip::ASFTestShip()
 	// contact still presses one hull some centimetres into the other (see the CCD note below), and
 	// the man is protected by the handover guard, not by this line.
 	//
-	// Only ECC_WorldDynamic, which is what a hull is. Every other physics-colliding thing in these
-	// rigs answers something else or has no body: the station's panels are query-only and it has
-	// no physics body, the drone has no collision, a projectile is a query, and the character's
-	// capsule is ECC_Pawn, which this box still only overlaps. A lone ship therefore meets nothing
-	// it did not meet before, docked or free.
+	// ECC_WorldDynamic, which is what a hull is, and ECC_WorldStatic, which is what a station's
+	// panels are. The second was added on 2026-09-22 for finding F1 of checkpoint 8, and until
+	// then this line blocked hulls alone on the argument that the station's panels were query
+	// only and it had no physics body, so a lone ship met nothing it did not meet before. It
+	// met the inside of the station. The owner flew into one by hand at under five metres a
+	// second, the station's interior volume covered the pilot in his seat, the handover guard
+	// let him through once the two carriers were within a metre a second of each other, and
+	// he was left in space when his ship flew on without him. SFTestStation.cpp carries the
+	// account; with its panels now query-and-physics and this response in place, a hull stops
+	// at a station's wall and no station volume can reach into a cabin.
+	//
+	// Still nothing else: the drone has no collision, a projectile is a query, the interior
+	// volumes are query-only and answer pawns alone, and the character's capsule is ECC_Pawn,
+	// which this box still only overlaps.
 	Hull->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+	Hull->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 
 	// Continuous detection, with its thresholds set in Config/DefaultEngine.ini under
 	// [ConsoleVariables]: a step is swept only when the pair moves more than 8 cm in it, and a swept
@@ -193,6 +205,17 @@ ASFTestShip::ASFTestShip()
 	// project physics settings cannot quietly put the atmosphere back.
 	Hull->SetLinearDamping(0.0f);
 	Hull->SetAngularDamping(0.0f);
+
+	// Euler's equations, so the plant is the one the flight controller is written for. The
+	// controller feeds w x Iw forward in both modes (spec 5: tau = I alpha + w x (I w)), and that is
+	// right only for a body that has it; Chaos integrates the gyroscopic part only when this flag is
+	// set (PBDRigidsEvolutionGBF.cpp 939), and the engine default is off (BodyInstanceCore.cpp 18).
+	// Without it the feed-forward was a disturbance: on a 20 x 8 x 8 m hull, full roll and pitch
+	// settled at 180 / 76 / 58 deg/s instead of 180 / 120 / 0. The rig's hull is a cube, whose w x Iw
+	// is zero, so no recorded figure depended on it -- which is how it went unseen. The owner chose
+	// on 2026-10-01 to make the plant agree with the controller rather than drop the term. Read at
+	// body creation (BodyInstance.cpp 1334), so it survives the physics state an undock recreates.
+	Hull->BodyInstance.bGyroscopicTorqueEnabled = true;
 
 	// Stated rather than derived from the box volume, so the inertia the flight
 	// maths later reads back from Chaos is reproducible instead of depending on a
@@ -536,14 +559,45 @@ void ASFTestShip::BeginPlay()
 	// mechanism that can hand GetActorTransform a smoothed value instead of the one
 	// physics computed, and every drift figure this rig has ever produced rests on
 	// that not happening.
-	const IConsoleVariable* AsyncMode =
-		IConsoleManager::Get().FindConsoleVariable(TEXT("p.Chaos.Solver.AsyncPhysicsBlockMode"));
+	//
+	// Asked of this world's solver, the way the engine asks it: IsUsingAsyncResults
+	// (PhysicsSolverBase.h 712-715) is !p.ForceDisableAsyncPhysics && AsyncDt >= 0, and the
+	// scene set AsyncDt from bTickPhysicsAsync when it was built, -1 with it off
+	// (PhysScene_Chaos.cpp 549). Its two inputs are read rather than the function called,
+	// because it reads a Chaos export and this module does not link Chaos. A variable that is
+	// not found is said in capitals on a Warning, never in brackets on a Display line: the
+	// "p.Chaos.Solver.AsyncPhysicsBlockMode" looked up here until 2026-10-01 is registered
+	// nowhere in 5.8, all 306 of these lines in evidence read "(cvar absent)", and a build with
+	// Tick Physics Async on would have printed the same. Substepping is read from the settings,
+	// where the engine reads it every frame (PhysLevel.cpp 212).
+	//
+	// Either one on is a state no drift figure in this project was taken under, so it is said
+	// in capitals and as a Warning, as every rig line says a state that did not hold.
+	const FPhysScene* PhysicsScene = GetWorld() ? GetWorld()->GetPhysicsScene() : nullptr;
+	const Chaos::FPhysicsSolverBase* Solver = PhysicsScene ? PhysicsScene->GetSolver() : nullptr;
+	const IConsoleVariable* ForceDisableAsync =
+		IConsoleManager::Get().FindConsoleVariable(TEXT("p.ForceDisableAsyncPhysics"));
+	const bool bSubstepping = UPhysicsSettings::Get()->bSubstepping;
+	const bool bRead = Solver && ForceDisableAsync;
+	const bool bAsync = bRead && ForceDisableAsync->GetInt() == 0 && Solver->GetAsyncDeltaTime() >= 0.0;
 
-	UE_LOG(LogStarForge, Display,
-		TEXT("Physics: async block mode %s, substepping %s. Drift figures are only "
-			 "comparable across runs where these match."),
-		AsyncMode ? *FString::FromInt(AsyncMode->GetInt()) : TEXT("(cvar absent)"),
-		UPhysicsSettings::Get()->bSubstepping ? TEXT("on") : TEXT("off"));
+	const FString SolverText = !Solver ? FString(TEXT("solver UNREAD -- this world has no physics scene"))
+		: !ForceDisableAsync ? FString(TEXT("solver UNREAD -- p.ForceDisableAsyncPhysics is not registered"))
+		: bAsync ? FString::Printf(TEXT("solver ASYNCHRONOUS at a fixed %.4f s step"), Solver->GetAsyncDeltaTime())
+		: FString(TEXT("solver synchronous"));
+
+	if (!bRead || bAsync || bSubstepping)
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Physics: %s, substepping %s. Drift figures are only comparable across runs where these match."),
+			*SolverText, bSubstepping ? TEXT("ON") : TEXT("off"));
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Display,
+			TEXT("Physics: %s, substepping off. Drift figures are only comparable across runs where these match."),
+			*SolverText);
+	}
 
 	// The rig assembles itself, so the thing the turret tracks is spawned here rather
 	// than placed: L_FrameSpike is empty by design. Anchored to this ship's position so
@@ -638,11 +692,11 @@ void ASFTestShip::TickScriptedProfile()
 	// Both are asked as questions about the hull rather than about docking, on purpose:
 	// those are the profile's true preconditions, and putting them this way means the rig
 	// never learns that docking exists, exactly as the pilot's post never does. The two
-	// coincide today because the only thing that locks the array -- docking -- also stops
-	// the simulation, and they part the moment something locks a hull that is still
-	// simulating: a damaged ship, a powered-down ship, a hull taken by a pirate. All three
-	// are stage 4's, and all three reach for SetLocked. Neither predicate is therefore a
-	// restatement of the other, and dropping either one is a decision, not a tidy-up.
+	// coincide while docking is what locks the array, because docking also stops the
+	// simulation, and they part the moment something locks a hull that is still simulating:
+	// a powered-down ship does, and IsLocked asks its damage model as well as the docking lock.
+	// Neither predicate is therefore a restatement of the other, and dropping either one is
+	// a decision, not a tidy-up.
 	//
 	// Silent, because it would run every frame.
 	if (!Hull->IsSimulatingPhysics() || (Thrusters && Thrusters->IsLocked()))
@@ -694,6 +748,10 @@ void ASFTestShip::LogFlightState(double DeltaSeconds)
 			break;
 		case ESFDockingState::Capturing:
 			DockText = FString::Printf(TEXT("capturing %.1f of %.1f s"),
+				Docking->GetCaptureElapsedSeconds(), Docking->GetCaptureSeconds());
+			break;
+		case ESFDockingState::Releasing:
+			DockText = FString::Printf(TEXT("releasing %.1f of %.1f s"),
 				Docking->GetCaptureElapsedSeconds(), Docking->GetCaptureSeconds());
 			break;
 		default:

@@ -1,5 +1,6 @@
 #include "Ship/SFDockingComponent.h"
 
+#include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Engine/EngineTypes.h"
 #include "EngineUtils.h"
@@ -9,6 +10,7 @@
 #include "Ship/SFShipFrameComponent.h"
 #include "Ship/SFTestStation.h"
 #include "Ship/SFThrusterArrayComponent.h"
+#include "ShipFrameMath.h"
 #include "StarForgeLog.h"
 #include "Units.h"
 
@@ -29,12 +31,65 @@ namespace
 	 * startup, so "sf.Dock 0, sf.Dock 1" leaves only the last value behind and the cycle
 	 * docked -> free -> docked cannot be asked for in one run at all. 2 asks for the whole
 	 * cycle on a single edge: undock now, dock again one capture later.
+	 *
+	 * The variable outlives the world it was typed in -- a PIE session, RestartLevel, open --
+	 * and every component starts from -1, so a value left behind is a keypress on the next
+	 * world's first tick: the loop rig's ship, spawned docked, released by nobody. EndPlay
+	 * puts it back to -1 when a world ends.
 	 */
 	TAutoConsoleVariable<int32> CVarDock(
 		TEXT("sf.Dock"), -1,
 		TEXT("1: dock, if the approach is inside the window. 0: undock. 2: undock and dock again after CaptureSeconds (the headless cycle). -1: no command.\n")
 		TEXT("Acted on when the value CHANGES, so this is a keypress and not a state."),
 		ECVF_Default);
+
+	/**
+	 * The negative control for finding F3, declared here for sf.Dock's reason.
+	 *
+	 * 0 brings back the undock that let go at the docked pose, with the hull's port face
+	 * flush on the tunnel's end faces; a sideways thrust from there must reproduce F3 line
+	 * for line, or the release is not what fixed it. Read at the moment of the undock
+	 * command, so a release already under way finishes as it began.
+	 */
+	TAutoConsoleVariable<int32> CVarDockRelease(
+		TEXT("sf.DockRelease"), 1,
+		TEXT("1: undocking eases the hull out along the port's axis until it is clear of the station, then lets go. ")
+		TEXT("0: let go at the docked pose, as before (the negative control for checkpoint 8's F3)."),
+		ECVF_Default);
+
+	/**
+	 * Puts a DETACHED root exactly on a pose, even when the move is under a micrometre.
+	 *
+	 * SetActorTransform ends in InternalSetWorldLocationAndRotation, which changes nothing -- not
+	 * the relative location, not ComponentToWorld, not the body -- when
+	 * NewLocation.Equals(GetRelativeLocation()) and the rotation is unchanged
+	 * (SceneComponent.cpp 3315-3317), and Equals is per axis within UE_KINDA_SMALL_NUMBER, 1e-4 cm
+	 * (Vector.h 371, 1599-1602). An eased move's last step is that small at a high frame rate: at
+	 * an uncapped ~2000 fps six of twelve releases lost theirs, 0.01-0.55 um short of the target,
+	 * and a path that loses its last step loses its last deceleration, which the felt figure -- a
+	 * second difference -- then reads as a velocity step (20.00 m/s2 in one run, over the 19.62
+	 * limit, on a release that peaks at 17.6). So a step the engine declines is finished with the
+	 * two calls that function makes once its test passes (SceneComponent.cpp 3319, 3341); the
+	 * header asks callers not to use SetRelativeLocation_Direct, and no public move skips the test.
+	 * TeleportPhysics makes the propagation run whatever its own 1e-8 test says (SceneComponent.cpp
+	 * 815), so the pose reaches the kinematic body as every eased step does. Compared exactly, so a
+	 * move the engine made is left alone.
+	 *
+	 * Location only, and only for a detached root, where relative is world: both callers hold the
+	 * rotation constant at that step or set it through SetActorTransform first, and a rotation
+	 * under the rotator's tolerance moves no point of the hull by a measurable amount.
+	 */
+	void TeleportDetachedRootExactly(AActor& Owner, const FTransform& Pose)
+	{
+		Owner.SetActorTransform(Pose, /*bSweep=*/false, /*OutHit=*/nullptr, ETeleportType::TeleportPhysics);
+
+		USceneComponent* Root = Owner.GetRootComponent();
+		if (Root && !Root->GetAttachParent() && Root->GetComponentLocation() != Pose.GetLocation())
+		{
+			Root->SetRelativeLocation_Direct(Pose.GetLocation());
+			Root->UpdateComponentToWorld(EUpdateTransformFlags::None, ETeleportType::TeleportPhysics);
+		}
+	}
 }
 
 USFDockingComponent::USFDockingComponent()
@@ -116,6 +171,15 @@ void USFDockingComponent::ResolvePorts()
 			TEXT("Docking component on [%s] found no port; this ship can never dock."), *Owner->GetName());
 	}
 
+	// The window's speed is read off the frame and nowhere else, so with no frame it is not a
+	// figure at all. ASFTestShip always carries one; the component is spawnable on anything.
+	if (!Frame)
+	{
+		UE_LOG(LogStarForge, Error,
+			TEXT("Docking component on [%s] found no frame component; its approach speed cannot be measured and this ship can never dock."),
+			*Owner->GetName());
+	}
+
 	// Not an error. L_FrameSpike has no station on purpose, and a ship that cannot dock
 	// there is correct rather than broken -- it just has to say so when asked.
 	UE_LOG(LogStarForge, Display,
@@ -129,6 +193,32 @@ void USFDockingComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	ResolvePorts();
+}
+
+void USFDockingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Reset when the world ends rather than seeded in BeginPlay: a value typed between two PIE
+	// sessions, in the editor's console before Play, is a command for the next world and has to
+	// reach it as a change. Not on Destroyed or RemovedFromWorld, where the world goes on and the
+	// value is still its own keypress; not on Quit, where no world follows in this process.
+	//
+	// ECVF_SetByConsole, because the console and -ExecCmds both write at that priority and Set
+	// refuses anything lower, keeping the old value with a LogConsoleManager warning
+	// (ConsoleManager.cpp 275-312). -ExecCmds applies on the first frame, after BeginPlay, so a
+	// headless sf.Dock 0 or 2 still arrives as a change.
+	if (EndPlayReason == EEndPlayReason::EndPlayInEditor || EndPlayReason == EEndPlayReason::LevelTransition)
+	{
+		const int32 LeftOver = CVarDock.GetValueOnGameThread();
+		if (LeftOver != -1)
+		{
+			CVarDock->Set(-1, ECVF_SetByConsole);
+			UE_LOG(LogStarForge, Display,
+				TEXT("Dock: sf.Dock %d reset to -1 as this world ends, so the next world does not take it for a keypress."),
+				LeftOver);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 const TCHAR* USFDockingComponent::RefusalName(StarForge::Docking::EDockingRefusal Refusal)
@@ -154,7 +244,7 @@ bool USFDockingComponent::CanDockNow() const
 void USFDockingComponent::UpdateApproach()
 {
 	const AActor* Owner = GetOwner();
-	if (!Port || !StationPort || !Owner)
+	if (!Port || !StationPort || !Owner || !Frame)
 	{
 		// A refusal is still the right answer -- CanDockNow must not go green on an
 		// instrument that read nothing -- but none of the four window conditions is what
@@ -162,6 +252,11 @@ void USFDockingComponent::UpdateApproach()
 		// that, so the refusal line can say it could not measure instead of reading the
 		// stored reason out and printing "distance 0.0 m over 3.0": a verdict against a
 		// figure that is INSIDE its own limit.
+		//
+		// A missing frame is the same case. The speed is read off the frame alone, and a 0.0
+		// standing in for it passes the 1.0 m/s condition whatever the hull is doing: a green
+		// window on a speed nobody read, and a capture that takes a hull closing at 5 m/s and,
+		// since the run-in starts from rest, stops it inside one frame.
 		bApproachMeasured = false;
 		LastApproachSI = StarForge::Docking::FDockingApproach();
 		LastPortOffsetShipLocalMetres = FVector::ZeroVector;
@@ -177,7 +272,7 @@ void USFDockingComponent::UpdateApproach()
 	//
 	// The frame samples in TG_PostPhysics and this runs pre-physics, so the figure is one
 	// frame old: 1.6 cm of travel at the 1 m/s limit and sixty frames a second.
-	const double SpeedSI = Frame ? Frame->GetLinearVelocityMetersPerSec().Size() : 0.0;
+	const double SpeedSI = Frame->GetLinearVelocityMetersPerSec().Size();
 
 	const StarForge::Docking::FDockingApproach InCentimetres =
 		StarForge::Docking::ComputeDockingApproach(
@@ -214,13 +309,14 @@ void USFDockingComponent::LogRefusal() const
 		// vocabulary for the four conditions of the window, and a missing port is an
 		// engine-side fact about this component, not a thing the approach did -- the same
 		// separation HasStation() already keeps. Which one is missing, because "could not
-		// measure" on its own sends the reader to check all three.
+		// measure" on its own sends the reader to check all four.
 		UE_LOG(LogStarForge, Warning,
 			TEXT("Dock: [%s] refused -- the approach could not be measured: no %s."),
 			*GetNameSafe(GetOwner()),
 			!Port ? TEXT("port on this ship")
 				: !StationPort ? TEXT("station port")
-				: TEXT("owner"));
+				: !GetOwner() ? TEXT("owner")
+				: TEXT("frame component on this ship, so its speed is unmeasured"));
 		return;
 	}
 
@@ -353,9 +449,11 @@ void USFDockingComponent::CompleteCapture()
 	}
 
 	// Exactly the target, from the maths, not the last interpolated step. This pose is
-	// what the attachment freezes for as long as the ship stays docked.
-	Owner->SetActorTransform(
-		CaptureTarget, /*bSweep=*/false, /*OutHit=*/nullptr, ETeleportType::TeleportPhysics);
+	// what the attachment freezes for as long as the ship stays docked -- and "exactly" has
+	// to be enforced: a last step under a micrometre is declined by the scene component, which
+	// would dock the hull up to 1 um off its pose and lose the run-in's last deceleration
+	// (see TeleportDetachedRootExactly).
+	TeleportDetachedRootExactly(*Owner, CaptureTarget);
 
 	// Attached to the socket, keeping the world transform we have just set. From here the
 	// relative velocity is zero by construction rather than by convergence -- which is
@@ -372,6 +470,13 @@ void USFDockingComponent::CompleteCapture()
 
 bool USFDockingComponent::RequestDock()
 {
+	if (State == ESFDockingState::Releasing)
+	{
+		UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] ignored -- the ship is releasing."),
+			*GetNameSafe(GetOwner()));
+		return false;
+	}
+
 	if (State != ESFDockingState::Free)
 	{
 		// Said out loud for the reason Toggle gives: a command that does nothing is otherwise
@@ -423,7 +528,9 @@ bool USFDockingComponent::RequestUndock()
 	{
 		UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] undock ignored -- the ship is %s."),
 			*GetNameSafe(GetOwner()),
-			State == ESFDockingState::Free ? TEXT("not docked") : TEXT("mid-capture"));
+			State == ESFDockingState::Free ? TEXT("not docked")
+				: State == ESFDockingState::Releasing ? TEXT("already releasing")
+				: TEXT("mid-capture"));
 		return false;
 	}
 
@@ -434,13 +541,198 @@ bool USFDockingComponent::RequestUndock()
 		return false;
 	}
 
-	// Detach FIRST, then simulate. SetSimulatePhysics(true) detaches an attached
-	// component itself and says so in its own documentation (PrimitiveComponent.h
-	// 1648-1656), and stopping simulation does not put it back -- which is also why
-	// docking attaches explicitly. Doing the detach here means the code states what
-	// happens instead of depending on a side effect that a later engine version could
-	// reasonably drop.
+	if (CVarDockRelease.GetValueOnGameThread() == 0)
+	{
+		// Detach FIRST, then simulate. SetSimulatePhysics(true) detaches an attached
+		// component itself and says so in its own documentation (PrimitiveComponent.h
+		// 1648-1656), and stopping simulation does not put it back -- which is also why
+		// docking attaches explicitly. Doing the detach here means the code states what
+		// happens instead of depending on a side effect that a later engine version could
+		// reasonably drop.
+		Owner->GetRootComponent()->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		LetGo();
+		return true;
+	}
+
+	if (!StationPort)
+	{
+		// Docked implies a station port -- both ways into Docked require one -- so this is
+		// EnterCapture's error, not a refusal. The ship stays docked rather than being let go
+		// flush against a station nobody can measure.
+		UE_LOG(LogStarForge, Error, TEXT("Dock: [%s] release did not start -- no station port."),
+			*Owner->GetName());
+		return false;
+	}
+
+	// The standoff, measured on the two bodies as they are. Centimetres in, metres into the
+	// maths, one crossing each way. The hull is its root box, taken as the sphere through its
+	// corners so the answer does not depend on which way the pilot turns first; the station
+	// is every one of its primitives that takes part in physics. The interior volumes are
+	// query only and are left out: a hull may stand in a volume, it may not stand in a wall.
+	const UBoxComponent* HullBox = Cast<UBoxComponent>(Hull);
+	const double HullRadiusCm = HullBox ? HullBox->GetScaledBoxExtent().Size() : Hull->Bounds.SphereRadius;
+
+	// The panels are boxed in the station's own frame, not the world's: their world bounds
+	// grow with the station's yaw, and a place can yaw it. Rigid, so the box is in world
+	// lengths and the hull's radius means the same thing inside it.
+	const AActor* Station = StationPort->GetOwner();
+	const FTransform StationFrameCm(Station->GetActorQuat(), Station->GetActorLocation());
+
+	FBox StationLocalBoundsCm(ForceInit);
+	TInlineComponentArray<UPrimitiveComponent*> StationPrimitives(Station);
+	for (const UPrimitiveComponent* Primitive : StationPrimitives)
+	{
+		if (Primitive && CollisionEnabledHasPhysics(Primitive->GetCollisionEnabled()))
+		{
+			StationLocalBoundsCm += Primitive->CalcBounds(
+				Primitive->GetComponentTransform().GetRelativeTransform(StationFrameCm)).GetBox();
+		}
+	}
+
+	const auto ToMetres = [](const FVector& Cm)
+	{
+		return FVector(
+			StarForge::Units::CmToMetres(Cm.X),
+			StarForge::Units::CmToMetres(Cm.Y),
+			StarForge::Units::CmToMetres(Cm.Z));
+	};
+
+	const FBox StationLocalBoundsMetres = StationLocalBoundsCm.IsValid
+		? FBox(ToMetres(StationLocalBoundsCm.Min), ToMetres(StationLocalBoundsCm.Max))
+		: FBox(ForceInit);
+
+	const FVector AwayWorld = StationPort->GetPortTransform().GetUnitAxis(EAxis::X);
+
+	const double StandoffMetres = StarForge::Docking::ReleaseStandoff(
+		ToMetres(Hull->GetComponentLocation()),
+		StarForge::Units::CmToMetres(HullRadiusCm),
+		AwayWorld,
+		FTransform(StationFrameCm.GetRotation(), ToMetres(StationFrameCm.GetTranslation())),
+		StationLocalBoundsMetres);
+	const double PeakMetresPerSecSq =
+		StarForge::Docking::SmoothstepPeakAcceleration(StandoffMetres, CaptureSeconds);
+
+	// Detached, but not simulating: the hull stays kinematic and the array stays locked, as
+	// they have been since the capture, so the pilot's post stands aside for the whole
+	// release exactly as it does during a capture.
 	Owner->GetRootComponent()->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+
+	ReleaseStart = Owner->GetActorTransform();
+	ReleaseTarget = ReleaseStart;
+	ReleaseTarget.AddToTranslation(AwayWorld * StarForge::Units::MetresToCm(StandoffMetres));
+
+	CaptureElapsedSeconds = 0.0;
+	bReleaseArrived = false;
+	State = ESFDockingState::Releasing;
+
+	// A non-positive CaptureSeconds is a one-frame jump, and the maths answers the largest
+	// double for it; printed as a number that would be three hundred digits of nothing.
+	const bool bInstant = PeakMetresPerSecSq >= TNumericLimits<double>::Max();
+	UE_LOG(LogStarForge, Display,
+		TEXT("Dock: [%s] releasing, %.2f m along the port axis over %.1f s, peak %s."),
+		*Owner->GetName(), StandoffMetres, CaptureSeconds,
+		bInstant ? TEXT("unbounded (a jump in one frame)")
+			: *FString::Printf(TEXT("%.1f m/s2"), PeakMetresPerSecSq));
+
+	// Spec 8's re-docking relies on a released ship standing inside its own window; sf.Dock
+	// 2's cycle and a pilot pressing F twice both assume it.
+	if (StandoffMetres > DistanceMetres)
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Dock: [%s] the release stands the ship %.2f m out, outside its own %.1f m docking window; it cannot dock again without flying back in."),
+			*Owner->GetName(), StandoffMetres, DistanceMetres);
+	}
+	if (PeakMetresPerSecSq >= StarForge::ShipFrame::GravPlateLimitMetersPerSecSq)
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Dock: [%s] the release peaks at %s, at or over the %.2f m/s2 grav-plate limit; a man standing aboard will be knocked down."),
+			*Owner->GetName(),
+			bInstant ? TEXT("an unbounded acceleration") : *FString::Printf(TEXT("%.1f m/s2"), PeakMetresPerSecSq),
+			StarForge::ShipFrame::GravPlateLimitMetersPerSecSq);
+	}
+
+	return true;
+}
+
+void USFDockingComponent::AdvanceRelease(double DeltaSeconds)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	if (bReleaseArrived)
+	{
+		// The tick after arrival, with the hull standing on ReleaseTarget and nothing moving
+		// it: the body starts simulating at rest, clear of the station, with nothing under its
+		// port face to drag across.
+		LetGo();
+
+		if (bAutoDockAfterRelease)
+		{
+			bAutoDockAfterRelease = false;
+			SecondsUntilAutoDock = CaptureSeconds;
+		}
+		return;
+	}
+
+	CaptureElapsedSeconds += DeltaSeconds;
+
+	const double Alpha = (CaptureSeconds > UE_DOUBLE_SMALL_NUMBER)
+		? CaptureElapsedSeconds / CaptureSeconds
+		: 1.0;
+
+	if (Alpha >= 1.0)
+	{
+		// Exactly the target, as a kinematic teleport like every step before it, and the let-go
+		// on the NEXT tick. Both used to happen here in one pre-physics tick, and the teleport
+		// was sometimes not made at all. Measured with sf.FeltDebug, the hull root to 1e-9 cm
+		// every frame, over twelve headless releases at an uncapped ~2000 fps: in six this step
+		// moved the hull 1.04-2.00 um and it ended exactly on ReleaseTarget; in the other six it
+		// did not move, 0.01-0.55 um short -- the scene component's 1e-4 cm dead band, which
+		// TeleportDetachedRootExactly says how it is closed. (Chaos's own 1 um leniency,
+		// ParticleDirtyFlags.h 94-97, serves only the rewind's desync test, RewindData.h 845, and a
+		// kinematic SetGlobalPose has no early-out, ChaosEngineInterface.cpp 2544.) Relative is
+		// world here because RequestUndock detached the root, and the rotation is ReleaseStart's
+		// throughout, so the location is the whole pose.
+		//
+		// The let-go waits so that the switch to simulation never shares a tick with a move. The
+		// body goes dynamic from the pose it already holds -- SetSimulatePhysics pushes no
+		// transform (BodyInstance.cpp 2591) -- and there is nothing for the sync to pull back; nor
+		// could it pull back less than 1 um, because OnSyncBodies skips a pose within
+		// UE_KINDA_SMALL_NUMBER of the component's (PhysScene_Chaos.cpp 2483). State stays
+		// Releasing through this tick, so Toggle, RequestDock, sf.Dock 2's countdown and the
+		// readouts see nothing Free early. What moves in recorded figures: "undocked." comes one
+		// frame later, f61 for f60 at 60 fps and f402 for f401 at 400
+		// (2026-09-25-f3fix-dockcycle-*.log), and sf.Dock 2's re-capture with it, f121 for f120
+		// and f803 for f802.
+		TeleportDetachedRootExactly(*Owner, ReleaseTarget);
+
+		bReleaseArrived = true;
+		return;
+	}
+
+	// Eased for the capture's reason, and in translation only: the rotation is the docked
+	// one throughout, so there is no angular term and the peak is the 6d/T^2 logged at the
+	// start. A teleport, like the capture's, because the hull is kinematic and the occupant
+	// rides it through the frame's transform difference.
+	const double Eased = Alpha * Alpha * (3.0 - 2.0 * Alpha);
+
+	FTransform Pose = ReleaseStart;
+	Pose.SetTranslation(FMath::Lerp(ReleaseStart.GetTranslation(), ReleaseTarget.GetTranslation(), Eased));
+
+	Owner->SetActorTransform(Pose, /*bSweep=*/false, /*OutHit=*/nullptr, ETeleportType::TeleportPhysics);
+}
+
+void USFDockingComponent::LetGo()
+{
+	AActor* Owner = GetOwner();
+	UPrimitiveComponent* Hull = GetHull();
+	if (!Owner || !Hull)
+	{
+		return;
+	}
 
 	Hull->SetSimulatePhysics(true);
 
@@ -464,7 +756,6 @@ bool USFDockingComponent::RequestUndock()
 	CaptureElapsedSeconds = 0.0;
 
 	UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] undocked."), *Owner->GetName());
-	return true;
 }
 
 void USFDockingComponent::Toggle()
@@ -476,6 +767,12 @@ void USFDockingComponent::Toggle()
 		break;
 	case ESFDockingState::Docked:
 		RequestUndock();
+		break;
+	case ESFDockingState::Releasing:
+		// Not cancellable either, for the capture's reason: half way out the hull is
+		// kinematic, detached and between two poses.
+		UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] release in progress; the command is ignored."),
+			*GetNameSafe(GetOwner()));
 		break;
 	default:
 		// A capture is not cancellable. Half way through, the hull is between two poses
@@ -536,9 +833,18 @@ void USFDockingComponent::PollConsoleCommand(double DeltaSeconds)
 			RequestUndock();
 			break;
 		case 2:
+			// One capture after the ship is FREE: at once when sf.DockRelease 0 has let it go
+			// in this call, at the end of the release otherwise.
 			if (RequestUndock())
 			{
-				SecondsUntilAutoDock = CaptureSeconds;
+				if (State == ESFDockingState::Free)
+				{
+					SecondsUntilAutoDock = CaptureSeconds;
+				}
+				else
+				{
+					bAutoDockAfterRelease = true;
+				}
 			}
 			break;
 		default:
@@ -578,6 +884,9 @@ void USFDockingComponent::TickComponent(
 		break;
 	case ESFDockingState::Capturing:
 		AdvanceCapture(DeltaTime);
+		break;
+	case ESFDockingState::Releasing:
+		AdvanceRelease(DeltaTime);
 		break;
 	default:
 		break;

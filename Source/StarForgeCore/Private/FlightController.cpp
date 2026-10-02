@@ -2,7 +2,11 @@
 
 namespace
 {
-	/** Clamps each component into [-1, 1] without changing the vector's direction. */
+	/**
+	 * Clamps each component into [-1, 1]: a full deflection of one axis is one, whatever the others
+	 * do. Per component, so an input beyond full travel on some axes but not others comes back
+	 * pointing a different way; the assist's speed limit is applied to the vector's length below.
+	 */
 	FVector ClampAxes(const FVector& Axes)
 	{
 		return FVector(
@@ -31,7 +35,16 @@ namespace StarForge
 			// The stick asks for a velocity, and the demand is whatever closes the gap.
 			// Releasing it therefore asks for zero velocity, which is why the ship
 			// stops instead of coasting.
-			const FVector TargetVelocity = LinearAxis * Limits.MaxSpeed;
+			//
+			// The speed limit is on the length, decided by the owner on 2026-10-01: spec 7's 200 m/s
+			// is a speed, not a speed per axis. Scaled per axis, full stick on two axes asked for
+			// 283 m/s and on three for 346, and the hand-flown fight of checkpoint 7 reached
+			// 276 m/s on a diagonal. A deflection of one axis has length one or less and comes back
+			// untouched, bit for bit (GetClampedToMaxSize returns the vector itself unless it is
+			// longer), so every flight along one axis reads as before. This limits the speed asked
+			// for, not the push towards it: from rest a diagonal still saturates both axes of the
+			// array, 22.6 m/s2 on 50 t, until the demand is cut to what the array can deliver.
+			const FVector TargetVelocity = LinearAxis.GetClampedToMaxSize(1.0) * Limits.MaxSpeed;
 			Demand.Force = (TargetVelocity - State.LinearVelocity) * Mass.Mass * Limits.LinearGain;
 
 			// Componentwise: each axis has its own ceiling.

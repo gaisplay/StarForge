@@ -1,5 +1,7 @@
 #include "DockingMath.h"
 
+#include <limits>
+
 namespace StarForge::Docking
 {
 	namespace
@@ -15,15 +17,32 @@ namespace StarForge::Docking
 		 * against exactly that; the clamp is what keeps a rounding error from ever having
 		 * to depend on them.
 		 *
-		 * It is not itself a filter for non-finite input and must not be read as one:
-		 * Clamp(NaN, -1, 1) returns 1.0, whose Acos is zero -- perfectly aligned, the
-		 * most permissive answer there is. A genuinely non-finite approach reaches CanDock
-		 * by way of the distance or the carried speed, and is refused there.
+		 * It is not a filter for non-finite input, so a dot product that is not finite is
+		 * kept away from it: Clamp returns 1.0 for a NaN and for +Inf, whose Acos is zero --
+		 * perfectly aligned, the most permissive answer there is. A port rotation gone NaN
+		 * arrives here with its location still finite, so neither the distance nor the
+		 * carried speed refuses it first; the angle goes out as NaN instead, and CanDock's
+		 * negated guards refuse it.
 		 */
 		double AngleBetween(const FVector& A, const FVector& B)
 		{
-			return FMath::Acos(FMath::Clamp(FVector::DotProduct(A, B), -1.0, 1.0));
+			const double Dot = FVector::DotProduct(A, B);
+			if (!FMath::IsFinite(Dot))
+			{
+				return std::numeric_limits<double>::quiet_NaN();
+			}
+			return FMath::Acos(FMath::Clamp(Dot, -1.0, 1.0));
 		}
+
+		/**
+		 * Steps for both searches below. They shrink the bracket by 2^-128 (bisection) and by
+		 * (2/3)^128, about 3e-23 (the ternary search for the minimum). A bracket is the
+		 * distance from the hull to the far side of the station plus the hull's radius, tens
+		 * of metres on the rig, so either is far below a micrometre -- the limit is the double
+		 * spacing of the positions themselves, not the step count. A fixed count keeps the
+		 * answer deterministic.
+		 */
+		constexpr int32 SearchIterations = 128;
 	}
 
 	FDockingApproach ComputeDockingApproach(
@@ -60,11 +79,12 @@ namespace StarForge::Docking
 		// the same, and the two differ exactly where this function must not be wrong. A
 		// non-finite figure compares false against both, so `> Limit` falls through all
 		// four guards and answers None -- permission to dock, granted on a question that
-		// could not be evaluated. Negated, it fails the first condition instead. Both
-		// paths in are reachable: the speed is carried from the caller's instrument
-		// untouched, and a port location that is not finite carries into FVector::Dist --
-		// as NaN if a coordinate is NaN, as +Infinity if one is merely infinite. The
-		// negation refuses both; `> Limit` would refuse only the infinite one.
+		// could not be evaluated. Negated, it fails the first condition instead. Every
+		// path in is reachable: the speed is carried from the caller's instrument
+		// untouched, a port location that is not finite carries into FVector::Dist --
+		// as NaN if a coordinate is NaN, as +Infinity if one is merely infinite -- and a
+		// port rotation that is not finite comes out of AngleBetween as two NaN angles.
+		// The negation refuses all of them; `> Limit` would refuse only the infinite one.
 		if (!(ApproachSI.Distance <= Limits.DistanceMetres))
 		{
 			return EDockingRefusal::Distance;
@@ -124,5 +144,111 @@ namespace StarForge::Docking
 		Pose.SetScale3D(Start.GetScale3D());
 
 		return Pose;
+	}
+
+	double ReleaseStandoff(
+		const FVector& HullCentre, double HullRadius, const FVector& AwayDirection, const FBox& StationBounds)
+	{
+		const FVector Dir = AwayDirection.GetSafeNormal();
+
+		// Negated for CanDock's reason: a NaN radius must not fall through into a search.
+		if (Dir.IsZero() || !StationBounds.IsValid || !(HullRadius > 0.0))
+		{
+			return 0.0;
+		}
+
+		// Squared on both sides, so no square root is taken in the loops below.
+		const double ClearSq = HullRadius * HullRadius;
+		const auto GapSq = [&HullCentre, &Dir, &StationBounds](double T)
+		{
+			return StationBounds.ComputeSquaredDistanceToPoint(HullCentre + T * Dir);
+		};
+
+		// Past this the centre is further from the box's centre than the box's half-diagonal
+		// plus the radius, so the sphere is clear here and at every t beyond: the bracket's
+		// upper end is clear by construction, not by a guess at a large number.
+		const double Beyond = FVector::Dist(HullCentre, StationBounds.GetCenter())
+			+ StationBounds.GetExtent().Size() + HullRadius;
+
+		// The distance from a point on a line to a convex box is convex in t, so the set of
+		// t that are too close is a single interval, and bisection needs one point inside it
+		// to start from. At every undock that point is t = 0 -- the hull starts flush on the
+		// station. A hull that starts clear may still be heading through the station, so the
+		// gap's minimum along the ray is found first, and only if even that is clear is the
+		// answer zero.
+		double Inside = 0.0;
+		if (!(GapSq(0.0) < ClearSq))
+		{
+			double Lo = 0.0;
+			double Hi = Beyond;
+			for (int32 Step = 0; Step < SearchIterations; ++Step)
+			{
+				const double A = Lo + (Hi - Lo) / 3.0;
+				const double B = Hi - (Hi - Lo) / 3.0;
+				if (GapSq(A) < GapSq(B))
+				{
+					Hi = B;
+				}
+				else
+				{
+					Lo = A;
+				}
+			}
+			Inside = 0.5 * (Lo + Hi);
+			if (!(GapSq(Inside) < ClearSq))
+			{
+				return 0.0;
+			}
+		}
+
+		// From inside the interval to beyond it the predicate "too close" is true and then
+		// false, once. Hi is returned rather than the midpoint, so the answer is always a t
+		// at which the sphere has been measured clear.
+		double Lo = Inside;
+		double Hi = Beyond;
+		for (int32 Step = 0; Step < SearchIterations; ++Step)
+		{
+			const double Mid = 0.5 * (Lo + Hi);
+			if (GapSq(Mid) < ClearSq)
+			{
+				Lo = Mid;
+			}
+			else
+			{
+				Hi = Mid;
+			}
+		}
+		return Hi;
+	}
+
+	double ReleaseStandoff(
+		const FVector& HullCentre, double HullRadius, const FVector& AwayDirection,
+		const FTransform& StationFrame, const FBox& StationLocalBounds)
+	{
+		// NoScale on both: a rigid change of frame keeps every distance, so the standoff
+		// measured in the station's frame is the standoff in the world's.
+		return ReleaseStandoff(
+			StationFrame.InverseTransformPositionNoScale(HullCentre),
+			HullRadius,
+			StationFrame.InverseTransformVectorNoScale(AwayDirection),
+			StationLocalBounds);
+	}
+
+	double SmoothstepPeakAcceleration(double Distance, double Seconds)
+	{
+		// x = d * s(t/T) with s(a) = 3a^2 - 2a^3, so x'' = d * (6 - 12a) / T^2, largest in
+		// magnitude at a = 0 and a = 1.
+		if (Distance == 0.0)
+		{
+			return 0.0;
+		}
+		// No duration is a jump in one frame, which is what the docking component does with a
+		// non-positive CaptureSeconds. Its acceleration is unbounded, and answering zero would
+		// hide it from the grav-plate check that exists for it.
+		if (!(Seconds > 0.0))
+		{
+			return TNumericLimits<double>::Max();
+		}
+		return 6.0 * Distance / (Seconds * Seconds);
 	}
 }

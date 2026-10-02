@@ -242,6 +242,173 @@ bool FFlightControllerAssistOffIsProportionalTest::RunTest(const FString& Parame
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFlightControllerAssistOffTurnsTest,
+	"StarForge.Core.FlightController.AssistOffTurnsAndKeepsTheGyroscopicTerm",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FFlightControllerAssistOffTurnsTest::RunTest(const FString& Parameters)
+{
+	// The two assist-off tests above set only the linear axis on a ship that is not turning,
+	// and assert only on the force, so the angular half of that branch -- and the gyroscopic
+	// term, which sits outside both branches -- were held by nothing there: a zeroed torque
+	// with assist off, or the Euler term moved inside the assist branch, passed. Here the
+	// stick asks for a mixed turn while the ship already spins about roll and pitch.
+	//
+	// Assist off, the torque is the stick's fraction of what the array can produce plus
+	// w x (I w), exactly as in GyroscopicTermIsPresent: with w = (wx, wy, 0) and a diagonal
+	// I, that term is (0, 0, wx * wy * (Iy - Ix)).
+	const StarForge::FShipMassProperties Mass = MakeAsymmetricShip();
+	const StarForge::FFlightLimits Limits = MakeLimits();
+	const StarForge::FWrench Capability = MakeCapability();
+
+	StarForge::FFlightIntent Intent;
+	Intent.bFlightAssistEnabled = false;
+	Intent.AngularAxis = FVector(0.5, -1.0, 0.25);
+
+	StarForge::FRigidBodyState State;
+	const double RollRate = 0.4;
+	const double PitchRate = 0.3;
+	State.AngularVelocity = FVector(RollRate, PitchRate, 0.0);
+
+	const StarForge::FWrench Demand = StarForge::ComputeDemandedWrench(Intent, State, Mass, Limits, Capability);
+
+	const double Gyro = RollRate * PitchRate * (60000.0 - 20000.0);
+	TestTrue(TEXT("roll is half the array's roll torque"),
+		FMath::IsNearlyEqual(Demand.Torque.X, 0.5 * Capability.Torque.X, 1e-6));
+	TestTrue(TEXT("pitch is the whole of it, the other way"),
+		FMath::IsNearlyEqual(Demand.Torque.Y, -1.0 * Capability.Torque.Y, 1e-6));
+	TestTrue(TEXT("and yaw is a quarter of it plus the gyroscopic term, assist off as on"),
+		FMath::IsNearlyEqual(Demand.Torque.Z, 0.25 * Capability.Torque.Z + Gyro, 1e-6));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFlightControllerAxesAreClampedTest,
+	"StarForge.Core.FlightController.AxesBeyondFullTravelAreClamped",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FFlightControllerAxesAreClampedTest::RunTest(const FString& Parameters)
+{
+	// The intent's axes are promised in [-1, 1], and not every operator keeps the promise:
+	// the console operator copies the sf.Intent.* variables in as typed, and the pilot's post
+	// hands the intent straight here. So the clamp in this function is the only one on that
+	// path, and every other fixture in this file sits inside the range, where it does nothing.
+	// Unclamped, sf.Intent.X 2 with assist on asks for 400 m/s, the boost figure, instead of
+	// the 200 m/s manoeuvring limit.
+	//
+	// One axis at a time, with both signs among them, so the fixtures read the same under a
+	// clamp of each component and under a clamp of the vector's length. The length is what
+	// spec 7 means (the owner, 2026-10-01); DiagonalSpeedIsTheLimit holds that half.
+	const StarForge::FShipMassProperties Mass = MakeAsymmetricShip();
+	const StarForge::FFlightLimits Limits = MakeLimits();
+	const StarForge::FWrench Capability = MakeCapability();
+	const StarForge::FRigidBodyState AtRest;
+
+	const FVector Moments(20000.0, 60000.0, 50000.0);
+	const double Overdrive[3] = { 2.0, -3.0, 1.5 };
+
+	for (int32 Axis = 0; Axis < 3; ++Axis)
+	{
+		const double Sign = FMath::Sign(Overdrive[Axis]);
+
+		StarForge::FFlightIntent Linear;
+		Linear.LinearAxis[Axis] = Overdrive[Axis];
+		const StarForge::FWrench LinearDemand =
+			StarForge::ComputeDemandedWrench(Linear, AtRest, Mass, Limits, Capability);
+		TestTrue(*FString::Printf(TEXT("linear axis %d at %.1f asks for the full-stick speed and no more"), Axis, Overdrive[Axis]),
+			FMath::IsNearlyEqual(LinearDemand.Force[Axis], Sign * Mass.Mass * Limits.MaxSpeed * Limits.LinearGain, 1e-6));
+
+		StarForge::FFlightIntent Angular;
+		Angular.AngularAxis[Axis] = Overdrive[Axis];
+		const StarForge::FWrench AngularDemand =
+			StarForge::ComputeDemandedWrench(Angular, AtRest, Mass, Limits, Capability);
+		TestTrue(*FString::Printf(TEXT("angular axis %d at %.1f asks for the full-stick rate and no more"), Axis, Overdrive[Axis]),
+			FMath::IsNearlyEqual(AngularDemand.Torque[Axis],
+				Sign * Moments[Axis] * Limits.MaxAngularSpeed[Axis] * Limits.AngularGain, 1e-6));
+
+		StarForge::FFlightIntent Unassisted = Linear;
+		Unassisted.bFlightAssistEnabled = false;
+		const StarForge::FWrench UnassistedDemand =
+			StarForge::ComputeDemandedWrench(Unassisted, AtRest, Mass, Limits, Capability);
+		TestTrue(*FString::Printf(TEXT("and assist off, linear axis %d asks for the whole array and no more"), Axis),
+			FMath::IsNearlyEqual(UnassistedDemand.Force[Axis], Sign * Capability.Force[Axis], 1e-6));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFlightControllerDiagonalSpeedTest,
+	"StarForge.Core.FlightController.DiagonalSpeedIsTheLimit",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FFlightControllerDiagonalSpeedTest::RunTest(const FString& Parameters)
+{
+	// Spec 7's 200 m/s is a speed. Scaled per axis, full stick on two axes asked for 283 m/s and
+	// on three for 346; the hand-flown fight of checkpoint 7 reached 276 m/s on a diagonal.
+	const StarForge::FShipMassProperties Mass = MakeAsymmetricShip();
+	const StarForge::FFlightLimits Limits = MakeLimits();
+	const StarForge::FWrench Capability = MakeCapability();
+	const double Gain = Mass.Mass * Limits.LinearGain;
+
+	const FVector Diagonals[] = {
+		FVector(1.0, 1.0, 0.0), FVector(1.0, -1.0, 1.0), FVector(-0.9, 0.0, 0.8), FVector(2.0, 2.0, 2.0) };
+
+	for (const FVector& Axis : Diagonals)
+	{
+		StarForge::FFlightIntent Intent;
+		Intent.LinearAxis = Axis;
+
+		// From rest the demand is the target velocity times mass times gain, so its length over
+		// that product is the speed asked for.
+		const StarForge::FRigidBodyState AtRest;
+		const StarForge::FWrench FromRest =
+			StarForge::ComputeDemandedWrench(Intent, AtRest, Mass, Limits, Capability);
+		const FVector Asked = FromRest.Force / Gain;
+		TestTrue(*FString::Printf(TEXT("stick (%.1f %.1f %.1f) asks for no more than %.0f m/s (asked %.6f)"),
+				Axis.X, Axis.Y, Axis.Z, Limits.MaxSpeed, Asked.Size()),
+			Asked.Size() <= Limits.MaxSpeed + 1e-9);
+
+		// A full deflection, however many axes it spans, asks for exactly the limit, and along the
+		// stick's own direction once each axis is inside full travel.
+		const FVector Clamped(
+			FMath::Clamp(Axis.X, -1.0, 1.0), FMath::Clamp(Axis.Y, -1.0, 1.0), FMath::Clamp(Axis.Z, -1.0, 1.0));
+		if (Clamped.Size() >= 1.0)
+		{
+			TestTrue(*FString::Printf(TEXT("stick (%.1f %.1f %.1f) at full deflection asks for exactly %.0f m/s"),
+					Axis.X, Axis.Y, Axis.Z, Limits.MaxSpeed),
+				FMath::IsNearlyEqual(Asked.Size(), Limits.MaxSpeed, 1e-9));
+			TestTrue(TEXT("along the stick's direction"),
+				FVector::DotProduct(Asked.GetSafeNormal(), Clamped.GetSafeNormal()) > 1.0 - 1e-12);
+		}
+
+		// And a ship already moving at the limit along that direction is asked for nothing: the
+		// per-axis form pushed it on towards 283 m/s.
+		StarForge::FRigidBodyState AtTheLimit;
+		AtTheLimit.LinearVelocity = Clamped.GetClampedToMaxSize(1.0) * Limits.MaxSpeed;
+		const StarForge::FWrench Holding =
+			StarForge::ComputeDemandedWrench(Intent, AtTheLimit, Mass, Limits, Capability);
+		TestTrue(*FString::Printf(TEXT("stick (%.1f %.1f %.1f) at the speed it asked for pushes no further (%.6f N)"),
+				Axis.X, Axis.Y, Axis.Z, Holding.Force.Size()),
+			Holding.Force.Size() < 1e-6);
+	}
+
+	// The limit is the assist's. With assist off the stick asks for thrust, and full stick on two
+	// axes is the whole array on both: that stays per axis.
+	StarForge::FFlightIntent Unassisted;
+	Unassisted.LinearAxis = FVector(1.0, 1.0, 0.0);
+	Unassisted.bFlightAssistEnabled = false;
+	const StarForge::FWrench Thrust =
+		StarForge::ComputeDemandedWrench(Unassisted, StarForge::FRigidBodyState(), Mass, Limits, Capability);
+	TestTrue(TEXT("assist off, a diagonal is the whole array on both axes"),
+		FMath::IsNearlyEqual(Thrust.Force.X, Capability.Force.X, 1e-9)
+		&& FMath::IsNearlyEqual(Thrust.Force.Y, Capability.Force.Y, 1e-9));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FFlightControllerPerAxisAngularLimitTest,
 	"StarForge.Core.FlightController.AngularLimitIsPerAxis",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
