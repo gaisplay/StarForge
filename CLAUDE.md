@@ -202,8 +202,9 @@ again:
 
 - `dock    free -- no station in this level` **on the panel** — there is no station. Until
   2026-10-01 the panel drew it red and upper-case, `NO STATION`, on the spike rig as well; it is
-  now drawn white wherever no `ASFTestStation` exists, and red, naming the station, only where one
-  is in the level and the docking found no port on it — which is a finding on any rig;
+  now drawn white wherever no docking station (`ISFDockingStation`) exists, and red, naming the
+  station, only where one is in the level and the docking found no port on it — which is a finding
+  on any rig;
 - `Frame handover REFUSED` when the hulls touch;
 - `thruster array NOT built` with its `Error`, once hits have left the survivors on two corners.
   The `Error` repeats on every later destruction.

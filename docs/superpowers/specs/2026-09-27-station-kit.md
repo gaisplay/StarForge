@@ -5,7 +5,8 @@
 мелких, каждое сверено со строкой кода и принято. Пересмотрен 2026-09-28: внесены решения владельца по вопросам
 прежнего §12 (§12 теперь — решения) и восемь замечаний заметки о механиках, каждое сверено с кодом (§13). Пересмотрен
 2026-09-28 повторно по второму независимому ревью: два серьёзных замечания и пятнадцать мелких, каждое сверено со
-строкой кода и принято (§14). Открыт один вопрос, 7; шагам 1–2 он не нужен
+строкой кода и принято (§14). Пересмотрен 2026-10-14 по слиянию ревью проекта 2026-10-01 в ветку набора: что ревью
+изменило в посылках спеки и что из этого внесено — §15. Открыт один вопрос, 7; шагам 1–2 он не нужен
 **Движок:** Unreal Engine 5.8.2
 **Опирается на:** [мир как граф мест](2026-09-17-world-as-a-graph-of-places.md) — §2, §3, §9, §10.2, §13, §14;
 [дизайн среза](2026-09-06-starforge-vertical-slice-design.md) — §4, §6, §8 с поправкой 2026-09-25;
@@ -585,7 +586,10 @@ X ∈ [−30, 30], Y ∈ [−12, 12], Z ∈ [0, 32]. Грань причала �
    Это прибор, а не отказ: передачу строка не останавливает, и отклонённую владельцем правку «не передавать сидящего»
    она не возвращает. Нужна она по §2: сидящий, отданный чужому носителю, — это и есть поломка F1, а сегодня она
    выходит в журнал спокойной строкой `Display`. На четырёх старых стендах строка не срабатывает: F1 закрыт
-   физически.
+   физически. **«Чужому» — значит не тому, чьё кресло он держит** (уточнено 2026-10-14, §15): с ревью 2026-10-01
+   выход из объёма своего носителя внутрь чужого — вход в чужой, и так контроль N2 возвращает сидящего на корабль.
+   Отданный обратно владельцу кресла — это починка, а не F1, и строка о «volume of Ship reaching into Station's
+   cabin» там была бы ложью; поэтому строка пишется, только когда носитель, принявший его, — не владелец кресла.
 
 4. **Занятость порта и уведомление о её смене — в шаге 1, а не в шаге 2.** Строке `Station rig:` уже в шаге 1 нужно
    знать, кто держит порт, и узнавать о каждой смене: H1.2 требует четырёх перепечаток по порядку. Сегодня у порта нет
@@ -934,10 +938,10 @@ Headless, 12 секунд: корпус доходит до стены за 3.0/
 |---|---|
 | Вход | Мировой трансформ порта, который просит; массив кандидатов — мировой трансформ и флаг «занят» у каждого |
 | Выход | Индекс выбранного и расстояние до него; индекс и расстояние следующего **свободного** кандидата (второе число для журнала); расстояние до каждого кандидата, занятого тоже (для журнала: строка называет, почему ближний пропущен); флаг «ничья»; причина отказа |
-| Причины отказа (`EPortRefusal`) | `None`; `NoCandidates` — кандидатов нет; `AllOccupied` — все заняты; `Unmeasurable` — у просящего порта или у всех свободных кандидатов положение не конечное |
+| Причины отказа (`EPortRefusal`) | `None`; `NoCandidates` — кандидатов нет; `AllOccupied` — все заняты; `Unmeasurable` — у просящего порта или у всех свободных кандидатов положение или поворот не конечные |
 | «Ближайший» | По расстоянию между началами портов. Углы — дело `CanDock` уже для выбранного порта |
 | Единицы | Как везде в `DockingMath`: длины в единицах вызывающего; игра передаёт сантиметры и переводит расстояние в метры один раз, для журнала |
-| Не конечное | Кандидат с NaN или бесконечностью в положении не выбирается никогда; сравнения записаны отрицанием, как в `CanDock` |
+| Не конечное | Кандидат с NaN или бесконечностью в положении **или в повороте** не выбирается никогда; сравнения записаны отрицанием, как в `CanDock`. Поворот — с 2026-10-14 (§15): с ревью 2026-10-01 `CanDock` отвергает NaN-поворот порта навсегда (его Н35), и выбор по одному расстоянию слал бы корабль к такому порту, пока дальше стоит исправный |
 
 ### 7.3 Занятость — состояние узла
 
@@ -1199,8 +1203,10 @@ index` печатается при каждом решении о стыковк
   Уровень прежний, `Log`;
 - **строки доводки, стыковки, отхода и отказа по окну называют порт:**
   `Dock: [Ship] refused -- Station.Port1: distance 60.1 m over 3.0`.
-- **панель:** когда все порты заняты, пишет красным `dock    free -- NO FREE PORT`, в дополнение к сегодняшнему
-  `NO STATION`. Это ворота только для ручного прогона: headless панель не читается.
+- **панель:** когда все порты заняты, пишет красным `dock    free -- NO FREE PORT`. Строки `NO STATION` с ревью
+  2026-10-01 на панели нет: без станции она пишет белым `dock    free -- no station in this level`, а при станции,
+  у которой порт не найден, — красным `… is in this level and the docking found NO STATION port` (станцию ищет
+  `ISFDockingStation::FindAll`, §15). Это ворота только для ручного прогона: headless панель не читается.
 
 Как именно добавить имя порта только для станций с несколькими портами — отдельной строкой или условным текстом, —
 решает план. Требование одно: на станции с одним портом старый текст остаётся буква в букву.
@@ -1219,8 +1225,8 @@ index` печатается при каждом решении о стыковк
 | `StarForge.Core.Docking.NearestFreePortRefusesWithNoCandidates` | Пустой массив даёт `NoCandidates` |
 | `StarForge.Core.Docking.NearestFreePortTieGoesToTheLowerIndex` | Точное равенство: выбран индекс 0, флаг ничьей поднят, второе число равно первому |
 | `StarForge.Core.Docking.NearestFreePortReportsTheRunnerUp` | Второе число — следующий **свободный**, а не следующий вообще |
-| `StarForge.Core.Docking.NearestFreePortNeverChoosesTheUnmeasurable` | Кандидат с NaN пропущен, выбран конечный; все свободные с NaN дают `Unmeasurable` |
-| `StarForge.Core.Docking.NearestFreePortRefusesAnUnmeasurableRequest` | Просящий порт с NaN даёт `Unmeasurable` |
+| `StarForge.Core.Docking.NearestFreePortNeverChoosesTheUnmeasurable` | Кандидат с NaN в положении или в повороте пропущен, выбран конечный; все свободные с NaN дают `Unmeasurable` |
+| `StarForge.Core.Docking.NearestFreePortRefusesAnUnmeasurableRequest` | Просящий порт с NaN в положении или в повороте даёт `Unmeasurable` |
 | `StarForge.Core.Docking.BoundsPastPortPlaneIsZeroWhenFlush` | Грань бокса в плоскости порта даёт 0 |
 | `StarForge.Core.Docking.BoundsPastPortPlaneMeasuresAlongTheAxis` | Выступ 1.0 м вдоль оси даёт 1.0 |
 | `StarForge.Core.Docking.BoundsPastPortPlaneIgnoresWhatIsBehind` | Бокс целиком за плоскостью даёт 0, отрицательного не бывает |
@@ -1347,7 +1353,7 @@ index` печатается при каждом решении о стыковк
 |---|---|---|---|---|---|
 | N1 | 1 (F3) | `sf.PortProtrusionM 1.0` в консоли, затем `F` из кресла; после — `sf.PortProtrusionM 0` и подлёт обратно: корабль встал вне окна | `-ini` `sf.PortProtrusionM=1.0`; `sf.FlightLog 1, sf.Dock 0` | `Station rig:` `Error` с `1.000 m of something physical PAST its plane (ControlProtrusion)` и `3.93 m … 23.6 m/s2 -- OUTSIDE …, OVER …`; `Dock: [Ship] releasing, 3.93 m along the port axis over 1.0 s, peak 23.6 m/s2.`; `Dock: [Ship] the release stands the ship 3.93 m out, outside its own 3.0 m docking window; it cannot dock again without flying back in.`; `Dock: [Ship] the release peaks at 23.6 m/s2, at or over the 19.62 m/s2 grav-plate limit; a man standing aboard will be knocked down.` | Отход, слепой к коллайдеру (коробка без физики, бокс из чего-то другого), напечатает 2.93 и ни одного `Warning` |
 | N1b | 1 | `sf.PortProtrusionM 0.2`, `F`; после — `sf.PortProtrusionM 0` | `-ini` `sf.PortProtrusionM=0.2`; `sf.FlightLog 1, sf.Dock 0` | `Station rig:` `Error` с `0.200 m of something physical PAST its plane (ControlProtrusion)`; `releasing, 3.13 m … peak 18.8 m/s2.` и **только** предупреждение об окне | Если сработают оба предупреждения или ни одного, два предела не разделены |
-| N2 | 2 (F1), форма 3 | `sf.ConsoleOperator 0`, `E` в кресло пилота, `sf.StationVolumeReach Boom0 4.0`. **Последним шагом сессии** или с возвратом (ниже) | `sf.FlightLog 1, sf.StationVolumeReach Boom0 4.0 1.0` | `Station rig:` `Error` с `Boom0 REACHES 4.000 m OUT of its channel` и `VOLUME REACHES 4.000 m PAST it (Boom0)`; `Frame handover: Ship -> Station, first carry moved him 0.000 cm`; `Standing on Ship's floor while bound to Station's frame for … (0.17 s).`; руками ещё строка `SEATED` из §6.7; headless строка `Frame handover: Station -> Ship` стоит в журнале раньше строки о росте объёма | Объём не вырос, строка не читает объёмы или прибора нет — строк нет |
+| N2 | 2 (F1), форма 3 | `sf.ConsoleOperator 0`, `E` в кресло пилота, `sf.StationVolumeReach Boom0 4.0`; возврат — `sf.StationVolumeReach Boom0 0` (ниже) | `sf.FlightLog 1, sf.StationVolumeReach Boom0 4.0 1.0` | `Station rig:` `Error` с `Boom0 REACHES 4.000 m OUT of its channel` и `VOLUME REACHES 4.000 m PAST it (Boom0)`; `Frame handover: Ship -> Station, first carry moved him 0.000 cm`; `Standing on Ship's floor while bound to Station's frame for … (0.17 s).`; руками ещё строка `SEATED` из §6.7; headless строка `Frame handover: Station -> Ship` стоит в журнале раньше строки о росте объёма | Объём не вырос, строка не читает объёмы или прибора нет — строк нет |
 | N2b | 2, формы 1–2 | `sf.StationVolumeReach Hall0 1.0`; после — `sf.StationVolumeReach Hall0 0` | `sf.FlightLog 1, sf.StationVolumeReach Hall0 1.0 1.0` | `Station rig:` `Error` с `Hall0 REACHES 1.000 m OUT of its hall`, и в той же строке у `Port0` `no interior volume past it (0.000 m)` | Если выход из оболочки читает `0.000`, прибор форм 1–2 мёртв. Если покраснело и «за плоскостью», два числа не разделены |
 | N3 | узел: первый порт занят | Запуск с `DA_Place_PierCoreParked0`; стартовые строки — в бланк. Затем `sf.ConsoleOperator 0`, `E`, `F`, отлёт и `F` в окне `Port1` | `-ini` `sf.PlaceAsset=DA_Place_PierCoreParked0`; `sf.FlightLog 1` | `Place parked hull: 'Parked' (crewing parked) docked at Station.Port0 -- pilot's and gunner's posts unoccupied, thrusters locked, not simulating, deaf to sf.*.`; `Dock: [Ship] nearest free port is now Station.Port1 at 63.94 m; next free none; held Station.Port0 by Parked at 22.10 m.`; `Station rig:` с `Port0 … held by Parked, whose release would be 2.93 m …` и `Port1 … held by Ship, whose release would be 2.93 m …`; `Frame handover: Station -> Ship, first carry moved him 0.000 cm`; **каждая** строка `Turret: [Parked] gunned by unoccupied |` и `Flight: [Parked] flown by unoccupied |` за весь прогон, ни одной с другим оператором (§7.6) | Без занятости корабль выберет `Port0` на 22.10 м и встанет в припаркованный корпус. Строка без расстояния до занятого не скажет, почему ближний пропущен. `Warning` с пустого поста — находка о посте. Оператор, севший на `Parked` в `BeginPlay`, даст `a post HELD by …` в строке сборки; севший на первом тике — строку `Turret:` или `Flight:` с его именем |
 | N4 | узел: оба порта заняты | Запуск с `DA_Place_PierCoreParkedBoth`, `sf.ConsoleOperator 0`, `E`, `F`: отказ; на панели `dock    free -- NO FREE PORT` | `-ini` `sf.PlaceAsset=DA_Place_PierCoreParkedBoth`; `sf.FlightLog 1, sf.Dock 1` | `Place rig: … the ship starts free at place-local (0.0 -40.0 0.0) m, as the place asks …`; `Dock: [Ship] nearest free port is now none: 2 of 2 held (Station.Port0 by Parked0 at 17.90 m, Station.Port1 by Parked1 at 62.61 m).`; `Dock: [Ship] refused -- no free port: 2 of 2 held (Station.Port0 by Parked0 at 17.90 m, Station.Port1 by Parked1 at 62.61 m).`; ежесекундная `Dock: [Ship] free -- NO FREE PORT: 2 of 2 held (Station.Port0 by Parked0, Station.Port1 by Parked1)` | Отказ без названной причины; стыковка к занятому порту; строка полёта печатает `port 0.0 m … -- out of window: distance`; строки `nearest free port is now none` нет — начальное состояние выбора совпало с ответом «свободных нет» (§7.4) |
@@ -1388,8 +1394,10 @@ index` печатается при каждом решении о стыковк
 
 Как устроены контроли:
 
-- **`sf.PortProtrusionM`** — строковая переменная, разбирается через `FDefaultValueHelper::ParseDouble` (прецедент
-  `sf.PlaceOffsetM`). Читается при `BeginPlay` станции и заново при каждом изменении значения — **через делегат
+- **`sf.PortProtrusionM`** — строковая переменная, разбирается через `StarForge::Parse::TryParseFiniteNumber`
+  (`NumberText.h`; прецедент `sf.PlaceOffsetM` после ревью 2026-10-01, пункт 5.1-3 называет эту ветку поимённо:
+  `FDefaultValueHelper::ParseDouble` пропускал `.`, `-` и `e10` нулём). Так же читаются оба числа
+  `sf.StationVolumeReach` и задержка `sf.UndockParked` (§15). Читается при `BeginPlay` станции и заново при каждом изменении значения — **через делегат
   изменения переменной**, `IConsoleVariable::OnChangedDelegate()`. Станция подписывается в `BeginPlay` и отписывается в
   `EndPlay` по образцу `USFWorldBoundsSubsystem` (`SFWorldBoundsSubsystem.cpp:44-48`, `:53-57`), которая так же
   перепечатывает свою строку на каждую смену `WorldBounds.DisableChecks`. Опрос в тике по образцу `sf.AimAt`
@@ -1418,17 +1426,21 @@ index` печатается при каждом решении о стыковк
   (`SFShipboardMovementComponent.cpp:103-117`) — `Warning`, которого у N2 в списке нет.
 - **`sf.UndockParked`** — §7.6.
 
-**Возврат после N2 руками.** Выход из объёма не отвязывает (`SFInteriorVolumeComponent.h:13-19`). Объём каюты
-снова не сработает: привязка идёт только по `BeginOverlap` (`SFInteriorVolumeComponent.cpp:219-231`), а человек из
-каюты не выходил; повторная привязка к тому же фрейму ничего не делает (`SFCharacter.cpp:250-253`). После
-`sf.StationVolumeReach Boom0 0` он остаётся привязан к станции, сидя в каюте, и следующий `F` отстыкует корабль без
-него. Это ложное воспроизведение F1, и оно отравит все цифры после себя. Поэтому N2 — последний шаг ручной сессии.
-Если сессию надо продолжать:
+**Возврат после N2 руками** (переписан 2026-10-14, §15). С ревью 2026-10-01 (его Н2) выход из объёма фрейма, к
+которому человек привязан, пока объём другого носителя ещё держит его, — это вход в тот
+(`USFInteriorVolumeComponent::HandleEndOverlap`, через `TryHandover` и его ворота в 1.0 м/с). `sf.StationVolumeReach
+Boom0 0` возвращает объём к размеру с обновлением пересечений, `Boom0` отпускает человека, объём каюты по-прежнему
+держит его, и корабль забирает его обратно сам. Строки `SEATED` на этом возврате нет: корабль, которому его вернули, —
+владелец его кресла (§6.7, п. 3). Поэтому N2 больше не обязан быть последним шагом сессии:
 
 1. `sf.StationVolumeReach Boom0 0`;
-2. `sf.BindFrame ship`;
-3. дождаться в журнале строки `Frame handover: Station -> Ship, first carry moved him 0.000 cm`, и только после неё
+2. дождаться в журнале строки `Frame handover: Station -> Ship, first carry moved him 0.000 cm`, и только после неё
    нажимать следующий `F`.
+
+`sf.BindFrame ship` здесь не нужен и теперь даёт `Warning` `sf.BindFrame 'ship': he is already bound to Ship. Nothing
+was rebound; the control did not run.` (`SFCharacter.cpp`, ревью 5.2-5), которого в списке N2 нет. До ревью этот
+абзац верно описывал прежний код: выход из объёма не отвязывал, после `Boom0 0` человек оставался привязан к станции,
+сидя в каюте, и N2 стоял последним шагом.
 
 N2b передач не даёт, и возврат после него — одна команда `sf.StationVolumeReach Hall0 0`.
 
@@ -1466,7 +1478,7 @@ by volume` законна здесь и только здесь, а старто
 - N2b руками с возвратом `sf.StationVolumeReach Hall0 0`;
 - N5 руками — стоя (§8.3);
 - N9 и N9b руками на петле `L_Loop`, после исправления (§6.9);
-- **последним** — N2 руками. Если после него сессия продолжается, то только через возврат из §8.3;
+- N2 руками, с возвратом из §8.3 (до ревью 2026-10-01 — последним; §15);
 - на глаз, ответ словами: видно ли из зала свой корабль через стёкла без меша; читается ли направление в зале;
   ощущается ли канал в 12 м.
 
@@ -1782,3 +1794,52 @@ while bound to Station's frame`. Записанный прогон это уже
 16. Последний абзац §9 называл исправление `ASFTestStation` первым, хотя перед ним стоят пункты 2 и 3. Переписан (§9).
 17. Образцом утверждения для сборщика «Кришны» был назван текст правила в `spec.py:112-114`, а утверждение стоит в
     `tools/blender/build.py:868-871` и `:880-882`. Ссылка исправлена (§4.3).
+
+---
+
+## 15. Слияние ревью проекта 2026-10-01 (2026-10-14) и что оно изменило
+
+Ветка набора отошла от `feat/place-as-data` на `9cf8d30`, до ревью всего проекта 2026-10-01
+(`notes/2026-10-01-review.md`). Ревью влито в набор 2026-10-14 слиянием `2861140`; стык двух веток, которого не видно
+по тексту, закрыт отдельным коммитом `42c90a6`. После этого база `kit-0-before` снята заново (прежняя —
+`kit-0-pre-review`, бланк базы, раздел 0), и N₀ = 122: после шага 1 тестов 130, после шага 2 — 138. Два независимых
+рецензента сверили задачи 6–21 плана с кодом после слияния; каждая находка сверена со строкой кода. Что изменилось в
+посылках этой спеки и что внесено:
+
+1. **Исправление объёма `ASFTestStation` сделано дважды.** Ревью сделало ту же починку, что задача 4 набора (его 5.1-2 и
+   эпизод отказа на носитель в его Н2), с теми же двумя коробками из тех же констант и с теми же именами помощников.
+   При слиянии оставлен текст ревью: он в PR #3 и несёт ещё возврат из люка (Н2). §6.9 описывает дефект верно; запись
+   в `CLAUDE.md` уже сделана ревью, и задача 20 её дополняет, а не повторяет.
+2. **Числа из консоли — только `StarForge::Parse::TryParseFiniteNumber`** (`NumberText.h`). `FDefaultValueHelper::
+   ParseDouble`, на который ссылался §8.3 с прецедентом `sf.PlaceOffsetM`, пропускал `.`, `-` и `e10` нулём; ревью
+   (5.1-3, Н22) заменило его везде и назвало эту ветку поимённо. Касается `sf.PortProtrusionM`, обоих чисел
+   `sf.StationVolumeReach` и задержки `sf.UndockParked`; в задачах 10 и 17 добавлены мусорные прогоны с `.` и `-`.
+3. **Выход из объёма своего носителя, пока объём другого держит человека, — вход в другой** (Н2 ревью,
+   `USFInteriorVolumeComponent::HandleEndOverlap`). Отсюда: возврат после N2 — одна команда, `sf.StationVolumeReach
+   Boom0 0`, и строка `Frame handover: Station -> Ship`; `sf.BindFrame ship` больше не нужен и предупреждает, что не
+   сработал; N2 перестал быть обязательно последним шагом ручной сессии (§8.3, §8.5).
+4. **Строка `SEATED` — только когда принявший носитель не владелец кресла** (§6.7, п. 3). Иначе возврат N2 из п. 3
+   печатал бы ложное «a volume of Ship reaches into Station's cabin».
+5. **Порт с не конечным поворотом не выбирается** (§7.2). С ревью `CanDock` отвергает NaN-поворот (его Н35), и выбор
+   по одному расстоянию слал бы корабль к такому порту навсегда. Проверяется двумя существующими тестами; мутант P9.
+6. **Замок двигателей припаркованного — механизм §7.6 без изменений.** Ревью развело замки: `SetLocked` — только
+   стыковочный, обесточивание — свой, и комментарий к `SetLocked` говорит «undocking clears it». У `Parked` `LetGo` его
+   не снимает, поэтому задача 16 правит этот комментарий, а не механизм.
+7. **Панель.** Строки `NO STATION` больше нет (§7.7); станцию для строки стыковки панель ищет через
+   `ISFDockingStation::FindAll` (стык слияния, `2861140`); место, отвергнутое `sf.PlaceAsset`, панель называет оранжевой
+   строкой `PLACE REFUSED - sf.PlaceAsset …`, а не красной `NO SFCHARACTER POSSESSED` (стык, `42c90a6`). Новые красные
+   строки ревью — `CARRY NOT RUNNING - bound to … never carried` и `footing  NONE …` — находка в любом прогоне набора.
+8. **Регрессия.** Опорные журналы теперь `notes/evidence/2026-10-01-review-rebase-*.log`, и большинство повторов
+   выходит `SAME`; посылка §6.7 «почти всё `CHANGED` из-за строки `World bounds:`» больше не верна, но сравнение строками
+   двух проходов остаётся правильным. `regress_evidence.py` с ревью повторяет и прогоны с переменным шагом (дважды,
+   вердикты `STEADY` / `RED ROSE` / `RED FELL`), и `compare_regress.py` требует у них `STEADY` в обоих проходах.
+9. **Прогоны с переменным шагом добавлены в шаги 1 и 2.** `CLAUDE.md` требует для каждой проверки движущегося носителя
+   и прогон без `-benchmark`: класс F4 при ровном шаге провалиться не может. H1.2 и H2.2 — отход и захват со стоящим
+   человеком — снимаются и так (задачи 12 и 19); их ворота — красные счётчики и `footing intact`.
+10. **Н1 ревью в прогонах с отстыковкой на первом кадре** (H1.3–H1.5, N1, N1b, N5): стартовая передача показывает не
+    `0.000 cm`, а путь отхода за кадры до приземления — около 5.76 см за 5 кадров на 60 fps и 3.82 см за 27 на 400
+    (2.928 × (3s² − 2s³) при s = 5/60 и 27/400). Это протокол, не находка; ворота `0.000` стоят только у H1.1 и N2.
+11. **`sf.PortProtrusionM` в конце мира не сбрасывается**, в отличие от `sf.Dock`, `sf.BindFrame` и `sf.AimAt` (Н10
+    ревью): те действуют по фронту, и оставшееся значение — нажатие в следующем мире; эта — уровень, как
+    `sf.PlaceOffsetM`, и оставшееся значение — контроль, который всё ещё задан, а строка `Station rig:` говорит это
+    красным.
