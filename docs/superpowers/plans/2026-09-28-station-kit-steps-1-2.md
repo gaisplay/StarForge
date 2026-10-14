@@ -2787,7 +2787,8 @@ namespace
 {
 /**
  * Nested and named for the unity build: every file's anonymous namespace is one namespace in this
- * module, and SFTestShip.cpp already owns CubeEdgeCm and PanelThickness at its top level.
+ * module, and SFTestShip.cpp already owns CubeEdgeCm and MarkerUniformScale at its top level. Inside
+ * a function with `using namespace KitStation;` those two are therefore written qualified.
  */
 namespace KitStation
 {
@@ -3955,7 +3956,7 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-*.log
 grep -nE "(^|[^:])\b(CubeEdgeCm|MarkerUniformScale)\b" Source/StarForge/Private/Ship/SFKitStation.cpp
 ```
 
-Последняя команда — ворота правила unity-сборки (Global Constraints). Задача 10 последней правит `SFKitStation.cpp`. Ожидаются ровно три строки: комментарий над `namespace KitStation` («…already owns CubeEdgeCm and PanelThickness…») и два объявления в нём, `constexpr double CubeEdgeCm = 100.0;` и `constexpr double MarkerUniformScale = 0.8;`. Любая другая строка — имя без `KitStation::` в функции, которая открыла пространство директивой. Сегодня оно собирается только по алфавиту файлов в блобе.
+Последняя команда — ворота правила unity-сборки (Global Constraints). Задача 10 последней правит `SFKitStation.cpp`. Ожидаются ровно три строки: комментарий над `namespace KitStation` («…already owns CubeEdgeCm and MarkerUniformScale…», исправлено при приёмке задачи 8) и два объявления в нём, `constexpr double CubeEdgeCm = 100.0;` и `constexpr double MarkerUniformScale = 0.8;`. Любая другая строка — имя без `KitStation::` в функции, которая открыла пространство директивой. Сегодня оно собирается только по алфавиту файлов в блобе.
 
 Полные ворота N1, N1b, N2, N2b на обеих частотах — задача 12. Здесь — что каждый контроль вообще умеет покраснеть и что мусор в нём не проходит молча. Второй мусорный прогон (`task10-junk2`) добавлен 2026-10-14: `.` и `-` — ровно те строки, которые `FDefaultValueHelper::ParseDouble` пропускал нулём; на нём прежний код плана поставил бы `sf.PortProtrusionM=.` без коллайдера и без `Warning`, а `Boom0 4.0 -` применил бы на первом кадре.
 
