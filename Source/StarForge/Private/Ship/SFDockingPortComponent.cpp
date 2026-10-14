@@ -47,3 +47,14 @@ void USFDockingPortComponent::BeginPlay()
 			*Owner->GetName());
 	}
 }
+
+void USFDockingPortComponent::NotifyHolder(USFDockingComponent* HolderOrNull)
+{
+	Holder = HolderOrNull;
+
+	// Directly, not through a tick: a station need not tick to hear its port change.
+	if (ISFDockingStation* Station = Cast<ISFDockingStation>(GetOwner()))
+	{
+		Station->OnDockingPortChanged(this);
+	}
+}

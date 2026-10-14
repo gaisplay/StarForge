@@ -165,6 +165,26 @@ public:
 	/** True when a dock command issued this instant would be accepted. */
 	bool CanDockNow() const;
 
+	/**
+	 * Every one of Station's OWN primitives that takes part in physics, boxed in Station's own frame,
+	 * in centimetres. The release measures against this, and so does a kit station's Station rig:
+	 * line -- one function, so the line reads exactly the box the release will use. Neighbours docked
+	 * to the station are other actors and are not in it; a visual mesh with collision is, which is
+	 * rule 5 of the station kit.
+	 */
+	static FBox StationPhysicalBoundsLocalCm(const AActor& Station);
+
+	/**
+	 * What a release from the docked pose would do now: the standoff along the station port's axis,
+	 * in metres, and the smoothstep peak over CaptureSeconds. False unless docked to a station port.
+	 * RequestUndock releases by exactly these numbers. Asked from any other pose the question means
+	 * something else -- ReleaseStandoff answers how far the hull still has to go along the port's
+	 * axis, from the pose it is in, for the sphere round it to clear the station's physical box: the
+	 * rest of the way from a pose part-way out, and zero only once the sphere is clear (2.93 m
+	 * port to port on the rig) -- and that is not the release F would make, so it is not asked.
+	 */
+	bool MeasureRelease(double& OutStandoffMetres, double& OutPeakMetresPerSecSq) const;
+
 	/** The last approach measured, with Distance already in METRES. */
 	StarForge::Docking::FDockingApproach GetLastApproach() const { return LastApproachSI; }
 

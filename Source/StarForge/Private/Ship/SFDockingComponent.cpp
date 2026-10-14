@@ -393,6 +393,10 @@ bool USFDockingComponent::EnterCapture()
 	CaptureElapsedSeconds = 0.0;
 	State = ESFDockingState::Capturing;
 
+	// Held from here until LetGo: while a capture runs, no second hull may choose this port. The
+	// port tells its station; DockImmediately comes through here too and holds it the same way.
+	StationPort->NotifyHolder(this);
+
 	return true;
 }
 
@@ -463,6 +467,8 @@ void USFDockingComponent::CompleteCapture()
 	CaptureElapsedSeconds = CaptureSeconds;
 
 	UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] docked."), *Owner->GetName());
+
+	StationPort->NotifyHolder(this);
 }
 
 bool USFDockingComponent::RequestDock()
@@ -516,6 +522,67 @@ bool USFDockingComponent::RequestDock()
 	return true;
 }
 
+FBox USFDockingComponent::StationPhysicalBoundsLocalCm(const AActor& Station)
+{
+	// Boxed in the station's own frame, not the world's: world bounds grow with the station's yaw,
+	// and a place can yaw it (three degrees asked 3.26 m where 2.93 is enough). Rigid, so the box is
+	// in world lengths and a hull's radius means the same thing inside it.
+	const FTransform StationFrameCm(Station.GetActorQuat(), Station.GetActorLocation());
+
+	FBox Bounds(ForceInit);
+	TInlineComponentArray<UPrimitiveComponent*> Primitives(&Station);
+	for (const UPrimitiveComponent* Primitive : Primitives)
+	{
+		if (Primitive && CollisionEnabledHasPhysics(Primitive->GetCollisionEnabled()))
+		{
+			Bounds += Primitive->CalcBounds(
+				Primitive->GetComponentTransform().GetRelativeTransform(StationFrameCm)).GetBox();
+		}
+	}
+	return Bounds;
+}
+
+bool USFDockingComponent::MeasureRelease(double& OutStandoffMetres, double& OutPeakMetresPerSecSq) const
+{
+	const UPrimitiveComponent* Hull = GetHull();
+	const AActor* Station = StationPort ? StationPort->GetOwner() : nullptr;
+	if (State != ESFDockingState::Docked || !Hull || !Station)
+	{
+		return false;
+	}
+
+	// The hull is its root box, taken as the sphere through its corners so the answer does not
+	// depend on which way the pilot turns first; the station is every one of its primitives that
+	// takes part in physics. The interior volumes are query only and are left out: a hull may stand
+	// in a volume, it may not stand in a wall. Centimetres in, metres into the maths, once each way.
+	const UBoxComponent* HullBox = Cast<UBoxComponent>(Hull);
+	const double HullRadiusCm = HullBox ? HullBox->GetScaledBoxExtent().Size() : Hull->Bounds.SphereRadius;
+
+	const FTransform StationFrameCm(Station->GetActorQuat(), Station->GetActorLocation());
+	const FBox StationLocalBoundsCm = StationPhysicalBoundsLocalCm(*Station);
+
+	const auto ToMetres = [](const FVector& Cm)
+	{
+		return FVector(
+			StarForge::Units::CmToMetres(Cm.X),
+			StarForge::Units::CmToMetres(Cm.Y),
+			StarForge::Units::CmToMetres(Cm.Z));
+	};
+
+	const FBox StationLocalBoundsMetres = StationLocalBoundsCm.IsValid
+		? FBox(ToMetres(StationLocalBoundsCm.Min), ToMetres(StationLocalBoundsCm.Max))
+		: FBox(ForceInit);
+
+	OutStandoffMetres = StarForge::Docking::ReleaseStandoff(
+		ToMetres(Hull->GetComponentLocation()),
+		StarForge::Units::CmToMetres(HullRadiusCm),
+		StationPort->GetPortTransform().GetUnitAxis(EAxis::X),
+		FTransform(StationFrameCm.GetRotation(), ToMetres(StationFrameCm.GetTranslation())),
+		StationLocalBoundsMetres);
+	OutPeakMetresPerSecSq = StarForge::Docking::SmoothstepPeakAcceleration(OutStandoffMetres, CaptureSeconds);
+	return true;
+}
+
 bool USFDockingComponent::RequestUndock()
 {
 	// Docked and nothing else. A capture is not cancellable (see Toggle), and letting go
@@ -561,53 +628,13 @@ bool USFDockingComponent::RequestUndock()
 		return false;
 	}
 
-	// The standoff, measured on the two bodies as they are. Centimetres in, metres into the
-	// maths, one crossing each way. The hull is its root box, taken as the sphere through its
-	// corners so the answer does not depend on which way the pilot turns first; the station
-	// is every one of its primitives that takes part in physics. The interior volumes are
-	// query only and are left out: a hull may stand in a volume, it may not stand in a wall.
-	const UBoxComponent* HullBox = Cast<UBoxComponent>(Hull);
-	const double HullRadiusCm = HullBox ? HullBox->GetScaledBoxExtent().Size() : Hull->Bounds.SphereRadius;
-
-	// The panels are boxed in the station's own frame, not the world's: their world bounds
-	// grow with the station's yaw, and a place can yaw it. Rigid, so the box is in world
-	// lengths and the hull's radius means the same thing inside it.
-	const AActor* Station = StationPort->GetOwner();
-	const FTransform StationFrameCm(Station->GetActorQuat(), Station->GetActorLocation());
-
-	FBox StationLocalBoundsCm(ForceInit);
-	TInlineComponentArray<UPrimitiveComponent*> StationPrimitives(Station);
-	for (const UPrimitiveComponent* Primitive : StationPrimitives)
-	{
-		if (Primitive && CollisionEnabledHasPhysics(Primitive->GetCollisionEnabled()))
-		{
-			StationLocalBoundsCm += Primitive->CalcBounds(
-				Primitive->GetComponentTransform().GetRelativeTransform(StationFrameCm)).GetBox();
-		}
-	}
-
-	const auto ToMetres = [](const FVector& Cm)
-	{
-		return FVector(
-			StarForge::Units::CmToMetres(Cm.X),
-			StarForge::Units::CmToMetres(Cm.Y),
-			StarForge::Units::CmToMetres(Cm.Z));
-	};
-
-	const FBox StationLocalBoundsMetres = StationLocalBoundsCm.IsValid
-		? FBox(ToMetres(StationLocalBoundsCm.Min), ToMetres(StationLocalBoundsCm.Max))
-		: FBox(ForceInit);
+	// The standoff, measured on the two bodies as they are, by the same method the kit station's
+	// Station rig: line prints -- so the line reads exactly what this release is about to do.
+	double StandoffMetres = 0.0;
+	double PeakMetresPerSecSq = 0.0;
+	MeasureRelease(StandoffMetres, PeakMetresPerSecSq);
 
 	const FVector AwayWorld = StationPort->GetPortTransform().GetUnitAxis(EAxis::X);
-
-	const double StandoffMetres = StarForge::Docking::ReleaseStandoff(
-		ToMetres(Hull->GetComponentLocation()),
-		StarForge::Units::CmToMetres(HullRadiusCm),
-		AwayWorld,
-		FTransform(StationFrameCm.GetRotation(), ToMetres(StationFrameCm.GetTranslation())),
-		StationLocalBoundsMetres);
-	const double PeakMetresPerSecSq =
-		StarForge::Docking::SmoothstepPeakAcceleration(StandoffMetres, CaptureSeconds);
 
 	// Detached, but not simulating: the hull stays kinematic and the array stays locked, as
 	// they have been since the capture, so the pilot's post stands aside for the whole
@@ -647,6 +674,8 @@ bool USFDockingComponent::RequestUndock()
 			bInstant ? TEXT("an unbounded acceleration") : *FString::Printf(TEXT("%.1f m/s2"), PeakMetresPerSecSq),
 			StarForge::ShipFrame::GravPlateLimitMetersPerSecSq);
 	}
+
+	StationPort->NotifyHolder(this);
 
 	return true;
 }
@@ -753,6 +782,13 @@ void USFDockingComponent::LetGo()
 	CaptureElapsedSeconds = 0.0;
 
 	UE_LOG(LogStarForge, Display, TEXT("Dock: [%s] undocked."), *Owner->GetName());
+
+	// One function for both ways out of Docked, so the release's end and sf.DockRelease 0's instant
+	// let-go free the port by the same line, and a control cannot drift from what it controls.
+	if (StationPort)
+	{
+		StationPort->NotifyHolder(nullptr);
+	}
 }
 
 void USFDockingComponent::Toggle()
