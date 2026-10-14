@@ -78,6 +78,9 @@
 - **П16. Бланк базы в `git add`.** Задачи с регрессией (6, 12, 15, 16, 19) дописывают строку в таблицу регрессий бланка базы и ставят его в `git add`, хотя их блок Files его не называет. Так и задумано: строка регрессии — часть задачи. В задаче 16 к её Files и `git add` добавлен `SFThrusterArrayComponent.h` (П7); в «Структуре файлов» он тоже есть.
 - **П17. Результаты «в бланк точки 11/12» до задачи 21.** Задачи 7, 12 и 14 велят записать таблицы мутантов и строки ворот в бланк ручной точки, а бланк создаёт только задача 21. До неё исполнитель пишет их в свой отчёт задачи под заголовком «Для бланка точки 11» (или 12), дословно, и задача 21 переносит их в бланк.
 - **П18. Ранбук задачи 21 ждёт окна.** Из PowerShell `& "…UnrealEditor.exe" --% …` возвращает управление сразу, и `Save-Log` скопировал бы журнал открытого окна. Строка запуска в ранбуке кончается на `| Out-Null` — конвейер прерывает действие `--%`, и PowerShell ждёт закрытия окна.
+- **П20. NaN в строке `Station rig:` (задача 9; найдено рецензентом интерфейсов задачи 7).** `BoxReachOutside` отвечает NaN за сломанный бокс с любой стороны, а строка говорила только «оболочку не прочесть» — теперь различает сломанный объём (`… itself could NOT BE MEASURED`). И максимум по объёмам за плоскостью порта (`!(M <= max)`) пускал NaN внутрь, а следующий конечный объём его затирал: строка вышла бы спокойной над объёмом, которого никто не измерил. Теперь NaN держится до конца цикла и печатается словами `… could NOT BE MEASURED`. Код задачи 9 исправлен на месте.
+- **П21. Порог контролей задачи 10 обоснован неверно.** Значение меньше 0.001 м печатается как `0.000`, только если оно меньше 0.0005 (`RedAtOrAboveMetres`); от 0.0005 до 0.001 строка печатает `0.001` и краснеет. Порог 0.001 оставлен — принятый контроль печатает не меньше того, что просили, — исправлены комментарии задачи 10 и фраза спеки §8.3.
+- **П22. Задача 7 после приёмки.** `BoundsPastPortPlane` отвечает NaN за не конечную ось и над пустым боксом (её комментарий это обещал, код — нет); три теста получили проверки защитных ветвей, а `BoundsPastPortPlaneReadsZeroAtThePrintedResolution` — закрепление порога 0.0005 через печать `%.3f` (без них мутант `RedAtOrAboveMetres = PrintedResolutionMetres` выживал). Счёт тестов прежний, 130. Комментарий о порогах в коде задачи выше исправлен: 0.071797 и 0.341797 — округлённые вверх и уже за пределом, точны 7 − 4√3 и 7.27 − 4√3 (спека §5).
 - **П19. Подписи интерфейсов** «Потребляет из задачи N» в задачах 6, 9, 10 и 14 местами называют не ту задачу-источник (строки сверки F8); на код это не влияет, источник — тот, где интерфейс объявлен по тексту плана.
 
 ---
@@ -2384,9 +2387,12 @@ bool FDockingReleaseStandoffGrowsByTheProtrusionTest::RunTest(const FString& Par
 		&& FMath::IsNearlyEqual(Peak(Standoff(0.2)), 6.0 * (Flush + 0.2), 1e-6)
 		&& FMath::IsNearlyEqual(Peak(Standoff(1.0)), 6.0 * (Flush + 1.0), 1e-6));
 
-	// The two thresholds, each from both sides and exactly (spec 5): the window warns on d > 3.0, so
-	// p = 7 - 4 sqrt(3) = 0.071797 is the last that stays inside; the ceiling warns on 6d >= 19.62,
-	// so p = 0.341797 is the first that does not. The rounded 0.072 and 0.342 are already past both.
+	// The two thresholds, each from both sides, with the comparisons the warnings make (spec 5). The window
+	// warns on d > 3.0, so p stays inside up to and including 7 - 4 sqrt(3) = 0.0717967697... m; the ceiling
+	// warns on 6d >= 19.62, that is d >= 3.27, so p stays under it only below 7.27 - 4 sqrt(3) =
+	// 0.3417967697... m. The six-decimal 0.071797 and 0.341797 are those bounds rounded up, by 2.3e-7 m, so
+	// each already lies past its limit, as do the rounded 0.072 and 0.342. The probes bracket each bound
+	// instead: 0.0717 and 0.3417 lie 9.7e-5 m on the calm side of it, 0.0719 and 0.3419 1.03e-4 m past it.
 	const double Window = StarForge::Docking::FDockingLimits().DistanceMetres;
 	const double Ceiling = StarForge::ShipFrame::GravPlateLimitMetersPerSecSq;
 	TestTrue(TEXT("p = 0.0717 stays inside the 3.0 m window"), Standoff(0.0717) <= Window);
@@ -2552,7 +2558,7 @@ furthest corner, and it is tested on a turned axis where the two part.
 
 Red starts where the printed figure stops being 0.000. Exact zero would paint a
 turned station red on a healthy build; the kit builds on whole centimetres, so
-the smallest real protrusion is a hundred times the threshold.
+the smallest real protrusion is twenty times the threshold.
 MSG
 ```
 
@@ -3342,8 +3348,16 @@ void ASFKitStation::ReportStationRig()
 		const double OutM = StarForge::Docking::BoxReachOutside(VolumeM, EnvelopeMetres(Record, StationFrameCm));
 		if (!FMath::IsFinite(OutM))
 		{
+			// BoxReachOutside answers NaN for a broken box on EITHER side (task 7), so the line says which:
+			// sent to the walls when the volume is what broke, the reader would look at the wrong thing
+			// (amendment P20).
+			const bool bVolumeReadable = VolumeM.IsValid
+				&& FMath::IsFinite(VolumeM.Min.X) && FMath::IsFinite(VolumeM.Min.Y) && FMath::IsFinite(VolumeM.Min.Z)
+				&& FMath::IsFinite(VolumeM.Max.X) && FMath::IsFinite(VolumeM.Max.Y) && FMath::IsFinite(VolumeM.Max.Z);
 			bRed = true;
-			VolumeTexts.Add(FString::Printf(TEXT("%s's %s envelope could NOT BE READ"), *Volume->GetName(), Record.EnvelopeWord));
+			VolumeTexts.Add(bVolumeReadable
+				? FString::Printf(TEXT("%s's %s envelope could NOT BE READ"), *Volume->GetName(), Record.EnvelopeWord)
+				: FString::Printf(TEXT("%s itself could NOT BE MEASURED"), *Volume->GetName()));
 		}
 		else if (StarForge::Docking::IsRedAtPrintedResolution(OutM))
 		{
@@ -3421,9 +3435,21 @@ FString ASFKitStation::DescribePort(const USFDockingPortComponent& Port, const F
 			VolumePastM = M;
 			VolumeName = Volumes[VolumeRecords[i].Volume]->GetName();
 		}
+		// A NaN sticks. "!(M <= max)" takes a NaN in, and the next finite volume would then take its
+		// place -- !(finite <= NaN) is true too -- and a volume nobody could measure would leave the
+		// line calm (amendment P20).
+		if (FMath::IsNaN(VolumePastM))
+		{
+			break;
+		}
 	}
 	FString VolumeText;
-	if (StarForge::Docking::IsRedAtPrintedResolution(VolumePastM))
+	if (FMath::IsNaN(VolumePastM))
+	{
+		bInOutRed = true;
+		VolumeText = FString::Printf(TEXT("how far an interior volume reaches past it could NOT BE MEASURED (%s)"), *VolumeName);
+	}
+	else if (StarForge::Docking::IsRedAtPrintedResolution(VolumePastM))
 	{
 		bInOutRed = true;
 		VolumeText = FString::Printf(TEXT("an interior VOLUME REACHES %.3f m PAST it (%s)"), VolumePastM, *VolumeName);
@@ -3670,7 +3696,12 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 	constexpr double ControlXMinCm = 2600.0;
 	constexpr double ControlZMinCm = 0.0;
 
-	/** The smallest control either instrument can show: below it the line prints 0.000 (spec 8.3). */
+	/**
+	 * The smallest control accepted: the line's printed resolution (spec 8.3). Below
+	 * StarForge::Docking::RedAtOrAboveMetres, half of it, the line would print 0.000 and stay calm; between
+	 * the two it would print 0.001 and go red. A control is refused under a whole millimetre so that every
+	 * accepted one prints at least what it was asked for (amendment P21).
+	 */
 	constexpr double MinimumControlMetres = 0.001;
 
 	/** Metres and seconds alike: a finite number written out, or false and OutMetres untouched. */
@@ -3708,7 +3739,8 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 			&& (Args.Num() == 2 || ParseFiniteMetres(Args[2], AfterSeconds));
 
 		// A negative figure accepted in silence would grow the volume inward, read 0.000 and look
-		// like a control that found nothing; a positive one under a millimetre would print 0.000.
+		// like a control that found nothing; a positive one under a millimetre is under the line's
+		// printed resolution, and under half of one it would print 0.000.
 		if (!bShape || !(Metres == 0.0 || Metres >= MinimumControlMetres) || !(AfterSeconds >= 0.0))
 		{
 			UE_LOG(LogStarForge, Warning,
