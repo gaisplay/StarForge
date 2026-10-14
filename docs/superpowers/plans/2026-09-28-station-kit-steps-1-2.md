@@ -61,7 +61,7 @@
 Набор отошёл от `feat/place-as-data` на `9cf8d30`, до ревью всего проекта 2026-10-01 (`notes/2026-10-01-review.md`). Задачи 1–5 сделаны до него. 2026-10-14 ревью влито в набор (`2861140`), стык закрыт `42c90a6`, и два независимых рецензента сверили задачи 6–21 с кодом после слияния. Эти поправки **главнее текста задач** там, где они расходятся; в задачах правки внесены на месте и помечены номером поправки. Спека получила свой §15.
 
 - **П1. База и счёт тестов.** База `kit-0-before` снята заново на слиянии (прежняя — `Saved/Regress/kit-0-pre-review`, бланк базы, раздел 0). N₀ = **122**: после шага 1 — **130**, после шага 2 — **138**. Все проходы с `kit-1.6` сравниваются с этой базой; `kit-1.2`, `kit-1.4` сравнивались с `kit-0-pre-f4`, `kit-1.5` — с базой на слиянии F4 (теперь `kit-0-pre-review`).
-- **П2. Номера строк.** Номера в задачах — по `bcdb849`/`9cf8d30`; ревью сдвинуло почти все. Якорь — названный текст, не номер. Где задача держится только за номер, вот новые места (2026-10-14): задача 15 — безымянное пространство `SFDockingComponent.cpp` кончается на строке 93, а не 54; задача 16 — `SFTestShip.cpp` 529–541 → 542–553 (блок раздачи флагов в `BeginPlay`, от `PilotStation->SetConsoleControlled`), 593–600 → 637–644 (ветка `else` без дрона), `SFAutomationOperatorComponent.h` 64/70 → 65/71, `.cpp` 138/169 → 142/193, `SFDockingComponent.h` 188 → 193, `SFThrusterArrayComponent.h` 104 → 105; задача 18 — `SFTestShip.cpp` 713–733 → 757–778, `SFDockingComponent.cpp` 175–180 → 246–261, `SFFrameDriftHUD.cpp` 330–333 → 386–405 (ветка теперь — вложенный `if`/`else`, вставка после 405). Задача 7: `#include <limits>` в `DockingMath.cpp` уже добавлен ревью.
+- **П2. Номера строк.** Номера в задачах — по `bcdb849`/`9cf8d30`; ревью сдвинуло почти все. Якорь — названный текст, не номер. Где задача держится только за номер, вот новые места (2026-10-14): задача 15 — безымянное пространство `SFDockingComponent.cpp` кончается на строке 93, а не 54; задача 16 — `SFTestShip.cpp` 529–541 → 542–553 (блок раздачи флагов в `BeginPlay`: от строки `const bool bAnswersConsole = …` до закрывающей скобки блока `if (Weapon)` включительно — замена задачи сама объявляет `bAnswersConsole`, и начать с `PilotStation->…` значило бы объявить её дважды), 593–600 → 637–644 (ветка `else` без дрона), `SFAutomationOperatorComponent.h` 64/70 → 65/71, `.cpp` 138/169 → 142/193, `SFDockingComponent.h` 188 → 193, `SFThrusterArrayComponent.h` 104 → 105; задача 18 — `SFTestShip.cpp` 713–733 → 757–778, `SFDockingComponent.cpp` 175–180 → 246–261, `SFFrameDriftHUD.cpp` 330–333 → 386–405 (ветка теперь — вложенный `if`/`else`, вставка после 405). Задача 7: `#include <limits>` в `DockingMath.cpp` уже добавлен ревью.
 - **П3. Числа из консоли — только `StarForge::Parse::TryParseFiniteNumber`** (`NumberText.h`). `FDefaultValueHelper::ParseDouble` пропускал `.`, `-` и `e10` нулём; ревью (5.1-3, Н22) убрало его из проекта и назвало эту ветку поимённо. Исправлено в задачах 10 (`sf.PortProtrusionM`, оба числа `sf.StationVolumeReach`), 17 (задержка `sf.UndockParked`) и 20 (строки таблицы `CLAUDE.md`); в задачи 10 и 17 добавлены мусорные прогоны с `.` и `-`.
 - **П4. Возврат N2 — сам.** С Н2 ревью выход из объёма своего носителя, пока объём другого держит человека, — вход в другой (`HandleEndOverlap`). `sf.StationVolumeReach Boom0 0` возвращает человека на корабль строкой `Frame handover: Station -> Ship, first carry moved him 0.000 cm`; `sf.BindFrame ship` не нужен и теперь предупреждает `… Nothing was rebound; the control did not run.`; N2 больше не обязан быть последним. Задачи 10, 11 (headless-проверка возврата), 20, 21; спека §8.3, §8.5.
 - **П5. Строка `SEATED` — только когда принявший носитель не владелец кресла** (задача 11; спека §6.7 п. 3). Иначе возврат N2 печатал бы ложь.
@@ -70,11 +70,15 @@
 - **П8. `sf.PortProtrusionM` в конце мира не сбрасывается** (задача 10). Сбрасываются команды по фронту (`sf.Dock`, `sf.BindFrame`, `sf.AimAt`, Н10 ревью); это уровень, как `sf.PlaceOffsetM`, и строка `Station rig:` показывает оставшееся значение красным. Решение записано в комментарии к переменной.
 - **П9. Прогоны с переменным шагом.** H1.2 (задача 12) и H2.2 (задача 19) снимаются ещё и без `-benchmark` (`kitvar`), по два журнала: отход и захват со стоящим человеком — класс F4, который при ровном шаге не проваливается (`CLAUDE.md`). Ворота — красные счётчики и `footing intact`.
 - **П10. `CLAUDE.md` в задаче 20.** Запись о двух объёмах ревью уже сделало (`since 2026-10-01 the station's interior is two volumes…`); задача дополняет её, а не пишет вторую с «Until 2026-09-28». Абзац «Current state» называет три базы (П1); абзац о ревью «not yet merged» переписывается по факту. Строка `CLAUDE.md` о белом `no station in this level` уже говорит «docking station (`ISFDockingStation`)» — после стыка слияния панель ищет станцию через интерфейс.
-- **П11. Стартовая передача в прогонах с отстыковкой на первом кадре** (H1.3–H1.5, N1, N1b, N5): по Н1 ревью она показывает не `0.000 cm`, а ≈5.76 см за 5 кадров на 60 fps и ≈3.82 см за 27 на 400. Протокол, не находка (задача 12).
+- **П11. Стартовая передача в прогонах с отстыковкой на первом кадре** (H1.2–H1.5, N1, N1b, N5): по Н1 ревью она показывает не `0.000 cm`, а путь корпуса за кадры до приземления (≈5 на 60 fps, ≈27 на 400): d × (3s² − 2s³) у отхода на d — ≈5.76 / 3.82 см при d = 2.93 м (H1.2–H1.5), ≈7.73 / 5.13 при 3.93 (N1), ≈6.16 / 4.08 при 3.13 (N1b); у N5 (`sf.DockRelease 0`, отхода нет) — путь от тяги, ≈2.04 / 1.21 см по журналам рига с тем же контролем. Протокол, не находка: ворот на этих числах нет (задача 12).
 - **П12. Инструменты регрессии.** Отчёт `regress_evidence.py` пишет `Fixed step: … have a result.` и `Variable step: …` вместо `Replayed: N of M` — так и записывать строку таблицы регрессий. Прогоны с переменным шагом повторяются дважды и судятся по красным счётчикам (`STEADY` / `RED ROSE` / `RED FELL`); `compare_regress.py` требует `STEADY` в обоих проходах, а новую такую команду пишет заметкой `new in run, STEADY at a variable step`. Опорные журналы — `2026-10-01-review-rebase-*`, и большинство повторов теперь `SAME`. В Global Constraints: `FrameMismatchThresholdSeconds` стоит теперь на `SFShipboardMovementComponent.h:227`, и порогов по времени два — с ревью есть `NeverCarriedThresholdSeconds = 1.0` (сторож «привязан и ни разу не перенесён»). В «Числах» проход базы — 106 команд с ровным шагом и 10 с переменным.
 - **П13. Панель.** Строки `NO STATION` больше нет (задачи 18, 21; спека §7.7): без станции — белая `no station in this level`, станция есть, а порт не найден — красная `… found NO STATION port`. Новые красные строки ревью — `CARRY NOT RUNNING - bound to … never carried` и `footing  NONE …` — находка в любом прогоне набора. Место, отвергнутое `sf.PlaceAsset` (N7), панель называет оранжевой строкой `PLACE REFUSED - sf.PlaceAsset '…': …` (стык `42c90a6`).
 - **П14. Запрет трогать `SFShipFrameComponent.*` и `ShipFrameMath.*`** держался работой над F4 в основном дереве; F4 влита, но ни одной задаче эти файлы не нужны, и запрет остаётся.
 - **П15. Самопроверка в конце плана:** «F4 добавляет семь тестов» — ревью добавило ещё десять (112 → 122); якоря «Counted rather than taken…» в `ResolvePorts` нет с задачи 5, задача 15 держится за новый блок.
+- **П16. Бланк базы в `git add`.** Задачи с регрессией (6, 12, 15, 16, 19) дописывают строку в таблицу регрессий бланка базы и ставят его в `git add`, хотя их блок Files его не называет. Так и задумано: строка регрессии — часть задачи. В задаче 16 к её Files и `git add` добавлен `SFThrusterArrayComponent.h` (П7); в «Структуре файлов» он тоже есть.
+- **П17. Результаты «в бланк точки 11/12» до задачи 21.** Задачи 7, 12 и 14 велят записать таблицы мутантов и строки ворот в бланк ручной точки, а бланк создаёт только задача 21. До неё исполнитель пишет их в свой отчёт задачи под заголовком «Для бланка точки 11» (или 12), дословно, и задача 21 переносит их в бланк.
+- **П18. Ранбук задачи 21 ждёт окна.** Из PowerShell `& "…UnrealEditor.exe" --% …` возвращает управление сразу, и `Save-Log` скопировал бы журнал открытого окна. Строка запуска в ранбуке кончается на `| Out-Null` — конвейер прерывает действие `--%`, и PowerShell ждёт закрытия окна.
+- **П19. Подписи интерфейсов** «Потребляет из задачи N» в задачах 6, 9, 10 и 14 местами называют не ту задачу-источник (строки сверки F8); на код это не влияет, источник — тот, где интерфейс объявлен по тексту плана.
 
 ---
 
@@ -189,6 +193,7 @@ Source/StarForge/
   Public/Ship/SFConsoleOperatorComponent.h    правится: IsConsoleControlled (16)
   Public/Ship/SFPilotStationComponent.h       правится: IsConsoleControlled (16)
   Public/Ship/SFWeaponComponent.h             правится: IsConsoleControlled (16)
+  Public/Ship/SFThrusterArrayComponent.h      правится: комментарий к SetLocked (16, поправка П7)
   Public/Ship/SFTestShip.h, Private/...       правится: Parked (16), sf.UndockParked (17),
                                               строка полёта NO FREE PORT (18)
   Private/Debug/SFFrameDriftHUD.cpp           правится: панель NO FREE PORT (18)
@@ -4064,7 +4069,10 @@ MSG
 ```bash
 kitvar() {
   local asset="$1" secs="$2" cmds="$3" name="$4"; shift 4
-  "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge-station/StarForge.uproject" \n    "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFPlaceGameMode" \n    "-ini:Engine:[ConsoleVariables]:sf.PlaceAsset=$asset" "$@" \n    -game -nullrhi -unattended -nosplash -seconds="$secs" -ExecCmds="$cmds" -log < /dev/null
+  "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "F:/UEProject/StarForge-station/StarForge.uproject" \
+    "/Game/Maps/L_FrameSpike?game=/Script/StarForge.SFPlaceGameMode" \
+    "-ini:Engine:[ConsoleVariables]:sf.PlaceAsset=$asset" "$@" \
+    -game -nullrhi -unattended -nosplash -seconds="$secs" -ExecCmds="$cmds" -log < /dev/null
   cp Saved/Logs/StarForge.log "docs/superpowers/notes/evidence/$(date +%F)-$name.log"
 }
 kitvar DA_Place_Berth 40 "sf.FlightLog 1, sf.Dock 2" kit-h1-2-var-a
@@ -4194,7 +4202,7 @@ grep -c "LogStarForge: Warning" "$F"                      # 0
 grep -c "LogStarForge: Display: World bounds:" "$F"       # 1: и в мире, где не собрано ничего
 ```
 
-**Стартовая передача в прогонах с отстыковкой на первом кадре** (H1.3, H1.4, H1.5, N1, N1b, N5; поправка П11): по Н1 ревью первый перенос после приземления идёт от позы корабля на момент привязки, и строка `Frame handover: Station -> Ship` показывает не `0.000 cm`, а путь отхода за кадры до приземления — около 5.76 см за 5 кадров на 60 fps и 3.82 см за 27 на 400 (2.928 × (3s² − 2s³) при s = 5/60 и 27/400). Это протокол, не находка: ворота `0.000 cm` стоят только у H1.1 и N2. Число — в бланк как есть.
+**Стартовая передача в прогонах с отстыковкой на первом кадре** (H1.2–H1.5, N1, N1b, N5; поправка П11): по Н1 ревью первый перенос после приземления идёт от позы корабля на момент привязки, и строка `Frame handover: Station -> Ship` показывает не `0.000 cm`, а путь корпуса за кадры до приземления — d × (3s² − 2s³) при s = 5/60 и 27/400: ≈5.76 / 3.82 см при d = 2.93 м, ≈7.73 / 5.13 у N1, ≈6.16 / 4.08 у N1b; у N5 отхода нет (`sf.DockRelease 0`), и число — путь от тяги, ≈2.04 / 1.21 см. Это протокол, не находка: ворота `0.000 cm` стоят только у H1.1 и N2. Число — в бланк как есть.
 
 Каждая строка ворот переписывается в бланк точки 11 дословно (задача 21 даёт ему форму). Провалившиеся ворота — находка: записать, не объяснять, остановиться.
 
@@ -6312,7 +6320,7 @@ told to each operator separately since then: the automation sits on the player's
 
 ```markdown
 | `sf.PlaceAsset` | *(empty)* | The place asset the place rig reads, by its bare name in `/Game/Places/` (`DA_Place_Berth`), not a path: MSYS rewrites an argument of the form `x=/path`. Empty keeps `DA_Place_OpenSpace`. **Read once in `InitGame`**, so `"-ini:Engine:[ConsoleVariables]:sf.PlaceAsset=DA_Place_Berth"`. A name with no asset behind it, or with a slash in it, refuses the place with two `Error` lines and assembles nothing; no fallback place is built in its stead |
-| `sf.PortProtrusionM` | *(empty)* | Station-kit controls N1/N1b: a 4 m control collider at the far end of block 0's berth face, its −Y face this many metres past the port plane. A string read by `StarForge::Parse::TryParseFiniteNumber`, never `FDefaultValueHelper::ParseDouble`, which passes `.` and `-` as zero; empty or 0 places nothing; anything that is not a finite number of at least 0.001 is a `Warning` and places nothing. Read at the kit station's `BeginPlay` and on every change, through the variable's change delegate — the kit station does not tick. A level like `sf.PlaceOffsetM`, so it is not put back when a world ends: a value left from the last Play is a control still set, and the line says so in red. The `Station rig:` `Error` is legitimate only while this is set |
+| `sf.PortProtrusionM` | *(empty)* | Station-kit controls N1/N1b: a 4 m control collider at the far end of block 0's berth face, its −Y face this many metres past the port plane. A string read by `StarForge::Parse::TryParseFiniteNumber`, never `FDefaultValueHelper::ParseDouble`, which passes `.` and `-` as zero; empty or 0 places nothing; any other value that is not a finite number of at least 0.001 is a `Warning` and places nothing. Read at the kit station's `BeginPlay` and on every change, through the variable's change delegate — the kit station does not tick. A level like `sf.PlaceOffsetM`, so it is not put back when a world ends: a value left from the last Play is a control still set, and the line says so in red. The `Station rig:` `Error` is legitimate only while this is set |
 | `sf.StationVolumeReach <Volume> <Metres> [DelaySeconds]` | *(a command)* | Station-kit controls N2/N2b: grows a kit station's interior volume (`Boom0`, `Hall1`, …) by that many metres outward along its block's port axis; 0 restores it. Both numbers read by `StarForge::Parse::TryParseFiniteNumber`. A command with a delay in game seconds, like `sf.KillThruster`, because `-ExecCmds` runs on the first frame, before the start-up handover is carried. The `Station rig:` `Error` is legitimate only while a volume is grown. **0 is control N2's whole return**: a volume going back to its size lets go of the man it took from a cabin, and the cabin's volume, which still holds him, takes him back (`HandleEndOverlap`, the review's N2) with `Frame handover: Station -> Ship, first carry moved him 0.000 cm`; wait for that line before the next `F`. `sf.BindFrame ship` is not needed there and warns that the control did not run |
 | `sf.UndockParked <Name> [DelaySeconds]` | *(a command)* | Undocks the named `Parked` hull through the same `RequestUndock` as `F`, so `sf.DockRelease` acts on it too. Refuses with a `Warning` a name that is no ship, a hull that is not parked, a hull that is not docked, a bad delay — read by `StarForge::Parse::TryParseFiniteNumber`, so `.` and `-` are bad delays rather than zero |
 ```
@@ -6451,10 +6459,10 @@ Count 'Test Completed. Result=\{Fail\}'      # 0
 5. **Запуск** — форма для всех ручных прогонов, с `--%` после пути к программе (остаток строки уходит движку как есть, с кавычками и квадратными скобками):
 
 ```powershell
-& "$UE\Binaries\Win64\UnrealEditor.exe" --% "F:\UEProject\StarForge-station\StarForge.uproject" /Game/Maps/L_Place "-ini:Engine:[ConsoleVariables]:sf.PlaceAsset=DA_Place_Berth" -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1, sf.DriftDebug 1"
+& "$UE\Binaries\Win64\UnrealEditor.exe" --% "F:\UEProject\StarForge-station\StarForge.uproject" /Game/Maps/L_Place "-ini:Engine:[ConsoleVariables]:sf.PlaceAsset=DA_Place_Berth" -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1, sf.DriftDebug 1" | Out-Null
 ```
 
-   После каждого запуска, до следующего: `Save-Log '<имя>'`. Открытый редактор этого дерева уводит журнал прогона в `StarForge_2.log` — перед каждым запуском он закрыт.
+   `| Out-Null` в конце — чтобы PowerShell ждал закрытия окна (поправка П18): без него `&` возвращает управление сразу, и `Save-Log` скопировал бы журнал ещё открытого окна. После каждого запуска, до следующего: `Save-Log '<имя>'`. Открытый редактор этого дерева уводит журнал прогона в `StarForge_2.log` — перед каждым запуском он закрыт.
 
 6. **Управление** — таблица клавиш из ранбука точки 8 без изменений (`E`, `F` только из кресла пилота, `F1` или `~` — консоль, `sf.ConsoleOperator 0` перед `E`).
 
@@ -6465,7 +6473,7 @@ Count 'Test Completed. Result=\{Fail\}'      # 0
    - **11-B** (`DA_Place_Berth`, `checkpoint-11-B-n5-standing`): N5 стоя — кресло держит консоль, в консоли `sf.DockRelease 0`, `sf.Dock 0`, `sf.Intent.X 1`; ворота — `Show 'Shipboard drift'` с `KNOCKED DOWN`.
    - **11-C** (петля, `checkpoint-11-C-latent-f1-by-hand`):
 ```powershell
-& "$UE\Binaries\Win64\UnrealEditor.exe" --% "F:\UEProject\StarForge-station\StarForge.uproject" /Game/Maps/L_Loop -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1"
+& "$UE\Binaries\Win64\UnrealEditor.exe" --% "F:\UEProject\StarForge-station\StarForge.uproject" /Game/Maps/L_Loop -game -windowed -ResX=1600 -ResY=900 -ExecCmds="sf.FlightLog 1" | Out-Null
 ```
      N9: `sf.ConsoleOperator 0`, `E`, `F`, отойти, подвести корабль к стене −Y сбоку от тоннеля медленнее 1 м/с до касания, `E`, подойти к стене хатча; затем то же над крышей тоннеля (N9b). Ворота — `Count 'Frame handover: Ship -> Station'` 0 и `Count 'Standing on'` 0 при `dock free`.
    - **Глазами** — три вопроса §8.5, ответы словами в бланк.
@@ -6534,7 +6542,7 @@ MSG
 | п. 7 — H2.1, H2.2, N3, N4, N6, N8; `kit-2.7` | 19 |
 | п. 8 — точка 12 | 21 |
 | §11 — правки `CLAUDE.md` и спеки второй фазы | 20 |
-| §8.1 — шестнадцать тестов, мутант у каждого | 7 (K1–K12), 14 (P1–P8) |
+| §8.1 — шестнадцать тестов, мутант у каждого | 7 (K1–K12), 14 (P1–P9; P9 — поправка П6) |
 
 **Заглушек нет.** В коде нет `TODO` и «аналогично задаче N»; единственное тело, которое в задаче 8 ничего не делает, — `OnDockingPortChanged`, и задача 9 его заменяет (в комментарии это сказано). Имена файлов улик и документов с `<дата>` — день выполнения, `$(date +%F)`; `<N>` и `<N₀>` в «Current state» — фактические числа из журнала тестов и бланка базы, а не выдуманные. Счета тестов в задачах записаны от N₀, а не числом, потому что F4 добавляет семь тестов и может влиться до базы.
 
