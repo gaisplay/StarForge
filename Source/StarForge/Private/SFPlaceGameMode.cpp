@@ -195,6 +195,11 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 		bPlaceFits = false;
 		bPlaceFromAsset = false;
 
+		// What the two size variables held at the refusal, so that OnPlaceVariableChanged answers a
+		// real change and not a Set of the value they already had.
+		OffsetRawAtMeasure = CVarPlaceOffsetM.GetValueOnGameThread();
+		RadiusRawAtMeasure = CVarPlaceRadiusM.GetValueOnGameThread();
+
 		const FString What = (AssetRefusal == TEXT("no such asset"))
 			? FString::Printf(TEXT("names no place asset at %s/%s"), PlaceRig::PlaceAssetDirectory, *RequestedAssetName)
 			: FString(TEXT("is not a bare asset name"));
@@ -743,6 +748,17 @@ void ASFPlaceGameMode::OnPlaceVariableChanged(IConsoleVariable* Variable)
 		return;
 	}
 	bReported = true;
+
+	// A place refused by name was never measured, and there is no size line for it to describe.
+	if (!AssetRefusal.IsEmpty())
+	{
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Place rig: %s changed to '%s' -- it is read once, before the local player logs in, and this ")
+			TEXT("world's place was refused by name (sf.PlaceAsset='%s') before anything was measured, so nothing ")
+			TEXT("changes until the level restarts."),
+			bOffset ? TEXT("sf.PlaceOffsetM") : TEXT("sf.PlaceRadiusM"), *Now, *RequestedAssetName);
+		return;
+	}
 
 	UE_LOG(LogStarForge, Warning,
 		TEXT("Place rig: %s changed to '%s' after the place was measured with '%s' -- it is read once, ")

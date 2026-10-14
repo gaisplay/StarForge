@@ -66,6 +66,14 @@ public:
 	 */
 	StarForge::Place::EPlaceRefusal GetPlaceRefusal() const;
 
+	/**
+	 * Why sf.PlaceAsset refused the place, or empty, and the name it was given. For the panel,
+	 * beside GetPlaceRefusal: a place refused by name was never measured, so it has no size reason,
+	 * and GetPlaceRefusal answers None for it.
+	 */
+	const FString& GetAssetRefusal() const { return AssetRefusal; }
+	const FString& GetRequestedAssetName() const { return RequestedAssetName; }
+
 private:
 	/**
 	 * sf.PlaceOffsetM and sf.PlaceRadiusM are read once, in InitGame, and a change after it would

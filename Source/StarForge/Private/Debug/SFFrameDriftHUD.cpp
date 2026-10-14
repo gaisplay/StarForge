@@ -166,6 +166,16 @@ void ASFFrameDriftHUD::DrawReadout(double& Y)
 		// the Error either way.
 		const UWorld* World = GetWorld();
 		const ASFPlaceGameMode* PlaceMode = World ? World->GetAuthGameMode<ASFPlaceGameMode>() : nullptr;
+
+		// Refused by name before anything was measured (sf.PlaceAsset), so there is no size reason
+		// to name, and GetPlaceRefusal answers None.
+		if (PlaceMode && !PlaceMode->GetAssetRefusal().IsEmpty())
+		{
+			DrawLine(FString::Printf(TEXT("PLACE REFUSED - sf.PlaceAsset '%s': %s; nothing was assembled, so there is no occupant to measure"),
+				*PlaceMode->GetRequestedAssetName(), *PlaceMode->GetAssetRefusal()), Y, FLinearColor(1.0f, 0.45f, 0.0f));
+			return;
+		}
+
 		const StarForge::Place::EPlaceRefusal Refusal =
 			PlaceMode ? PlaceMode->GetPlaceRefusal() : StarForge::Place::EPlaceRefusal::None;
 		if (Refusal != StarForge::Place::EPlaceRefusal::None)
