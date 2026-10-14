@@ -178,4 +178,40 @@ namespace StarForge::Docking
 	 * any limit; zero distance answers zero. Distance's unit per second squared comes out.
 	 */
 	STARFORGECORE_API double SmoothstepPeakAcceleration(double Distance, double Seconds);
+
+	/**
+	 * How far a box reaches past a port's plane, along the port's OUTWARD axis: the box's support in
+	 * that direction measured from the plane, and never less than zero (station-kit spec 5, rule 1).
+	 *
+	 * The support, not the centre's projection: a box is past a plane by its furthest corner. The axis
+	 * is normalised here; a zero or non-finite axis, or a non-finite origin, answers NaN whatever the
+	 * box, which is red at the printed resolution: a question that cannot be asked must not read as a
+	 * calm zero. Asked of a port that can be measured, an invalid box answers zero -- a station with
+	 * nothing physical in it has nothing past any plane.
+	 *
+	 * It looks one way on purpose. A box that stops short of the plane reads zero, not a negative
+	 * figure, and a boom shorter than its port is caught by BoxReachOutside against the boom's
+	 * envelope instead (spec 6.8). Lengths in whatever unit the caller passes; the game passes metres.
+	 */
+	STARFORGECORE_API double BoundsPastPortPlane(const FBox& Bounds, const FVector& PortOrigin, const FVector& PortOutwardAxis);
+
+	/**
+	 * How far Inner reaches outside Envelope: the largest excess over all six faces, zero when Inner
+	 * lies within it or flush on it (station-kit spec 5, rule 2). NaN when either box is invalid or
+	 * not finite -- an envelope nobody could read is not an envelope anything is inside.
+	 */
+	STARFORGECORE_API double BoxReachOutside(const FBox& Inner, const FBox& Envelope);
+
+	/**
+	 * The Station rig: line prints these lengths in metres to three decimals. A figure is red when it
+	 * would print as more than zero: from 0.0005 m up (spec 6.8). Every collider, volume and port the
+	 * kit builds stands on whole centimetres, so a real protrusion is at least 0.01 m, and the noise a
+	 * turned transform leaves is many orders below a millimetre. The threshold and the print agree by
+	 * construction: there is no red 0.000 and no calm 0.001.
+	 */
+	inline constexpr double PrintedResolutionMetres = 0.001;
+	inline constexpr double RedAtOrAboveMetres = 0.5 * PrintedResolutionMetres;
+
+	/** True from RedAtOrAboveMetres up, and for NaN: an instrument that computed nothing is not calm. */
+	STARFORGECORE_API bool IsRedAtPrintedResolution(double Metres);
 }

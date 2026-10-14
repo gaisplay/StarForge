@@ -43,6 +43,16 @@ namespace StarForge::Docking
 		 * answer deterministic.
 		 */
 		constexpr int32 SearchIterations = 128;
+
+		bool IsFiniteVector(const FVector& V)
+		{
+			return FMath::IsFinite(V.X) && FMath::IsFinite(V.Y) && FMath::IsFinite(V.Z);
+		}
+
+		bool IsFiniteBox(const FBox& Box)
+		{
+			return IsFiniteVector(Box.Min) && IsFiniteVector(Box.Max);
+		}
 	}
 
 	FDockingApproach ComputeDockingApproach(
@@ -250,5 +260,56 @@ namespace StarForge::Docking
 			return TNumericLimits<double>::Max();
 		}
 		return 6.0 * Distance / (Seconds * Seconds);
+	}
+
+	double BoundsPastPortPlane(const FBox& Bounds, const FVector& PortOrigin, const FVector& PortOutwardAxis)
+	{
+		const FVector Axis = PortOutwardAxis.GetSafeNormal();
+
+		// Before the box, so that an empty box cannot answer a calm zero to a port nobody could measure.
+		// GetSafeNormal hands a NaN or infinite axis back with a NaN in it, which IsZero does not catch.
+		if (Axis.IsZero() || !IsFiniteVector(Axis) || !IsFiniteVector(PortOrigin))
+		{
+			return std::numeric_limits<double>::quiet_NaN();
+		}
+		if (!Bounds.IsValid)
+		{
+			return 0.0;
+		}
+
+		// The support of a box along a unit axis: the centre's projection plus the half-extents, each
+		// weighted by how much of the axis lies along it. A NaN anywhere in the box carries through,
+		// and FMath::Max(0, NaN) answers the NaN, so a broken box stays red.
+		const FVector Centre = Bounds.GetCenter();
+		const FVector Extent = Bounds.GetExtent();
+		const double Support = FVector::DotProduct(Centre - PortOrigin, Axis)
+			+ FMath::Abs(Axis.X) * Extent.X
+			+ FMath::Abs(Axis.Y) * Extent.Y
+			+ FMath::Abs(Axis.Z) * Extent.Z;
+
+		return FMath::Max(0.0, Support);
+	}
+
+	double BoxReachOutside(const FBox& Inner, const FBox& Envelope)
+	{
+		if (!Inner.IsValid || !Envelope.IsValid || !IsFiniteBox(Inner) || !IsFiniteBox(Envelope))
+		{
+			return std::numeric_limits<double>::quiet_NaN();
+		}
+
+		double Worst = 0.0;
+		for (int32 Axis = 0; Axis < 3; ++Axis)
+		{
+			Worst = FMath::Max(Worst, Envelope.Min[Axis] - Inner.Min[Axis]);
+			Worst = FMath::Max(Worst, Inner.Max[Axis] - Envelope.Max[Axis]);
+		}
+		return Worst;
+	}
+
+	bool IsRedAtPrintedResolution(double Metres)
+	{
+		// Negated for CanDock's reason: a NaN fails every comparison, and "not under the threshold"
+		// is the spelling that makes it red.
+		return !(Metres < RedAtOrAboveMetres);
 	}
 }
