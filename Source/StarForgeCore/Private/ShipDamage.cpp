@@ -45,7 +45,7 @@ namespace StarForge::Damage
 		return true;
 	}
 
-	bool ApplyHit(FShieldState& State, const FShieldLimits& Limits, EShipFace Face, double Damage, FHitOutcome& Out)
+	bool ApplyHit(FShieldState& State, EShipFace Face, double Damage, FHitOutcome& Out)
 	{
 		// An EShipFace can be cast from any uint8, and an index outside the six would write past
 		// both arrays.

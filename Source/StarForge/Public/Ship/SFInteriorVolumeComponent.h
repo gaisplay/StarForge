@@ -18,6 +18,12 @@ class USFShipFrameComponent;
  * until a new one replaces it, and spec 8's "leaving one is always entering the other"
  * is true to within the thickness of a wall.
  *
+ * For a capsule it needs one more rule, because a capsule is not a point: its edge enters a
+ * volume long before its centre leaves the other, so across the doorway it is inside both.
+ * Leaving the volume of the frame he is bound to while another carrier's volume still holds
+ * him is therefore entering that one (HandleEndOverlap). Without it, a man who stepped into
+ * the hatch and back stayed bound to the station anywhere in his own cabin.
+ *
  * It knows nothing about docking, and must not: an airlock handover and a boarding
  * action are the same event, which is what spec 8 says this mechanism buys.
  *
@@ -87,15 +93,10 @@ private:
 	 */
 	void TryHandover(ASFCharacter* Character);
 
-	/**
-	 * Whether another interior volume of this volume's owner still holds Character in an open refused
-	 * episode. The REFUSED line promises silence "until he leaves <carrier>'s volume", naming the
-	 * carrier and not the box, so a carrier built of several boxes says it once for all of them
-	 * (station-kit spec 6.4, 6.7 item 8).
-	 */
+	/** Whether another interior volume on this volume's owner already holds Character refused. */
 	bool IsRefusedByAnotherVolumeOfThisCarrier(const ASFCharacter* Character) const;
 
-	/** An accepted handover closes the episode on every volume of the owner, not only this one. */
+	/** Closes Character's refused episode on every interior volume of this volume's owner. */
 	void ForgetRefusalOnEveryVolumeOfThisCarrier(const ASFCharacter* Character);
 
 	UFUNCTION()

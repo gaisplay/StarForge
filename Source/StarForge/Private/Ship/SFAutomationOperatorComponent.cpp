@@ -27,11 +27,13 @@ namespace
 	 * what gives the stage's main instrument a target that does not move and has panels to
 	 * stop a shot: the station.
 	 *
-	 * Acted on when the value changes, as sf.BindFrame is, and ignored by an automated hull.
+	 * Acted on when the value changes, as sf.BindFrame is, and ignored by an automated hull. Cleared
+	 * when the world ends (see EndPlay), so it never carries into the next one.
 	 */
 	TAutoConsoleVariable<FString> CVarAimAt(TEXT("sf.AimAt"), TEXT(""),
 		TEXT("station: the gunner's automation tracks the station. ship: another ship, never its own.\n")
-		TEXT("Empty: whatever the rig gave it -- the drone on both measurement rigs. Ignored by an automated hull."),
+		TEXT("Empty: whatever the rig gave it -- the drone on both measurement rigs. Ignored by an automated hull.\n")
+		TEXT("Cleared when the world ends."),
 		ECVF_Default);
 }
 
@@ -142,6 +144,26 @@ void USFAutomationOperatorComponent::BeginPlay()
 	{
 		Gunner->TryOccupy(this);
 	}
+}
+
+void USFAutomationOperatorComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// sf.AimAt is acted on when it differs from LastAimAtCommand, which every new component starts
+	// empty, and the variable outlives the world: left at "station" by one Play-in-Editor session,
+	// RestartLevel or open, it would retarget the next world's gunner on its first tick with nobody
+	// typing anything. So the world takes its value with it. At console priority, because a value
+	// typed at the console holds that priority and one set beneath it is refused; and only when the
+	// world itself ends, not when one hull leaves it. A value typed after this, between sessions, is
+	// a change against the next component's empty start and acts on its first tick, as it should.
+	if (bConsoleControlled
+		&& (EndPlayReason == EEndPlayReason::EndPlayInEditor
+			|| EndPlayReason == EEndPlayReason::LevelTransition
+			|| EndPlayReason == EEndPlayReason::Quit))
+	{
+		CVarAimAt->Set(TEXT(""), ECVF_SetByConsole);
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void USFAutomationOperatorComponent::TickComponent(

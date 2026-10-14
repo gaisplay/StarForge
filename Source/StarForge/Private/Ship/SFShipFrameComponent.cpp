@@ -33,7 +33,14 @@ namespace
 		TEXT("0: both differences divided by the frame, as before 2026-09-27 (the negative control for finding F4; over-reads a kinematic carrier under a variable step)."),
 		ECVF_Default);
 
-	/** F4's one knockdown left on a let-go, felt 20.00 where the release peaks at 17.58, lies outside the estimator's model, and only per-frame figures can say what moved the hull. */
+	/**
+	 * Written for the one knockdown F4's fix left on a let-go, felt 20.00 where the release peaks
+	 * at 17.58, which lay outside the estimator's model. Its per-frame lines found the cause: in
+	 * six uncapped releases of twelve the last eased step was declined by the scene component's
+	 * 1e-4 cm dead band, and the path lost its last deceleration. Closed on 2026-09-28 by
+	 * TeleportDetachedRootExactly and the tick the let-go now waits (SFDockingComponent.cpp).
+	 * Kept for the next figure the model does not explain.
+	 */
 	TAutoConsoleVariable<int32> CVarFeltDebug(
 		TEXT("sf.FeltDebug"), 0,
 		TEXT("1: every tick of every ship's frame, one line with everything the felt acceleration was estimated from -- frame, clock, flags, root, displacement, velocity and its stamp, spacing, acceleration, and the body's own velocity -- so any step can be recomputed by hand.\n")
@@ -251,8 +258,7 @@ void USFShipFrameComponent::TickComponent(
 		// Chaos integrates v += a h and then x += v h, so dx / h is v_n exactly and the
 		// difference of two of those is a_n exactly -- at ANY step, fixed or variable, so
 		// long as physics steps once in the frame, by the frame's own dt. Two things break
-		// that; divided by the frame, the first has knocked a man down and the second is
-		// predicted to:
+		// that, and divided by the frame each has knocked a man down:
 		//  - a kinematic carrier, whose pose is written against accumulated time: the
 		//    docking release and capture. dx / dt is then the frame's MEAN velocity, which
 		//    belongs to the frame's middle, and the difference of two means divided by dt_n
@@ -264,15 +270,26 @@ void USFShipFrameComponent::TickComponent(
 		//  - a frame longer than MaxPhysicsDeltaTime, 1/30 s by default: physics advances
 		//    only h = min(dt, max) (ChaosScene.cpp 344), dx / dt under-reads v by h / dt,
 		//    and the next normal frame reads the recovery as a spike -- at 200 m/s a 40 ms
-		//    frame reads -833 and then +13 333 m/s2. Predicted, never measured; sf.Hitch
-		//    makes the long frame.
+		//    frame among 400 fps ones reads -833 and then +13 333 m/s2. Predicted first,
+		//    then measured with sf.Hitch, which makes the long frame: under sf.FeltTimeBase 0
+		//    one 50 ms stall at 200 m/s cruise, uncapped, read felt 1359.85 m/s2 and knocked
+		//    a standing man down (1355.72 on the repeat, 530.14 at about 80 m/s); on this
+		//    time base the same run reads footing intact
+		//    (evidence/2026-09-27-f4fix-*hitch50-*-uncapped*.log).
 		// So a simulated step is divided by h and stamped at its end, any other by the
 		// frame and stamped at its middle, and the second difference is taken between the
 		// stamps. A step counts as simulated only if the root simulated at both samples: the
-		// frame the release lets go on snaps the hull and switches simulation on in one
-		// pre-physics tick, and its travel is the snap. At a fixed step no longer than the
-		// physics maximum every figure is bit-identical to dividing by the frame except on
-		// the frame or two either side of such a switch; ShipFrameMath.cpp says why.
+		// capture's first step began simulating and its travel is an eased step, and a move
+		// written into the tick that switches simulation on is a teleport. The release let go
+		// that way until 2026-09-28. Since then it writes its last eased pose exactly
+		// (TeleportDetachedRootExactly) and lets go on the next tick (bReleaseArrived in
+		// USFDockingComponent::AdvanceRelease), which moves nothing, so the step that ends
+		// simulating carries only what Chaos integrated from rest in it -- nothing at all in
+		// sf.FeltDebug's record, unless the pilot's demand lands in the same tick (FFrameStep
+		// in ShipFrameMath.h says what that reads) -- and the rule decides only where its
+		// zero is stamped. At a fixed step no longer than the physics maximum every figure is
+		// bit-identical to dividing by the frame except on the frame or two either side of
+		// such a switch; ShipFrameMath.cpp says why.
 		//
 		// One of those frames reads MORE than it did, and it is the capture's first. The
 		// run-in's smoothstep starts from rest whatever the hull was doing, so a capture

@@ -70,6 +70,12 @@ namespace StarForge::Docking
 		Up
 	};
 
+	/**
+	 * The approach between two ports, measured. Nothing in it is refused here: a figure that
+	 * cannot be computed comes back not finite, and CanDock refuses it. That includes the
+	 * angles, which come back NaN for a port rotation that is not finite rather than the zero
+	 * -- nose-on, decks parallel -- that clamping its dot product would make of it.
+	 */
 	STARFORGECORE_API FDockingApproach ComputeDockingApproach(
 		const FTransform& ShipPortWorld,
 		const FTransform& StationPortWorld,

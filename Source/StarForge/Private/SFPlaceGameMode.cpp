@@ -4,7 +4,8 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
-#include "Misc/DefaultValueHelper.h"
+#include "Misc/PackageName.h"
+#include "NumberText.h"
 #include "Place.h"
 #include "Player/SFCharacter.h"
 #include "Player/SFShipboardMovementComponent.h"
@@ -13,7 +14,6 @@
 #include "Ship/SFTestShip.h"
 #include "Ship/SFTestStation.h"
 #include "StarForgeLog.h"
-#include "UObject/ConstructorHelpers.h"
 #include "Units.h"
 #include "World/SFPlaceDataAsset.h"
 
@@ -27,12 +27,13 @@ namespace
 	 * representable float, and at 4.3e10 the gap between neighbouring floats is about 4 km --
 	 * a quarter of the rig place's own radius, in the one figure this whole stage turns on.
 	 * sf.BindFrame and sf.AimAt are the precedent for a string variable; ParseMetres below is the
-	 * parse (FDefaultValueHelper::ParseDouble, never Atod), and what it parsed is printed back.
+	 * parse (StarForge::Parse::TryParseFiniteNumber, never Atod), and what it parsed is printed back.
 	 *
 	 * Read ONCE, when the rig assembles itself, which is before -ExecCmds is applied: set it
 	 * before the level starts, with "-ini:Engine:[ConsoleVariables]:sf.PlaceOffsetM=..." on the
 	 * command line, or in the editor's console before Play. One -ini switch per variable: two
-	 * joined by a comma are not taken.
+	 * joined by a comma are not taken. A change after the measurement is watched for and said
+	 * once, as a warning, because it changes nothing and would otherwise say nothing.
 	 */
 	TAutoConsoleVariable<FString> CVarPlaceOffsetM(TEXT("sf.PlaceOffsetM"), TEXT(""),
 		TEXT("Metres to move the place along +X, on top of the authored origin. Empty: leave it alone.\n")
@@ -77,7 +78,10 @@ namespace
 		constexpr double FallbackRadiusMetres = 18000.0;
 		const FName StationName = TEXT("Station");
 
-		/** Where the asset is looked for, named once so the finder and the warning cannot drift. */
+		/**
+		 * Where the asset is looked for, named once so the lookup and the warning cannot drift: the
+		 * warning prints the package this path names rather than a copy of it.
+		 */
 		const TCHAR* AssetPath = TEXT("/Game/Places/DA_Place_OpenSpace.DA_Place_OpenSpace");
 
 		/** Where sf.PlaceAsset's bare names are looked for. */
@@ -86,13 +90,10 @@ namespace
 		/**
 		 * Reads a metre figure out of a string console variable.
 		 *
-		 * Returns false on empty, which is "no command", and on anything that does not parse to
-		 * a finite number, which is said out loud by the caller. A silent fall-back to the
+		 * Returns false on empty, which is "no command", and on anything that is not a finite
+		 * number written out, which is said out loud by the caller. A silent fall-back to the
 		 * authored value would let a negative control be performed with a typo in it and count
 		 * as having found nothing.
-		 *
-		 * One guard covers infinity and NaN both: FMath::IsFinite tests that the exponent is not
-		 * all ones (GenericPlatformMath.h 587), and a NaN's is.
 		 */
 		bool ParseMetres(const FString& Raw, double& OutMetres)
 		{
@@ -101,35 +102,20 @@ namespace
 				return false;
 			}
 
-			// ParseDouble rather than Atod, and the difference is the whole point of this
-			// function. Atod cannot fail: it answers 0.0 for a string with no number in it at
-			// all and offers no way to tell that apart from a genuine zero, so the first form
-			// of this rig accepted sf.PlaceOffsetM=nonsense, moved the place by zero metres,
-			// and announced "the console changed the place" over a place the console had not
-			// touched. That is worse than passing in silence -- it is a control reporting that
-			// it did the thing it did not do.
+			// The strict reader, and the history of this call is the whole reason. Atod cannot
+			// fail: it answers 0.0 for a string with no number in it at all, so the first form of
+			// this rig accepted sf.PlaceOffsetM=nonsense, moved the place by zero metres, and
+			// announced "the console changed the place" over a place the console had not touched.
+			// That is worse than passing in silence -- it is a control reporting that it did the
+			// thing it did not do.
 			//
-			// ParseDouble validates the entire string through IsStringValidFloat before
-			// converting (DefaultValueHelper.cpp), so "nonsense" and "43abc" are both refused
-			// while "4.3e10" and "-1.5" are taken. Measured on this rig: the junk control now
-			// warns and builds the authored place, where before it warned about nothing.
-			double Parsed = 0.0;
-			if (!FDefaultValueHelper::ParseDouble(Raw, Parsed))
-			{
-				return false;
-			}
-
-			// Still needed after a shape check: "1e999" is a perfectly well-formed number that
-			// converts to infinity. One guard covers infinity and NaN both -- FMath::IsFinite
-			// tests that the exponent is not all ones (GenericPlatformMath.h 587), and a NaN's
-			// is.
-			if (!FMath::IsFinite(Parsed))
-			{
-				return false;
-			}
-
-			OutMetres = Parsed;
-			return true;
+			// FDefaultValueHelper::ParseDouble came next and refused "nonsense", but every part of
+			// its grammar is optional (IsStringValidFloat, DefaultValueHelper.cpp 268-308): "." and
+			// "e10" passed, converted through the same Atod, and sf.PlaceOffsetM=. brought
+			// the same false report of a move of zero metres back (review of 2026-09-23, reproduced
+			// by a run). TryParseFiniteNumber needs a digit in the mantissa and in any exponent and
+			// refuses an overflow to infinity, so "4.3e10" and "-1.5" are taken and those warn.
+			return StarForge::Parse::TryParseFiniteNumber(Raw, OutMetres);
 		}
 	}
 }
@@ -138,17 +124,6 @@ ASFPlaceGameMode::ASFPlaceGameMode()
 {
 	DefaultPawnClass = ASFCharacter::StaticClass();
 	HUDClass = ASFFrameDriftHUD::StaticClass();
-
-	// By path and guarded, exactly as ASFTestShip resolves DA_TestShip, and for the same two
-	// reasons: the map is empty so there is no placed actor to author this on, and the asset
-	// does not exist the first time this file compiles. An unresolved finder leaves PlaceData
-	// null, which InitGame reports in a warning and answers with a place written in code.
-	static ConstructorHelpers::FObjectFinder<USFPlaceDataAsset> PlaceAsset(PlaceRig::AssetPath);
-
-	if (PlaceAsset.Succeeded())
-	{
-		PlaceData = PlaceAsset.Object;
-	}
 }
 
 void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
@@ -172,6 +147,15 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 	PlaceOriginMetres = FVector::ZeroVector;
 	PlaceRadiusMetres = PlaceRig::FallbackRadiusMetres;
 	PlaceCarriers.Reset();
+
+	// By path and guarded, for ASFTestShip's two reasons -- the map is empty, so there is no placed
+	// actor to author this on, and the asset may not exist -- but here, on every InitGame, and not
+	// through a static ConstructorHelpers finder in the constructor. That finder ran once per
+	// process, when the class default object was built, so an editor started before the asset
+	// existed went on building the place written in code, under the warning below that there was no
+	// asset, in every Play until it was restarted. NoWarn because the miss is this rig's line to say.
+	// sf.PlaceAsset, below, replaces it when it names another asset.
+	PlaceData = LoadObject<USFPlaceDataAsset>(nullptr, PlaceRig::AssetPath, nullptr, LOAD_NoWarn);
 
 	PlaceShipStart = FSFShipStart();
 	AssetRefusal.Reset();
@@ -244,15 +228,17 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 		PlaceCarriers.Add(Station);
 
 		UE_LOG(LogStarForge, Warning,
-			TEXT("Place rig: no place asset at /Game/Places/DA_Place_OpenSpace, so a place written ")
+			TEXT("Place rig: no place asset at %s, so a place written ")
 			TEXT("in code was used instead. Its figures are the asset's; the size line below is what ")
-			TEXT("the two have to agree on."));
+			TEXT("the two have to agree on."),
+			*FPackageName::ObjectPathToPackageName(FString(PlaceRig::AssetPath)));
 	}
 
 	FString OverrideText;
 
 	double OffsetM = 0.0;
 	const FString OffsetRaw = CVarPlaceOffsetM.GetValueOnGameThread();
+	OffsetRawAtMeasure = OffsetRaw;
 	if (!OffsetRaw.IsEmpty())
 	{
 		if (PlaceRig::ParseMetres(OffsetRaw, OffsetM))
@@ -273,6 +259,7 @@ void ASFPlaceGameMode::InitGame(const FString& MapName, const FString& Options, 
 
 	double OverrideRadiusM = 0.0;
 	const FString RadiusRaw = CVarPlaceRadiusM.GetValueOnGameThread();
+	RadiusRawAtMeasure = RadiusRaw;
 	if (!RadiusRaw.IsEmpty())
 	{
 		if (PlaceRig::ParseMetres(RadiusRaw, OverrideRadiusM))
@@ -364,6 +351,11 @@ void ASFPlaceGameMode::StartPlay()
 	bool bProfileOff = false;
 	if (IConsoleVariable* Profile = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile")))
 	{
+		// Kept for EndPlay, which puts it back: see SFLoopGameMode.cpp for why a 0 left behind
+		// stops the spike rig's manoeuvre in every later session of the same editor.
+		ProfileBeforeRig = Profile->GetInt();
+		bRestoreProfile = true;
+
 		Profile->Set(0);
 
 		const int32 Held = Profile->GetInt();
@@ -439,6 +431,15 @@ void ASFPlaceGameMode::StartPlay()
 
 			SpawnedCarriers.Add(Spawned);
 
+			// The name the actor GOT, which is the one every later line about it carries -- the
+			// handover line above all. Requested mode hands out another when the asked-for name is
+			// taken or none was asked for, and a line naming the request would then describe an
+			// actor nobody else's line mentions. The request is added only when the two differ.
+			const FString SpawnedName = Spawned->GetName();
+			const FString AskedText = (Spawned->GetFName() == Carrier.CarrierName)
+				? FString()
+				: FString::Printf(TEXT(" (asked for '%s')"), *Carrier.CarrierName.ToString());
+
 			// What actually makes an actor a carrier is the frame facade: it is what answers
 			// "where is this frame" and what the carry composes against. An actor without one
 			// looks like a carrier on screen and is not one, and the only other way to find out
@@ -449,13 +450,13 @@ void ASFPlaceGameMode::StartPlay()
 				UE_LOG(LogStarForge, Warning,
 					TEXT("Place carrier: '%s' of class %s has no USFShipFrameComponent, so nobody ")
 					TEXT("can stand in its frame."),
-					*Carrier.CarrierName.ToString(), *Carrier.CarrierClass->GetName());
+					*SpawnedName, *Carrier.CarrierClass->GetName());
 			}
 
 			UE_LOG(LogStarForge, Display,
-				TEXT("Place carrier: '%s' of class %s in place '%s' at place-local (%.1f %.1f %.1f) m, ")
+				TEXT("Place carrier: '%s'%s of class %s in place '%s' at place-local (%.1f %.1f %.1f) m, ")
 				TEXT("world (%.6e %.6e %.6e) cm, frame %s -- motionless (%s)."),
-				*Carrier.CarrierName.ToString(), *Carrier.CarrierClass->GetName(),
+				*SpawnedName, *AskedText, *Carrier.CarrierClass->GetName(),
 				*PlaceName.ToString(),
 				Carrier.LocationInPlaceMetres.X, Carrier.LocationInPlaceMetres.Y, Carrier.LocationInPlaceMetres.Z,
 				WorldCm.X, WorldCm.Y, WorldCm.Z,
@@ -522,6 +523,15 @@ void ASFPlaceGameMode::StartPlay()
 	}
 
 	Super::StartPlay();
+
+	// Watched from here, on a refused place as on one that fits -- a radius typed mid-run to rescue
+	// a refusal is the likeliest change of all -- and from here because this mode has now begun
+	// play, so EndPlay is certain to take the watch off (AActor::RouteEndPlay calls EndPlay only on
+	// an actor that has begun).
+	OffsetChangedHandle = CVarPlaceOffsetM.AsVariable()->OnChangedDelegate().AddUObject(
+		this, &ASFPlaceGameMode::OnPlaceVariableChanged);
+	RadiusChangedHandle = CVarPlaceRadiusM.AsVariable()->OnChangedDelegate().AddUObject(
+		this, &ASFPlaceGameMode::OnPlaceVariableChanged);
 
 	if (!bPlaceFits)
 	{
@@ -685,4 +695,58 @@ void ASFPlaceGameMode::StartPlay()
 	{
 		UE_LOG(LogStarForge, Display, TEXT("%s"), *Report);
 	}
+}
+
+void ASFPlaceGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	CVarPlaceOffsetM.AsVariable()->OnChangedDelegate().Remove(OffsetChangedHandle);
+	CVarPlaceRadiusM.AsVariable()->OnChangedDelegate().Remove(RadiusChangedHandle);
+	OffsetChangedHandle.Reset();
+	RadiusChangedHandle.Reset();
+
+	// At SetByCode, and only while nothing stronger holds the variable, for the reasons
+	// SFLoopGameMode.cpp's EndPlay gives. No line.
+	if (bRestoreProfile)
+	{
+		IConsoleVariable* Profile = IConsoleManager::Get().FindConsoleVariable(TEXT("sf.ShipProfile"));
+		if (Profile && ((uint32)Profile->GetFlags() & ECVF_SetByMask) <= (uint32)ECVF_SetByCode)
+		{
+			Profile->Set(ProfileBeforeRig, ECVF_SetByCode);
+		}
+		bRestoreProfile = false;
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+StarForge::Place::EPlaceRefusal ASFPlaceGameMode::GetPlaceRefusal() const
+{
+	return (bPlaceMeasured && !bPlaceFits) ? PlaceFit.Refusal : StarForge::Place::EPlaceRefusal::None;
+}
+
+void ASFPlaceGameMode::OnPlaceVariableChanged(IConsoleVariable* Variable)
+{
+	const bool bOffset = (Variable == CVarPlaceOffsetM.AsVariable());
+	if (!bOffset && Variable != CVarPlaceRadiusM.AsVariable())
+	{
+		return;
+	}
+
+	// The delegate fires on every Set, the same value included, and a value the place was measured
+	// with is not one it ignored. Said once per variable per world: the point is that the switch did
+	// nothing, and one line makes it.
+	bool& bReported = bOffset ? bOffsetChangeReported : bRadiusChangeReported;
+	const FString& AtMeasure = bOffset ? OffsetRawAtMeasure : RadiusRawAtMeasure;
+	const FString Now = Variable->GetString();
+	if (bReported || Now == AtMeasure)
+	{
+		return;
+	}
+	bReported = true;
+
+	UE_LOG(LogStarForge, Warning,
+		TEXT("Place rig: %s changed to '%s' after the place was measured with '%s' -- it is read once, ")
+		TEXT("before the local player logs in, so this world stays the place the size line describes ")
+		TEXT("until the level restarts."),
+		bOffset ? TEXT("sf.PlaceOffsetM") : TEXT("sf.PlaceRadiusM"), *Now, *AtMeasure);
 }

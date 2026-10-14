@@ -161,22 +161,26 @@ void USFInteriorVolumeComponent::TryHandover(ASFCharacter* Character)
 			// episode and is said again. The retry runs every tick in between, silently.
 			if (!RefusedOccupants.ContainsByPredicate(IsCharacter))
 			{
+				// The episode belongs to the carrier, not to one of its boxes: the station is a room
+				// and a tunnel, and a man refused at the tunnel mouth who walks on into the room is
+				// still the same refusal. Joined silently, so this box retries him too.
+				const bool bEpisodeOpen = IsRefusedByAnotherVolumeOfThisCarrier(Character);
+
 				RefusedOccupants.Add(Character);
 				SetComponentTickEnabled(true);
 
-				// One episode per carrier: a man refused in the tunnel and walking on into the room has
-				// not left the station's volume, and the line below promised silence until he does.
-				// Added to this box's list all the same, so the retry every tick goes on as before.
-				if (!IsRefusedByAnotherVolumeOfThisCarrier(Character))
+				if (bEpisodeOpen)
 				{
-					const FString FromName = From->GetOwner() ? From->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
-					const FString ToName = To->GetOwner() ? To->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
-					UE_LOG(LogStarForge, Warning,
-						TEXT("Frame handover REFUSED: %s -> %s, the two carriers move %.2f m/s relative to each other where he ")
-						TEXT("stands, over the %.1f m/s limit. He stays bound to %s; said once until he leaves %s's volume or the ")
-						TEXT("two come within the limit."),
-						*FromName, *ToName, RelativeSpeed, InteriorHandover::MaxRelativeSpeedMetresPerSec, *FromName, *ToName);
+					return;
 				}
+
+				const FString FromName = From->GetOwner() ? From->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
+				const FString ToName = To->GetOwner() ? To->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
+				UE_LOG(LogStarForge, Warning,
+					TEXT("Frame handover REFUSED: %s -> %s, the two carriers move %.2f m/s relative to each other where he ")
+					TEXT("stands, over the %.1f m/s limit. He stays bound to %s; said once until he leaves %s's volume or the ")
+					TEXT("two come within the limit."),
+					*FromName, *ToName, RelativeSpeed, InteriorHandover::MaxRelativeSpeedMetresPerSec, *FromName, *ToName);
 			}
 			return;
 		}
@@ -184,6 +188,43 @@ void USFInteriorVolumeComponent::TryHandover(ASFCharacter* Character)
 
 	ForgetRefusalOnEveryVolumeOfThisCarrier(Character);
 	Character->BindFrame(To);
+}
+
+bool USFInteriorVolumeComponent::IsRefusedByAnotherVolumeOfThisCarrier(const ASFCharacter* Character) const
+{
+	const AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return false;
+	}
+
+	TInlineComponentArray<USFInteriorVolumeComponent*> Volumes(Owner);
+	for (const USFInteriorVolumeComponent* Volume : Volumes)
+	{
+		if (Volume != this && Volume->RefusedOccupants.ContainsByPredicate(
+			[Character](const TWeakObjectPtr<ASFCharacter>& Entry) { return Entry.Get() == Character; }))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void USFInteriorVolumeComponent::ForgetRefusalOnEveryVolumeOfThisCarrier(const ASFCharacter* Character)
+{
+	const auto IsCharacter = [Character](const TWeakObjectPtr<ASFCharacter>& Entry) { return Entry.Get() == Character; };
+
+	// Every box of the carrier, this one included: a box still holding him would go on retrying a
+	// handover that has gone through.
+	if (const AActor* Owner = GetOwner())
+	{
+		TInlineComponentArray<USFInteriorVolumeComponent*> Volumes(Owner);
+		for (USFInteriorVolumeComponent* Volume : Volumes)
+		{
+			Volume->RefusedOccupants.RemoveAll(IsCharacter);
+		}
+	}
+	RefusedOccupants.RemoveAll(IsCharacter);
 }
 
 void USFInteriorVolumeComponent::TickComponent(
@@ -242,38 +283,37 @@ void USFInteriorVolumeComponent::HandleEndOverlap(
 	UPrimitiveComponent* OtherComp,
 	int32 OtherBodyIndex)
 {
-	// Leaving still does not unbind (see the class comment). It only closes a refused episode.
+	// Leaving does not unbind (see the class comment). It closes a refused episode.
 	RefusedOccupants.RemoveAll([OtherActor](const TWeakObjectPtr<ASFCharacter>& Entry)
 	{
 		return !Entry.IsValid() || Entry.Get() == OtherActor;
 	});
-}
 
-bool USFInteriorVolumeComponent::IsRefusedByAnotherVolumeOfThisCarrier(const ASFCharacter* Character) const
-{
-	TInlineComponentArray<USFInteriorVolumeComponent*> Volumes(GetOwner());
-	for (const USFInteriorVolumeComponent* Volume : Volumes)
+	// And leaving the volume of the frame he is bound to, while another carrier's volume still
+	// holds him, is entering that one. Binding happens when the EDGE of his capsule touches a
+	// volume, and docked, the two volumes are 10 cm apart against a 34 cm radius: his capsule is in
+	// both across a 58 cm band of the doorway. Walking out he is bound to the station at its near
+	// edge; turning back anywhere inside the band he never leaves the ship's volume, so no entry
+	// rebinds him, and he stayed the station's in his own cabin -- not carried by the ship, E
+	// unable to find the pilot's seat, and since the F3 release, dropped by the next undock.
+	// Through TryHandover, so the speed gate holds here as on entry.
+	ASFCharacter* Character = Cast<ASFCharacter>(OtherActor);
+	const USFShipboardMovementComponent* Movement = Character ? Character->GetShipboardMovement() : nullptr;
+	const USFShipFrameComponent* Mine = GetOwnerFrame();
+	if (!Movement || !Mine || Movement->GetShipFrame() != Mine || IsOverlappingActor(Character))
 	{
-		if (Volume && Volume != this && Volume->RefusedOccupants.ContainsByPredicate(
-			[Character](const TWeakObjectPtr<ASFCharacter>& Entry) { return Entry.Get() == Character; }))
-		{
-			return true;
-		}
+		return;
 	}
-	return false;
-}
 
-void USFInteriorVolumeComponent::ForgetRefusalOnEveryVolumeOfThisCarrier(const ASFCharacter* Character)
-{
-	// Every box, or a neighbour would go on retrying a handover that has already happened. Their
-	// ticks switch themselves off on the next pass once their lists are empty.
-	TInlineComponentArray<USFInteriorVolumeComponent*> Volumes(GetOwner());
-	for (USFInteriorVolumeComponent* Volume : Volumes)
+	TArray<UPrimitiveComponent*> Overlapping;
+	Character->GetOverlappingComponents(Overlapping);
+	for (UPrimitiveComponent* Component : Overlapping)
 	{
-		if (Volume)
+		USFInteriorVolumeComponent* Other = Cast<USFInteriorVolumeComponent>(Component);
+		if (Other && Other != this && Other->GetOwnerFrame() && Other->GetOwnerFrame() != Mine)
 		{
-			Volume->RefusedOccupants.RemoveAll(
-				[Character](const TWeakObjectPtr<ASFCharacter>& Entry) { return Entry.Get() == Character; });
+			Other->TryHandover(Character);
+			return;
 		}
 	}
 }

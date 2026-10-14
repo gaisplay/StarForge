@@ -77,11 +77,15 @@ bool FTurretBearingPitchIsElevationTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("and carries no yaw"), FMath::IsNearlyZero(Bearing.YawRad, 1e-6));
 
 	// Straight up is ninety, and yaw is then undefined but must not be garbage: atan2
-	// of (0, 0) is zero, which is what a barrel pointing up would sensibly keep.
+	// of (0, 0) is zero, which is what a barrel pointing up would sensibly keep. The yaw
+	// starts on a sentinel, so a bearing that left it alone cannot pass for one that wrote
+	// the zero.
+	Bearing.YawRad = 1.23;
 	TestTrue(TEXT("found"), StarForge::Turret::ComputeBearing(
 		FTransform::Identity, FVector(0.0, 0.0, 100.0), Bearing));
 	TestTrue(TEXT("straight up is ninety degrees of pitch"),
 		FMath::IsNearlyEqual(Bearing.PitchRad, 90.0 * Deg, 1e-9));
+	TestTrue(TEXT("and zero yaw, not garbage"), Bearing.YawRad == 0.0);
 
 	return true;
 }
@@ -179,6 +183,27 @@ bool FTurretStepIsRateLimitedTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("yaw moves a degree and a half"), FMath::IsNearlyEqual(Step.Aim.YawRad, 1.5 * Deg, 1e-9));
 	TestTrue(TEXT("pitch moves a degree and a half"), FMath::IsNearlyEqual(Step.Aim.PitchRad, 1.5 * Deg, 1e-9));
 	TestTrue(TEXT("and it is still slewing"), Step.State == StarForge::Turret::EAimState::Slewing);
+
+	// The rate is per second, not per frame, and at a sixtieth of a second the two are one
+	// number: a step of Rate / 60 passes everything above. At 400 fps the same second is
+	// 400 steps of 0.225 degrees, where a per-frame step would traverse at 600 deg/s.
+	const StarForge::Turret::FAimStep Fast =
+		StarForge::Turret::StepAim(Current, Bearing, MakeLimits(), 1.0 / 400.0);
+	TestTrue(TEXT("at 1/400 s yaw moves 0.225 degrees"), FMath::IsNearlyEqual(Fast.Aim.YawRad, 0.225 * Deg, 1e-9));
+	TestTrue(TEXT("and so does pitch"), FMath::IsNearlyEqual(Fast.Aim.PitchRad, 0.225 * Deg, 1e-9));
+
+	// And the other way: every bearing above lies up and to the right, so yaw and pitch were
+	// only ever asked to increase. A step clamped to [0, MaxStep] instead of
+	// [-MaxStep, MaxStep] would never bring the barrel back.
+	StarForge::Turret::FTurretAim DownLeft;
+	DownLeft.YawRad = -45.0 * Deg;
+	DownLeft.PitchRad = -20.0 * Deg;
+	const StarForge::Turret::FAimStep Back =
+		StarForge::Turret::StepAim(Current, DownLeft, MakeLimits(), Frame);
+	TestTrue(TEXT("toward a bearing on the left yaw moves -1.5 degrees"),
+		FMath::IsNearlyEqual(Back.Aim.YawRad, -1.5 * Deg, 1e-9));
+	TestTrue(TEXT("and toward one below pitch moves -1.5 degrees"),
+		FMath::IsNearlyEqual(Back.Aim.PitchRad, -1.5 * Deg, 1e-9));
 
 	return true;
 }
@@ -319,6 +344,41 @@ bool FTurretStepAtTheStopIsNotOnTargetTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("and says it cannot bear, not that it is on target"),
 		Step.State == StarForge::Turret::EAimState::CannotBear);
 
+	// The same on the left, which is where half the arc's stops are. The yaw test is on the
+	// bearing's magnitude: without the absolute value, -130 is under +120, the target reads
+	// as bearable, and the barrel parked on the -120 stop ten degrees off reports Slewing for
+	// ever instead. And the stop is a stop from both sides, which StepAim makes twice: it clamps
+	// the goal to the stops and then the result. Either lower bound alone holds the barrel at
+	// -120 here -- with the goal clamped only from above the step aims at -121.5 and the result's
+	// clamp pulls it back -- so this assertion fails only when both are gone.
+	StarForge::Turret::FTurretAim LeftStop;
+	LeftStop.YawRad = -120.0 * Deg;
+	StarForge::Turret::FTurretAim LeftBearing;
+	LeftBearing.YawRad = -130.0 * Deg;
+
+	const StarForge::Turret::FAimStep Left =
+		StarForge::Turret::StepAim(LeftStop, LeftBearing, MakeLimits(), Frame);
+
+	TestTrue(TEXT("the barrel stays on the -120 stop"), FMath::IsNearlyEqual(Left.Aim.YawRad, -120.0 * Deg, 1e-9));
+	TestTrue(TEXT("and a target at -130 cannot be borne either"),
+		Left.State == StarForge::Turret::EAimState::CannotBear);
+
+	// And above the pitch ceiling, a pirate overhead at +70 against the +60 stop: one degree
+	// from the stop, a step of 1.5 has to end on it and not past it, and the state has to say
+	// the target is out of reach rather than that the barrel is still on its way. Every other
+	// out-of-reach pitch here is below the floor.
+	StarForge::Turret::FTurretAim NearCeiling;
+	NearCeiling.PitchRad = 59.0 * Deg;
+	StarForge::Turret::FTurretAim Overhead;
+	Overhead.PitchRad = 70.0 * Deg;
+
+	const StarForge::Turret::FAimStep Up =
+		StarForge::Turret::StepAim(NearCeiling, Overhead, MakeLimits(), Frame);
+
+	TestTrue(TEXT("the barrel stops on the +60 stop, not past it"), FMath::IsNearlyEqual(Up.Aim.PitchRad, 60.0 * Deg, 1e-9));
+	TestTrue(TEXT("and a target above the ceiling cannot be borne"),
+		Up.State == StarForge::Turret::EAimState::CannotBear);
+
 	return true;
 }
 
@@ -398,6 +458,33 @@ bool FTurretStepYawTakesTheLongWayRoundThroughZeroTest::RunTest(const FString& P
 		FMath::IsNearlyEqual(Step.Aim.YawRad, 179.0 * Deg, 1e-9));
 	TestTrue(TEXT("and reports on target rather than stuck against a stop"),
 		Step.State == StarForge::Turret::EAimState::OnTarget);
+
+	// The same turn takes the same time at 400 fps, and the time is what is asserted: a
+	// count of frames is a frame rate. The state turns OnTarget on the first step that ends
+	// within the half-degree tolerance, 357.5 degrees out, so after 357.5 / 90 = 3.972 s of
+	// summed steps and before one more step has passed -- 239 frames at 60 fps (3.983 s), 1589
+	// at 400 (3.9725 s). A traverse counted per frame would arrive in 0.6 s at 400.
+	const double TimeToTolerance = (358.0 - 0.5) / 90.0;
+	for (const double StepSeconds : { 1.0 / 60.0, 1.0 / 400.0 })
+	{
+		StarForge::Turret::FAimStep Turn;
+		Turn.Aim.YawRad = -179.0 * Deg;
+		double Elapsed = 0.0;
+		int32 Steps = 0;
+		do
+		{
+			Turn = StarForge::Turret::StepAim(Turn.Aim, Bearing, Limits, StepSeconds);
+			Elapsed += StepSeconds;
+			++Steps;
+		}
+		while (Turn.State != StarForge::Turret::EAimState::OnTarget && Steps < 10000);
+
+		TestTrue(FString::Printf(TEXT("at 1/%.0f s the long way round is on target after %.4f s, not sooner than %.4f"),
+				1.0 / StepSeconds, Elapsed, TimeToTolerance),
+			Elapsed >= TimeToTolerance - 1e-9);
+		TestTrue(FString::Printf(TEXT("and within one step of it (%d steps)"), Steps),
+			Elapsed < TimeToTolerance + StepSeconds);
+	}
 
 	return true;
 }

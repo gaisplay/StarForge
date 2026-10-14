@@ -35,7 +35,7 @@ namespace StarForge
 	/** The envelope the assist holds the ship inside. */
 	struct STARFORGECORE_API FFlightLimits
 	{
-		/** Metres per second. */
+		/** Metres per second, the length of the velocity the assist may ask for -- not a limit per axis. */
 		double MaxSpeed = 200.0;
 
 		/**
@@ -69,9 +69,12 @@ namespace StarForge
 	/**
 	 * Turns an intent into the force and torque the thrusters should be asked for.
 	 *
-	 * The torque includes Euler gyroscopic term, omega cross I omega. It is what
-	 * makes a heavy ship feel heavy: without it, holding an established spin costs
-	 * nothing and every hull turns like a fighter.
+	 * The torque includes Euler's gyroscopic term, omega cross I omega: a body spinning
+	 * about anything but a principal axis needs that torque to keep its spin, and the
+	 * controller supplies it so the assist tracks the rate it was asked for. It is right
+	 * only on a plant that has Euler dynamics, which is why ASFTestShip turns Chaos's
+	 * gyroscopic integration on; without it the term is a disturbance, and an elongated
+	 * hull asked for full roll and pitch settled at 180 / 76 / 58 deg/s.
 	 *
 	 * ArrayCapability is what the stick is a fraction of when assist is off, so it
 	 * must be what the array can actually deliver on each axis: the allocator's

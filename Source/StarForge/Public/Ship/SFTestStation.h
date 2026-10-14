@@ -20,11 +20,12 @@ class USFShipFrameComponent;
  * project for the sake of a word, and the component's contract -- "where is this frame,
  * and how do I convert into it" -- is exactly as true here. Spec 8 says so explicitly.
  *
- * No physics body of any kind. The frame component derives velocity and acceleration as
- * differences of its owner's transform precisely so that an owner which is not a rigid
- * body is still a full reference frame: the knockdown of spec 6 works on the station
- * through the same code, and reads zero, because a station that does not move cannot
- * knock anyone off his feet.
+ * No simulating body. Since F1 its panels are physics colliders, so a hull stops at its walls,
+ * but each is its own kinematic collider and nothing on it moves under physics. The frame
+ * component derives velocity and acceleration as differences of its owner's transform
+ * precisely so that an owner which is not a rigid body is still a full reference frame: the
+ * knockdown of spec 6 works on the station through the same code, and reads zero, because a
+ * station that does not move cannot knock anyone off his feet.
  *
  * Assembled in the constructor from engine cubes for the same reason the ship is: the
  * loop map is empty by design and the game mode spawns this from StaticClass(), so
@@ -78,6 +79,7 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFDockingPortComponent> DockingPort;
 
+	/** The room, out to the walls' inner faces. Whoever walks in rides the station. */
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USFInteriorVolumeComponent> Interior;
 

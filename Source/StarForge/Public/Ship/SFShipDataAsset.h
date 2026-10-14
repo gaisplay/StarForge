@@ -31,7 +31,11 @@ struct STARFORGE_API FSFThrusterSpec
 	UPROPERTY(EditAnywhere, Category = "Thruster")
 	double MaxThrustNewtons = 0.0;
 
-	/** Seconds to spool from zero to full. */
+	/**
+	 * The time constant of the spool's first-order lag, seconds: a throttle stepped from zero
+	 * reaches 63% of full after one ResponseTimeSeconds and 99.9% only after about 6.9 of them,
+	 * so it is not a time to full.
+	 */
 	UPROPERTY(EditAnywhere, Category = "Thruster")
 	double ResponseTimeSeconds = 0.05;
 };
@@ -65,7 +69,13 @@ public:
 	UPROPERTY(EditAnywhere, Category = "StarForge|Limits")
 	double MaxSpeed = 200.0;
 
-	/** Boost ceiling from spec 7, metres per second. Consumed by plan 2b. */
+	/**
+	 * Boost ceiling from spec 7, metres per second. Nothing reads it: FFlightLimits has no boost
+	 * and BuildLimits copies MaxSpeed alone, so no stick can ask for more than MaxSpeed, and
+	 * changing this in an asset changes nothing in flight. Kept because it is the spec's figure.
+	 * The one 400 m/s anything flies is the scripted profile's, ASFTestShip::PeakSpeedCms, a
+	 * literal of its own.
+	 */
 	UPROPERTY(EditAnywhere, Category = "StarForge|Limits")
 	double BoostSpeed = 400.0;
 

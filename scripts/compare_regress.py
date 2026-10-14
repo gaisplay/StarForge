@@ -13,9 +13,13 @@ not move a single verdict. This compares the two passes' own logs instead:
   - a replay that VARIES in either pass: its red counters must be equal between the passes, except
     a counter that differs between .now and .again inside one pass, which is protocol;
   - INVALID in either pass: the replay did not happen, and that replay is taken again;
+  - a command run at a variable step, which regress_evidence.py replays twice and judges on its red
+    counters against every good log of it (since the 2026-10-01 review): STEADY in both passes. Its
+    lines do not repeat from one run to the next, so they are not compared;
   - every claim reads HOLDS in both passes;
   - a command present only in the later pass (its log was laid in evidence after the base) is judged
-    by its own verdict: SAME, or VARIES with the red counters of its baseline unchanged;
+    by its own verdict: SAME, or VARIES with the red counters of its baseline unchanged, or STEADY at
+    a variable step;
   - a command present only in the base is a finding: a baseline has left the evidence folder.
 
 Exit code 0 when every rule holds and 1 when any does not. The report goes to stdout and to
@@ -115,6 +119,13 @@ def compare(base_dir, run_dir):
             findings.append(f"MISSING FROM RUN: {b['baseline']} -- a baseline left the evidence folder")
             continue
         tag = r["baseline"]
+        if "variable" in (r.get("step"), (b or {}).get("step")):
+            if b is None and r["verdict"] == "STEADY":
+                notes.append(f"new in run, STEADY at a variable step: {tag}")
+            elif b is None or b["verdict"] != "STEADY" or r["verdict"] != "STEADY":
+                findings.append(f"VARIABLE {tag}: base {b['verdict'] if b else 'absent'}, run {r['verdict']}; "
+                                f"rose {r.get('rose')}, fell {r.get('fell')}")
+            continue
         if b is None:
             if r["verdict"] == "SAME":
                 notes.append(f"new in run, SAME: {tag}")

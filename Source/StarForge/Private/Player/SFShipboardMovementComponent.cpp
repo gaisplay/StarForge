@@ -127,19 +127,55 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 		bHandoverPending = true;
 	}
 
+	// A gap still open when the binding ends is banked here, by the same count DetectCarryGap
+	// takes. That function banks a gap only when the carry resumes, and a binding ends one for
+	// good: a man off his carrier who drifts into another's volume is bound on the overlap,
+	// base or no base, and a hull destroyed after he came off it is released through here.
+	// Either way the gap left no trace -- the open-gap warnings stopped, CARRY SKIPPED never
+	// appeared, and the interval line below read NO FOOTING or FRAME LOST for a carry that had
+	// failed. An ordinary handover comes at most one tick after the last carry, so its gap is
+	// zero and nothing moves.
+	if (bHasCarriedOnce && OwnTickCount > LastCarryTick + 1)
+	{
+		const int64 Skipped = static_cast<int64>(OwnTickCount - LastCarryTick - 1);
+		SkippedCarryFrames += Skipped;
+		TotalSkippedCarryFrames += Skipped;
+	}
+
+	// The interval this binding ends is logged while its own figures are still in place.
+	// It used to be logged after the resets below, so the line describing the old frame's
+	// interval always read "skipped carries 0" and could never say CARRY FAILED -- about an
+	// interval whose periodic lines had said exactly that.
+	RestartMeasurementInterval();
+
 	ShipFrame = NewFrame;
+	bBoundToFrame = NewFrame != nullptr;
+	BoundFrameName = (NewFrame && NewFrame->GetOwner()) ? NewFrame->GetOwner()->GetActorNameOrLabel() : FString();
 
 	if (NewFrame)
 	{
+		// The view is stored against the pose below and goes with it: re-expressed in the new
+		// carrier's frame before that pose is replaced, so a binding changes what carries the
+		// view and not where he is looking.
+		if (AController* Controller = GetOwnerController())
+		{
+			SyncViewFromController(*Controller);
+		}
+		ReexpressView(NewFrame->GetFrameTransform());
+
 		LastFrameTransform = NewFrame->GetFrameTransform();
+		LostFrameName.Reset();
 	}
 
 	SecondsSinceCommandedInput = 0.0;
 	bBaselineValid = false;
 
-	LastCarryFrame = 0;
+	LastCarryTick = 0;
 	SkippedCarryFrames = 0;
 	bHasCarriedOnce = false;
+	SecondsBoundUncarried = 0.0;
+	bNeverCarriedReported = false;
+	SecondsSinceGapLog = 0.0;
 
 	// A new frame is a new footing. The flag is the one that keeps the base through a
 	// knockdown, and it must not outlive the knockdown it was set for.
@@ -149,8 +185,9 @@ void USFShipboardMovementComponent::SetShipFrame(USFShipFrameComponent* NewFrame
 	PushMetersPerSecSq = FVector::ZeroVector;
 	CurrentKnockdownSeconds = 0.0;
 	LastFootingFrame = TNumericLimits<uint64>::Max();
-
-	RestartMeasurementInterval();
+	bLastDecisionKnockdownOff = false;
+	bLastDecisionStrappedIn = false;
+	bLastDecisionNoBase = false;
 
 	// The latched result belongs to whichever frame produced it. Binding to a new
 	// (or the same) frame invalidates it, and this is the only place that does --
@@ -187,7 +224,25 @@ int64 USFShipboardMovementComponent::GetFramesSinceLastCarry() const
 		return 0;
 	}
 
-	return static_cast<int64>(GFrameCounter) - static_cast<int64>(LastCarryFrame);
+	return static_cast<int64>(OwnTickCount) - static_cast<int64>(LastCarryTick);
+}
+
+bool USFShipboardMovementComponent::IsCarryNotRunning() const
+{
+	// The HUD's threshold and the log's, for the same reason: one tick is tick order, two is
+	// a gap.
+	if (GetFramesSinceLastCarry() > 1)
+	{
+		return true;
+	}
+
+	return ShipFrame.IsValid() && !bHasCarriedOnce
+		&& SecondsBoundUncarried >= NeverCarriedThresholdSeconds;
+}
+
+bool USFShipboardMovementComponent::HasNoFloor() const
+{
+	return ShipFrame.IsValid() && GetMovementBaseObject() == nullptr;
 }
 
 FVector USFShipboardMovementComponent::GetLocalLocation() const
@@ -210,7 +265,7 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 
 	if (CVarDriftDebug.GetValueOnGameThread() != 0)
 	{
-		LogDiagnostics(DeltaSeconds);
+		LogDiagnostics(DeltaSeconds, /*bFromCarry=*/true);
 	}
 
 	DetectCarryGap();
@@ -223,12 +278,21 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 	// calling this function at all -- taking the carry and the whole measurement with
 	// it. Pointing gravity along the ship's own down is what the spec's grav plates
 	// mean in engine terms. Gated on sf.ShipGravity so the rig can be run as a
-	// negative control: with it off, gravity is left at world down and the deck
+	// negative control: with it off, gravity is put back at world down and the deck
 	// detaches the occupant on its own, proving the drift gauge can report a
 	// failure and is not just an instrument that has only ever read zero.
+	//
+	// Put back, not left alone. Left alone, a 0 typed mid-run froze gravity at whatever the
+	// ship's down was on the last frame at 1 -- horizontal with the hull rolled 90 degrees --
+	// and the control ran on a gravity nobody had asked for, detaching him at a time that
+	// depended on when it was typed.
 	if (CVarShipGravity.GetValueOnGameThread() != 0)
 	{
 		SetGravityDirection(-ShipFrame->GetFrameTransform().GetUnitAxis(EAxis::Z));
+	}
+	else
+	{
+		SetGravityDirection(FVector::DownVector);
 	}
 
 	CarryWithFrame();
@@ -239,44 +303,45 @@ void USFShipboardMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 	UpdateDriftMeasurement(DeltaSeconds);
 }
 
-void USFShipboardMovementComponent::LogDiagnostics(float DeltaSeconds)
+void USFShipboardMovementComponent::LogDiagnostics(float DeltaSeconds, bool bFromCarry)
 {
-	// Calls per engine frame. UpdateDriftMeasurement adds DeltaSeconds once per
-	// call, so if this is ever above one the measured clock runs fast by exactly
-	// that factor and every duration on the results form is wrong by it.
+	// Calls per engine frame. The carry runs once a frame on a base that is not simulating
+	// and twice on one that is, and the drift clock is guarded against the second call; if
+	// that guard ever goes, this is where the doubling shows. Rolled over by whichever path
+	// first sees a new frame, so the figure printed is always a frame's whole count.
 	const uint64 ThisFrame = GFrameCounter;
-	if (ThisFrame == DebugLastFrame)
+	if (ThisFrame != DebugLastFrame)
 	{
-		++DebugCallsThisFrame;
-	}
-	else
-	{
-		DebugCallsThisFrame = 1;
+		DebugCallsLastFrame = (ThisFrame == DebugLastFrame + 1) ? DebugCallsThisFrame : 0;
+		DebugCallsThisFrame = 0;
 		DebugLastFrame = ThisFrame;
 	}
-	DebugCallsPerFramePeak = FMath::Max(DebugCallsPerFramePeak, DebugCallsThisFrame);
+	if (bFromCarry)
+	{
+		++DebugCallsThisFrame;
+		DebugCallsPerFramePeak = FMath::Max(DebugCallsPerFramePeak, DebugCallsThisFrame);
+	}
 
 	const UObject* Base = GetMovementBaseObject();
 	const FString State = FString::Printf(TEXT("%s|%s"),
 		*GetMovementName(), Base ? *Base->GetName() : TEXT("none"));
 
-	// Only on the frame's first call. This function runs twice per frame for the same
-	// reason UpdateDriftMeasurement does, and accumulating on both ran this throttle at
-	// exactly twice real time: a line every half second under a comment promising one a
-	// second, so twenty-five seconds of run produced fifty lines and anyone counting
-	// them to recover a duration got double. The doubled clock this project already
-	// found once, relocated into the log's own pacing. The call counter above is
-	// deliberately not guarded -- counting the calls is what it is for.
-	if (DebugCallsThisFrame == 1)
+	// Once a frame, and by the carry alone. Accumulating on both of its calls ran this
+	// throttle at exactly twice real time: a line every half second under a comment promising
+	// one a second, so twenty-five seconds of run produced fifty lines and anyone counting
+	// them to recover a duration got double. The doubled clock this project already found
+	// once, relocated into the log's own pacing.
+	if (bFromCarry && ThisFrame != DebugThrottleFrame)
 	{
+		DebugThrottleFrame = ThisFrame;
 		DebugSecondsSinceLog += DeltaSeconds;
 	}
 
-	// One line a second, and one the instant the mode or the base changes. The
-	// transitions are where the answer is, and a once-a-second sample steps straight
-	// over the quarter second in which the occupant comes off a rolling deck.
+	// One line a second from the carry, and one the instant the mode or the base changes,
+	// from either path. The transitions are where the answer is, and a once-a-second sample
+	// steps straight over the quarter second in which the occupant comes off a rolling deck.
 	const bool bStateChanged = State != DebugLastState;
-	if (!bStateChanged && DebugSecondsSinceLog < 1.0)
+	if (!bStateChanged && (!bFromCarry || DebugSecondsSinceLog < 1.0))
 	{
 		return;
 	}
@@ -287,7 +352,7 @@ void USFShipboardMovementComponent::LogDiagnostics(float DeltaSeconds)
 		TEXT("Drift debug%s: calls/frame %d peak %d, dt %.4f, mode %s, base %s, ")
 		TEXT("ship-local (%.0f %.0f %.0f) dist %.0f cm, settled %.1f s, measured %.1f s, ship gravity %d"),
 		bStateChanged ? TEXT(" [CHANGED]") : TEXT(""),
-		DebugCallsThisFrame, DebugCallsPerFramePeak, DeltaSeconds,
+		DebugCallsLastFrame, DebugCallsPerFramePeak, DeltaSeconds,
 		*GetMovementName(),
 		Base ? *Base->GetName() : TEXT("none"),
 		Local.X, Local.Y, Local.Z, Local.Size(),
@@ -300,16 +365,26 @@ void USFShipboardMovementComponent::LogDiagnostics(float DeltaSeconds)
 
 void USFShipboardMovementComponent::DetectCarryGap()
 {
-	const uint64 ThisFrame = GFrameCounter;
-
-	if (bHasCarriedOnce && ThisFrame > LastCarryFrame + 1)
+	// In this component's ticks; see GetSkippedCarryFrames. A paused world advances neither
+	// this count nor the carry, so a pause is no gap.
+	if (bHasCarriedOnce && OwnTickCount > LastCarryTick + 1)
 	{
 		// The engine stopped calling us for a stretch -- the occupant was not attached.
 		// Carrying through a ship pose that old would map him through hundreds of metres
 		// of stale motion, so re-seed instead and make the gap visible: a skipped carry
 		// is the single most important thing this instrument can report.
-		SkippedCarryFrames += static_cast<int64>(ThisFrame - LastCarryFrame - 1);
-		LastFrameTransform = ShipFrame->GetFrameTransform();
+		const int64 Skipped = static_cast<int64>(OwnTickCount - LastCarryTick - 1);
+		SkippedCarryFrames += Skipped;
+		TotalSkippedCarryFrames += Skipped;
+
+		// The view was not carried through the gap either, and stays where it is in the world.
+		const FTransform Reseeded = ShipFrame->GetFrameTransform();
+		if (AController* Controller = GetOwnerController())
+		{
+			SyncViewFromController(*Controller);
+		}
+		ReexpressView(Reseeded);
+		LastFrameTransform = Reseeded;
 		bBaselineValid = false;
 
 		// The re-seed above is what makes a pending handover unmeasurable: the carry that
@@ -323,7 +398,7 @@ void USFShipboardMovementComponent::DetectCarryGap()
 		SecondsSinceCommandedInput = 0.0;
 	}
 
-	LastCarryFrame = ThisFrame;
+	LastCarryTick = OwnTickCount;
 	bHasCarriedOnce = true;
 }
 
@@ -470,13 +545,12 @@ void USFShipboardMovementComponent::CarryWithFrame()
 
 	// The view is stored ship-local: the player keeps looking at the same
 	// bulkhead no matter what the ship does, and the stars sweep past outside.
-	if (ACharacter* Owner = Cast<ACharacter>(GetOwner()))
+	// Written whole from the ship's rotation, never composed onto what the controller holds;
+	// LocalView says what composing lost.
+	if (AController* Controller = GetOwnerController())
 	{
-		if (AController* Controller = Owner->GetController())
-		{
-			const FQuat NewView = FrameDelta * Controller->GetControlRotation().Quaternion();
-			Controller->SetControlRotation(NewView.Rotator());
-		}
+		SyncViewFromController(*Controller);
+		WriteView(*Controller, CurrentFrameTransform.GetRotation());
 	}
 
 	LastFrameTransform = CurrentFrameTransform;
@@ -674,7 +748,11 @@ void USFShipboardMovementComponent::UpdateFooting(float DeltaSeconds)
 	// three, never landed, was never carried once in twenty-five seconds, and the ship
 	// left at 282 m/s without him. The state still advances here whether he is based or
 	// not, which is what stands him up again after the deck has let go of him.
-	const bool bOverLimit = IsKnockdownEnabled() && !bStrappedIn && bHasBase
+	bLastDecisionKnockdownOff = !IsKnockdownEnabled();
+	bLastDecisionStrappedIn = bStrappedIn;
+	bLastDecisionNoBase = !bHasBase;
+
+	const bool bOverLimit = !bLastDecisionKnockdownOff && !bLastDecisionStrappedIn && !bLastDecisionNoBase
 		&& StarForge::ShipFrame::ExceedsGravPlateLimit(FeltAccelMetersPerSecSq);
 
 	const bool bWasDown = Footing.bDown;
@@ -775,6 +853,29 @@ void USFShipboardMovementComponent::TickComponent(
 	ELevelTick TickType,
 	FActorComponentTickFunction* ThisTickFunction)
 {
+	// Before the engine's tick, so both of this frame's carry calls see the new count.
+	++OwnTickCount;
+
+	if (bBoundToFrame && !ShipFrame.IsValid())
+	{
+		ReleaseLostFrame();
+	}
+
+	// World down while the control is on, whether or not the carry runs. The carry sets it
+	// too, but a man who has already lost his base is never carried again, and would keep
+	// whatever down the ship last had.
+	if (CVarShipGravity.GetValueOnGameThread() == 0)
+	{
+		SetGravityDirection(FVector::DownVector);
+	}
+
+	// The engine calls the carry only while he has a base, so a base lost is seen here or
+	// not at all.
+	if (CVarDriftDebug.GetValueOnGameThread() != 0 && ShipFrame.IsValid())
+	{
+		LogDiagnostics(DeltaTime, /*bFromCarry=*/false);
+	}
+
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	// The footing again, from the one path that runs whether or not he has a movement
@@ -792,6 +893,33 @@ void USFShipboardMovementComponent::LogOpenCarryGap(float DeltaSeconds)
 {
 	if (!ShipFrame.IsValid())
 	{
+		return;
+	}
+
+	// A binding with no carry in it yet. The count below measures from the last carry and
+	// reads zero until there has been one, so a man bound in mid-air who never reaches a
+	// deck was reported by nothing at all. A clock in seconds, not ticks; see
+	// NeverCarriedThresholdSeconds for the figure.
+	if (!bHasCarriedOnce)
+	{
+		SecondsBoundUncarried += DeltaSeconds;
+		if (SecondsBoundUncarried < NeverCarriedThresholdSeconds)
+		{
+			SecondsSinceGapLog = 0.0;
+			return;
+		}
+
+		SecondsSinceGapLog += DeltaSeconds;
+		if (!bNeverCarriedReported || SecondsSinceGapLog >= 1.0)
+		{
+			const UObject* Base = GetMovementBaseObject();
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Carry NOT RUNNING: bound to %s %.1f s ago and never carried since (mode %s, base %s). ")
+				TEXT("The fall to the deck takes 0.06 s; he has not reached one."),
+				*GetFrameName(), SecondsBoundUncarried, *GetMovementName(), Base ? *Base->GetName() : TEXT("none"));
+			bNeverCarriedReported = true;
+			SecondsSinceGapLog = 0.0;
+		}
 		return;
 	}
 
@@ -828,6 +956,18 @@ FString USFShipboardMovementComponent::DescribeFooting() const
 	{
 		return TEXT("CARRY FAILED: the skipped carries are the defect");
 	}
+
+	// Both carry failures that the count above cannot see yet: it is banked when the carry
+	// resumes or the binding ends, and neither of these has done either.
+	if (bBoundToFrame && !ShipFrame.IsValid())
+	{
+		return TEXT("FRAME LOST: the carrier he was bound to no longer exists");
+	}
+	if (HasNoFloor())
+	{
+		return TEXT("NO FOOTING: no floor under him, so nothing carries him");
+	}
+
 	if (!IsKnockdownEnabled())
 	{
 		return TEXT("knockdown off (sf.Knockdown 0)");
@@ -843,4 +983,99 @@ FString USFShipboardMovementComponent::DescribeFooting() const
 	}
 
 	return TEXT("footing intact");
+}
+
+FString USFShipboardMovementComponent::DescribeKnockdownExemptions() const
+{
+	TArray<FString> Exemptions;
+	if (bLastDecisionStrappedIn)
+	{
+		Exemptions.Add(TEXT("strapped in"));
+	}
+	if (bLastDecisionKnockdownOff)
+	{
+		Exemptions.Add(TEXT("sf.Knockdown 0"));
+	}
+	if (bLastDecisionNoBase)
+	{
+		Exemptions.Add(TEXT("no floor under him"));
+	}
+	return FString::Join(Exemptions, TEXT(" and "));
+}
+
+void USFShipboardMovementComponent::ReleaseLostFrame()
+{
+	const UObject* Base = GetMovementBaseObject();
+	UE_LOG(LogStarForge, Warning,
+		TEXT("Frame LOST: %s, the carrier he was bound to, no longer exists (mode %s, base %s). ")
+		TEXT("He is unbound and stands in world space; nothing carries him."),
+		*BoundFrameName, *GetMovementName(), Base ? *Base->GetName() : TEXT("none"));
+
+	// Through the one path that unbinds, so everything a binding owns -- the footing, the
+	// flag that keeps a base through a fall, the interval, the cross-check -- is cleared the
+	// way a binding clears it, and the interval this ends is logged with its own verdict.
+	// A crossing into the lost carrier that no carry consumed has nothing left to measure,
+	// and left pending it would be printed under the next binding's first carry.
+	const FString Lost = BoundFrameName;
+	SetShipFrame(nullptr);
+	bHandoverPending = false;
+	bPendingHandoverCarryGap = false;
+	LostFrameName = Lost;
+}
+
+AController* USFShipboardMovementComponent::GetOwnerController() const
+{
+	return CharacterOwner ? CharacterOwner->GetController() : nullptr;
+}
+
+void USFShipboardMovementComponent::SyncViewFromController(const AController& Controller)
+{
+	const FRotator Held = Controller.GetControlRotation();
+	if (bLocalViewValid && Held.Equals(LastLeftControlRotation, 0.0))
+	{
+		return;
+	}
+
+	// Somebody else's view is in the world as it stood at the last carry, which is the pose
+	// LocalView is stored against.
+	LocalView = (LastFrameTransform.GetRotation().Inverse() * Held.Quaternion()).GetNormalized();
+	LastLeftControlRotation = Held;
+	bLocalViewValid = true;
+}
+
+void USFShipboardMovementComponent::ReexpressView(const FTransform& NewReference)
+{
+	if (!bLocalViewValid)
+	{
+		return;
+	}
+
+	LocalView = (NewReference.GetRotation().Inverse() * LastFrameTransform.GetRotation() * LocalView).GetNormalized();
+}
+
+void USFShipboardMovementComponent::WriteView(AController& Controller, const FQuat& FrameRotation)
+{
+	Controller.SetControlRotation((FrameRotation * LocalView).Rotator());
+	LastLeftControlRotation = Controller.GetControlRotation();
+}
+
+void USFShipboardMovementComponent::TurnView(double YawDegrees, double PitchDegrees)
+{
+	AController* Controller = GetOwnerController();
+	if (!Controller || !UpdatedComponent)
+	{
+		return;
+	}
+
+	SyncViewFromController(*Controller);
+
+	// Turned in the world, because the step's axes are the deck's as the capsule stands now --
+	// its up vector is the deck normal, the carry rotates it with the ship -- and stored back
+	// against the pose the capsule was last carried to, which is the pose that up belongs to.
+	const FQuat Reference = LastFrameTransform.GetRotation();
+	const FQuat Turned = StarForge::ShipFrame::ApplyLookStep(
+		Reference * LocalView, UpdatedComponent->GetUpVector(), YawDegrees, PitchDegrees);
+
+	LocalView = (Reference.Inverse() * Turned).GetNormalized();
+	WriteView(*Controller, Reference);
 }
