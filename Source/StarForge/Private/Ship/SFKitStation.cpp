@@ -4,9 +4,12 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DockingMath.h"
+#include "Ship/SFDockingComponent.h"
 #include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFInteriorVolumeComponent.h"
 #include "Ship/SFShipFrameComponent.h"
+#include "ShipFrameMath.h"
 #include "StarForgeLog.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Units.h"
@@ -62,6 +65,56 @@ namespace KitStation
 	constexpr double MarkerWallClearanceXCm = 140.0; // the rig: inner half-X 590 less its marker offset 450
 	constexpr double MarkerWallClearanceYCm = 90.0;  // the rig: inner half-Y 390 less its marker offset 300
 	constexpr double LightIntensityCandelas = 2000.0;// the rig's, with auto-exposure off
+
+	FVector ToMetres(const FVector& Cm)
+	{
+		return FVector(StarForge::Units::CmToMetres(Cm.X), StarForge::Units::CmToMetres(Cm.Y), StarForge::Units::CmToMetres(Cm.Z));
+	}
+
+	FBox ToMetres(const FBox& Cm)
+	{
+		return Cm.IsValid ? FBox(ToMetres(Cm.Min), ToMetres(Cm.Max)) : FBox(ForceInit);
+	}
+
+	/**
+	 * A primitive's box in the station's own frame, in metres: through the same relative transform the
+	 * release boxes the station's colliders with (USFDockingComponent::StationPhysicalBoundsLocalCm),
+	 * so the line and the release read the same geometry.
+	 */
+	FBox BoxInFrameMetres(const UPrimitiveComponent& Primitive, const FTransform& StationFrameCm)
+	{
+		return ToMetres(Primitive.CalcBounds(Primitive.GetComponentTransform().GetRelativeTransform(StationFrameCm)).GetBox());
+	}
+
+	/** "-Y" for an axis along one of the station's own, the vector otherwise. */
+	FString AxisWord(const FVector& Axis)
+	{
+		static const TCHAR* const Names[3] = { TEXT("X"), TEXT("Y"), TEXT("Z") };
+		for (int32 i = 0; i < 3; ++i)
+		{
+			if (FMath::IsNearlyEqual(FMath::Abs(Axis[i]), 1.0, 1e-6))
+			{
+				return FString::Printf(TEXT("%s%s"), Axis[i] > 0.0 ? TEXT("+") : TEXT("-"), Names[i]);
+			}
+		}
+		return FString::Printf(TEXT("(%.2f %.2f %.2f)"), Axis.X, Axis.Y, Axis.Z);
+	}
+
+	/**
+	 * A coordinate as it is printed to two decimals, with a sign-only zero made plain. A turned
+	 * station's round trip through GetRelativeTransform can leave a rounding residue of either sign
+	 * where the builder put zero, and "-0.00" in a line that is compared character for character is a
+	 * difference made of nothing.
+	 */
+	double Shown(double Metres)
+	{
+		return FMath::Abs(Metres) < 0.005 ? 0.0 : Metres;
+	}
+
+	const TCHAR* Plural(int32 Count)
+	{
+		return Count == 1 ? TEXT("") : TEXT("s");
+	}
 }
 }
 
@@ -291,8 +344,281 @@ void ASFKitStation::GetDockingPorts(TArray<USFDockingPortComponent*>& Out) const
 	}
 }
 
+void ASFKitStation::BeginPlay()
+{
+	Super::BeginPlay();
+	ReportStationRig();
+}
+
 void ASFKitStation::OnDockingPortChanged(USFDockingPortComponent* Port)
 {
-	// Nothing is said about ports until the station has a line to say it in; that line is the
-	// Station rig: line, and it replaces this body (station-kit plan, task 9).
+	// Never before BeginPlay: on the place rig the whole start-up docking happens before the world
+	// begins play, and the BeginPlay line reads the state as it stands by then (spec 6.8).
+	if (HasActorBegunPlay())
+	{
+		ReportStationRig();
+	}
+}
+
+void ASFKitStation::ReportStationRig()
+{
+	using namespace KitStation;
+
+	const FTransform StationFrameCm(GetActorQuat(), GetActorLocation());
+	const FBox StationBoxM = ToMetres(USFDockingComponent::StationPhysicalBoundsLocalCm(*this));
+
+	// Counted from the world rather than from the builder's list: a control collider switched on is
+	// one of them, and a mesh given collision by mistake would be one too (rule 5).
+	TArray<const UPrimitiveComponent*> Physical;
+	bool bSimulating = false;
+	{
+		TInlineComponentArray<UPrimitiveComponent*> Primitives(this);
+		for (const UPrimitiveComponent* Primitive : Primitives)
+		{
+			if (!Primitive)
+			{
+				continue;
+			}
+			if (CollisionEnabledHasPhysics(Primitive->GetCollisionEnabled()))
+			{
+				Physical.Add(Primitive);
+			}
+			bSimulating |= Primitive->IsSimulatingPhysics();
+		}
+	}
+
+	bool bRed = !Frame || bSimulating || !StationBoxM.IsValid;
+
+	FString Line = FString::Printf(
+		TEXT("Station rig: '%s' (%s), frame %s, %s -- %d block%s, %d port%s, %d interior volume%s, %d physical collider%s "),
+		*GetName(), *GetClass()->GetName(),
+		Frame ? TEXT("present") : TEXT("MISSING"),
+		bSimulating ? TEXT("a SIMULATING BODY") : TEXT("no simulating body"),
+		BlockOriginsCm.Num(), Plural(BlockOriginsCm.Num()),
+		Ports.Num(), Plural(Ports.Num()),
+		Volumes.Num(), Plural(Volumes.Num()),
+		Physical.Num(), Plural(Physical.Num()));
+
+	Line += StationBoxM.IsValid
+		? FString::Printf(TEXT("boxed in its own frame at X %.2f..%.2f Y %.2f..%.2f Z %.2f..%.2f m; "),
+			Shown(StationBoxM.Min.X), Shown(StationBoxM.Max.X), Shown(StationBoxM.Min.Y), Shown(StationBoxM.Max.Y),
+			Shown(StationBoxM.Min.Z), Shown(StationBoxM.Max.Z))
+		: FString(TEXT("and NOTHING PHYSICAL to box; "));
+
+	// Each volume against the walls that are meant to enclose it: rule 2, forms 1 and 2.
+	TArray<FBox> VolumeBoxesM;
+	TArray<FString> VolumeTexts;
+	for (const FSFKitVolumeRecord& Record : VolumeRecords)
+	{
+		const USFInteriorVolumeComponent* Volume = Volumes[Record.Volume];
+		const FBox VolumeM = BoxInFrameMetres(*Volume, StationFrameCm);
+		VolumeBoxesM.Add(VolumeM);
+
+		const double OutM = StarForge::Docking::BoxReachOutside(VolumeM, EnvelopeMetres(Record, StationFrameCm));
+		if (!FMath::IsFinite(OutM))
+		{
+			// BoxReachOutside answers NaN for a broken box on EITHER side (task 7), so the line says which:
+			// sent to the walls when the volume is what broke, the reader would look at the wrong thing
+			// (amendment P20).
+			const bool bVolumeReadable = VolumeM.IsValid
+				&& FMath::IsFinite(VolumeM.Min.X) && FMath::IsFinite(VolumeM.Min.Y) && FMath::IsFinite(VolumeM.Min.Z)
+				&& FMath::IsFinite(VolumeM.Max.X) && FMath::IsFinite(VolumeM.Max.Y) && FMath::IsFinite(VolumeM.Max.Z);
+			bRed = true;
+			VolumeTexts.Add(bVolumeReadable
+				? FString::Printf(TEXT("%s's %s envelope could NOT BE READ"), *Volume->GetName(), Record.EnvelopeWord)
+				: FString::Printf(TEXT("%s itself could NOT BE MEASURED"), *Volume->GetName()));
+		}
+		else if (StarForge::Docking::IsRedAtPrintedResolution(OutM))
+		{
+			bRed = true;
+			VolumeTexts.Add(FString::Printf(TEXT("%s REACHES %.3f m OUT of its %s"), *Volume->GetName(), OutM, Record.EnvelopeWord));
+		}
+		else
+		{
+			VolumeTexts.Add(FString::Printf(TEXT("%s within its %s (%.3f m out)"), *Volume->GetName(), Record.EnvelopeWord, OutM));
+		}
+	}
+	Line += FString::Join(VolumeTexts, TEXT(", ")) + TEXT(".");
+
+	for (const TObjectPtr<USFDockingPortComponent>& Port : Ports)
+	{
+		if (Port)
+		{
+			Line += TEXT(" ") + DescribePort(*Port, StationFrameCm, StationBoxM, Physical, VolumeBoxesM, bRed);
+		}
+	}
+
+	if (bRed)
+	{
+		UE_LOG(LogStarForge, Error, TEXT("%s"), *Line);
+	}
+	else
+	{
+		UE_LOG(LogStarForge, Display, TEXT("%s"), *Line);
+	}
+}
+
+FString ASFKitStation::DescribePort(const USFDockingPortComponent& Port, const FTransform& StationFrameCm, const FBox& StationBoxM,
+	const TArray<const UPrimitiveComponent*>& Physical, const TArray<FBox>& VolumeBoxesM, bool& bInOutRed) const
+{
+	using namespace KitStation;
+
+	const FTransform PortInFrame = Port.GetComponentTransform().GetRelativeTransform(StationFrameCm);
+	const FVector OriginM = ToMetres(PortInFrame.GetLocation());
+	const FVector Axis = PortInFrame.GetUnitAxis(EAxis::X);
+
+	// Rule 1: p from the one box the release uses, and named by the collider that reaches furthest,
+	// so the line says what to move. The box is one for the whole station: a protrusion anywhere on
+	// the face costs every port its full p (spec 5).
+	const double PastM = StarForge::Docking::BoundsPastPortPlane(StationBoxM, OriginM, Axis);
+	FString PastText;
+	if (StarForge::Docking::IsRedAtPrintedResolution(PastM))
+	{
+		bInOutRed = true;
+		FString Worst = TEXT("nothing it could name");
+		double WorstM = -1.0;
+		for (const UPrimitiveComponent* Primitive : Physical)
+		{
+			const double M = StarForge::Docking::BoundsPastPortPlane(BoxInFrameMetres(*Primitive, StationFrameCm), OriginM, Axis);
+			if (!(M <= WorstM))
+			{
+				WorstM = M;
+				Worst = Primitive->GetName();
+			}
+		}
+		PastText = FString::Printf(TEXT("%.3f m of something physical PAST its plane (%s)"), PastM, *Worst);
+	}
+	else
+	{
+		PastText = FString::Printf(TEXT("nothing physical past its plane (%.3f m)"), PastM);
+	}
+
+	// Rule 2, form 3: no interior volume past any port's plane.
+	double VolumePastM = 0.0;
+	FString VolumeName;
+	for (int32 i = 0; i < VolumeBoxesM.Num(); ++i)
+	{
+		const double M = StarForge::Docking::BoundsPastPortPlane(VolumeBoxesM[i], OriginM, Axis);
+		if (!(M <= VolumePastM))
+		{
+			VolumePastM = M;
+			VolumeName = Volumes[VolumeRecords[i].Volume]->GetName();
+		}
+		// A NaN sticks. "!(M <= max)" takes a NaN in, and the next finite volume would then take its
+		// place -- !(finite <= NaN) is true too -- and a volume nobody could measure would leave the
+		// line calm (amendment P20).
+		if (FMath::IsNaN(VolumePastM))
+		{
+			break;
+		}
+	}
+	FString VolumeText;
+	if (FMath::IsNaN(VolumePastM))
+	{
+		bInOutRed = true;
+		VolumeText = FString::Printf(TEXT("how far an interior volume reaches past it could NOT BE MEASURED (%s)"), *VolumeName);
+	}
+	else if (StarForge::Docking::IsRedAtPrintedResolution(VolumePastM))
+	{
+		bInOutRed = true;
+		VolumeText = FString::Printf(TEXT("an interior VOLUME REACHES %.3f m PAST it (%s)"), VolumePastM, *VolumeName);
+	}
+	else
+	{
+		VolumeText = FString::Printf(TEXT("no interior volume past it (%.3f m)"), VolumePastM);
+	}
+
+	return FString::Printf(TEXT("%s at (%.2f %.2f %.2f) m facing %s: %s, %s; %s."),
+		*Port.GetName(), Shown(OriginM.X), Shown(OriginM.Y), Shown(OriginM.Z), *AxisWord(Axis),
+		*PastText, *VolumeText, *DescribeHolder(Port, bInOutRed));
+}
+
+FString ASFKitStation::DescribeHolder(const USFDockingPortComponent& Port, bool& bInOutRed) const
+{
+	const USFDockingComponent* Holder = Port.GetHolder();
+	if (!Holder)
+	{
+		return TEXT("free");
+	}
+
+	const FString Name = GetNameSafe(Holder->GetOwner());
+	switch (Holder->GetState())
+	{
+	case ESFDockingState::Capturing:
+		return FString::Printf(TEXT("capturing by %s"), *Name);
+	case ESFDockingState::Releasing:
+		return FString::Printf(TEXT("releasing by %s"), *Name);
+	case ESFDockingState::Docked:
+	{
+		// Only here: ReleaseStandoff answers how far the hull still has to go along the port's axis,
+		// from the pose it is in, for the sphere round it to clear the station's physical box, and
+		// only from the docked pose is that the release F would make. Asked from any other pose it
+		// answers another question beside a calm verdict (spec 6.8).
+		double StandoffM = 0.0;
+		double PeakMss = 0.0;
+		if (!Holder->MeasureRelease(StandoffM, PeakMss))
+		{
+			bInOutRed = true;
+			return FString::Printf(TEXT("held by %s, whose release could NOT BE MEASURED"), *Name);
+		}
+
+		// The very comparisons the release warns by (SFDockingComponent.cpp): the window on >, the
+		// ceiling on >=.
+		const bool bInside = StandoffM <= Holder->DistanceMetres;
+		const bool bUnder = PeakMss < StarForge::ShipFrame::GravPlateLimitMetersPerSecSq;
+		bInOutRed |= !bInside || !bUnder;
+
+		const FString PeakText = (PeakMss >= TNumericLimits<double>::Max())
+			? FString(TEXT("unbounded")) : FString::Printf(TEXT("%.1f m/s2"), PeakMss);
+
+		return FString::Printf(
+			TEXT("held by %s, whose release would be %.2f m in %.1f s, peak %s -- %s its %.1f m window, %s the %.2f m/s2 limit"),
+			*Name, StandoffM, Holder->GetCaptureSeconds(), *PeakText,
+			bInside ? TEXT("inside") : TEXT("OUTSIDE"), Holder->DistanceMetres,
+			bUnder ? TEXT("under") : TEXT("OVER"), StarForge::ShipFrame::GravPlateLimitMetersPerSecSq);
+	}
+	default:
+		bInOutRed = true;
+		return FString::Printf(TEXT("held by %s while it reads FREE"), *Name);
+	}
+}
+
+FBox ASFKitStation::EnvelopeMetres(const FSFKitVolumeRecord& Record, const FTransform& StationFrameCm) const
+{
+	using namespace KitStation;
+
+	FVector Min(0.0);
+	FVector Max(0.0);
+	for (int32 Face = 0; Face < 6; ++Face)
+	{
+		const int32 Axis = Face / 2;
+		const bool bMinFace = (Face % 2) == 0;
+
+		if (Record.Faces[Face].IsEmpty())
+		{
+			return FBox(ForceInit);
+		}
+
+		// The tightest source: a min face as far in as its furthest-in wall, a max face likewise.
+		double Value = bMinFace ? -TNumericLimits<double>::Max() : TNumericLimits<double>::Max();
+		for (const FSFKitFaceSource& Source : Record.Faces[Face])
+		{
+			const UPrimitiveComponent* Collider = Colliders.IsValidIndex(Source.Collider) ? Colliders[Source.Collider].Get() : nullptr;
+			if (!Collider)
+			{
+				return FBox(ForceInit);
+			}
+			const FBox Wall = BoxInFrameMetres(*Collider, StationFrameCm);
+			const double Side = Source.bMaxSide ? Wall.Max[Axis] : Wall.Min[Axis];
+			if (!FMath::IsFinite(Side))
+			{
+				// FMath::Max and Min hold a NaN only until the next finite source, so one wall nobody could
+				// measure would vanish into its neighbours and leave the line calm (amendment P20's class).
+				return FBox(ForceInit);
+			}
+			Value = bMinFace ? FMath::Max(Value, Side) : FMath::Min(Value, Side);
+		}
+		(bMinFace ? Min : Max)[Axis] = Value;
+	}
+	return FBox(Min, Max);
 }

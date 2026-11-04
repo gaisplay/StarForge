@@ -61,6 +61,20 @@ class STARFORGE_API ASFKitStation : public AActor, public ISFDockingStation
 public:
 	ASFKitStation();
 
+	/** Says the Station rig: line once the station is in play (spec 6.8). */
+	virtual void BeginPlay() override;
+
+	/**
+	 * The Station rig: line: blocks, ports, volumes and physical colliders, the box they make in the
+	 * station's own frame, each volume against its envelope, and each port -- what reaches past its
+	 * plane, which volume does, and who holds it. Boxes, positions, the collider count and what each
+	 * holder reports are read back from the world; the counts of blocks, ports and volumes are the
+	 * builder's own. Written at BeginPlay, on every port change after it, and whenever a control is
+	 * applied. An upper-case word is a state that did not hold, and the whole line then goes out as an
+	 * Error.
+	 */
+	void ReportStationRig();
+
 	virtual void GetDockingPorts(TArray<USFDockingPortComponent*>& Out) const override;
 	virtual USFShipFrameComponent* GetStationFrame() const override { return Frame; }
 	virtual void OnDockingPortChanged(USFDockingPortComponent* Port) override;
@@ -84,6 +98,16 @@ private:
 	int32 AddVolume(FName Name, const FVector& MinCm, const FVector& MaxCm, const TCHAR* EnvelopeWord, const FVector& OutwardAxis);
 
 	UStaticMeshComponent* AddMarker(FName Name, UStaticMesh* Mesh, const FVector& LocationCm);
+
+	/** One port's sentence of the line; sets bInOutRed when anything in it did not hold. */
+	FString DescribePort(const USFDockingPortComponent& Port, const FTransform& StationFrameCm, const FBox& StationBoxM,
+		const TArray<const UPrimitiveComponent*>& Physical, const TArray<FBox>& VolumeBoxesM, bool& bInOutRed) const;
+
+	/** Who holds the port and in what state; the release only while the holder is docked (spec 6.8). */
+	FString DescribeHolder(const USFDockingPortComponent& Port, bool& bInOutRed) const;
+
+	/** A volume's envelope, in metres in the station's frame, read face by face from its walls' boxes. */
+	FBox EnvelopeMetres(const FSFKitVolumeRecord& Record, const FTransform& StationFrameCm) const;
 
 	UPROPERTY(VisibleAnywhere, Category = "StarForge")
 	TObjectPtr<USceneComponent> Root;
