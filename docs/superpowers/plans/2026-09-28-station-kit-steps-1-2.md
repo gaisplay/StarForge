@@ -82,6 +82,7 @@
 - **П21. Порог контролей задачи 10 обоснован неверно.** Значение меньше 0.001 м печатается как `0.000`, только если оно меньше 0.0005 (`RedAtOrAboveMetres`); от 0.0005 до 0.001 строка печатает `0.001` и краснеет. Порог 0.001 оставлен — принятый контроль печатает не меньше того, что просили, — исправлены комментарии задачи 10 и фраза спеки §8.3.
 - **П22. Задача 7 после приёмки.** `BoundsPastPortPlane` отвечает NaN за не конечную ось и над пустым боксом (её комментарий это обещал, код — нет); три теста получили проверки защитных ветвей, а `BoundsPastPortPlaneReadsZeroAtThePrintedResolution` — закрепление порога 0.0005 через печать `%.3f` (без них мутант `RedAtOrAboveMetres = PrintedResolutionMetres` выживал). Счёт тестов прежний, 130. Комментарий о порогах в коде задачи выше исправлен: 0.071797 и 0.341797 — округлённые вверх и уже за пределом, точны 7 − 4√3 и 7.27 − 4√3 (спека §5).
 - **П19. Подписи интерфейсов** «Потребляет из задачи N» в задачах 6, 9, 10 и 14 местами называют не ту задачу-источник (строки сверки F8); на код это не влияет, источник — тот, где интерфейс объявлен по тексту плана.
+- **П23. Задача 9 после ревью.** Фраза сообщения коммита теряла условие: строка пишется на `BeginPlay` и на каждой смене порта **после него**, а до `BeginPlay` — на стенде места это вся стартовая стыковка — не пишется ничего; то же исправлено в абзаце задачи 20 для `CLAUDE.md`. В той же фразе «every station» стало «every kit station» — `ASFTestStation` строки не пишет, — а заголовок коммита относит «read back from the world» к тому, что меряют правила, а не к каждому числу строки. `EnvelopeMetres` отказывает стороне стены, которую не прочесть (`!FMath::IsFinite`), и не отдаёт её `FMath::Max`/`Min`: те держат NaN только до следующего конечного источника, и одна неизмеренная стена растворилась бы в соседних, оставив строку спокойной (класс П20). Два комментария сказаны точнее: счёт блоков, портов и объёмов взят из списков сборщика, а не прочитан из мира; у остатка округления в `Shown` нет одного размера — «-1e-12» не измерялось и зависит от удаления станции от начала координат. Код задачи 9 исправлен на месте. Копия комментария `DescribeHolder` в плане приведена к коду: исполнитель по указанию контроллера согласовал его с описанием `MeasureRelease`, исправленным в задаче 6.
 
 ---
 
@@ -3176,7 +3177,7 @@ MSG
 
 **Interfaces:**
 - Потребляет: `BoundsPastPortPlane`, `BoxReachOutside`, `IsRedAtPrintedResolution` (задача 7); `USFDockingComponent::StationPhysicalBoundsLocalCm`, `MeasureRelease`, `GetState`, `DistanceMetres`, `GetCaptureSeconds` (задача 6); `USFDockingPortComponent::GetHolder` (задача 6); `StarForge::ShipFrame::GravPlateLimitMetersPerSecSq` (только чтение).
-- Отдаёт задачам 10, 12, 13: `void ASFKitStation::ReportStationRig()`; строка `Station rig:` в формате §6.8; перепечатка на каждом `OnDockingPortChanged` после `BeginPlay`.
+- Отдаёт задачам 10, 12, 13: `void ASFKitStation::ReportStationRig()`; строка `Station rig:` в формате §6.8; перепечатка на каждом `OnDockingPortChanged` после `BeginPlay`; помощник `KitStation::AxisWord` (задача 10). Строку читают и задачи 15, 19, 20, 21.
 
 - [ ] **Step 1: «Красный» шаг — строки нет**
 
@@ -3197,9 +3198,11 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task9-red-60.log
 	/**
 	 * The Station rig: line: blocks, ports, volumes and physical colliders, the box they make in the
 	 * station's own frame, each volume against its envelope, and each port -- what reaches past its
-	 * plane, which volume does, and who holds it. Every figure read back from the world. Written at
-	 * BeginPlay, on every port change after it, and whenever a control is applied. An upper-case word
-	 * is a state that did not hold, and the whole line then goes out as an Error.
+	 * plane, which volume does, and who holds it. Boxes, positions, the collider count and what each
+	 * holder reports are read back from the world; the counts of blocks, ports and volumes are the
+	 * builder's own. Written at BeginPlay, on every port change after it, and whenever a control is
+	 * applied. An upper-case word is a state that did not hold, and the whole line then goes out as an
+	 * Error.
 	 */
 	void ReportStationRig();
 ```
@@ -3259,8 +3262,9 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task9-red-60.log
 
 	/**
 	 * A coordinate as it is printed to two decimals, with a sign-only zero made plain. A turned
-	 * station's round trip through GetRelativeTransform leaves -1e-12 where the builder put zero, and
-	 * "-0.00" in a line that is compared character for character is a difference made of nothing.
+	 * station's round trip through GetRelativeTransform can leave a rounding residue of either sign
+	 * where the builder put zero, and "-0.00" in a line that is compared character for character is a
+	 * difference made of nothing.
 	 */
 	double Shown(double Metres)
 	{
@@ -3482,8 +3486,10 @@ FString ASFKitStation::DescribeHolder(const USFDockingPortComponent& Port, bool&
 		return FString::Printf(TEXT("releasing by %s"), *Name);
 	case ESFDockingState::Docked:
 	{
-		// Only here: ReleaseStandoff answers "how far out of the docked pose", and asked from any
-		// other pose it answers another question beside a calm verdict (spec 6.8).
+		// Only here: ReleaseStandoff answers how far the hull still has to go along the port's axis,
+		// from the pose it is in, for the sphere round it to clear the station's physical box, and
+		// only from the docked pose is that the release F would make. Asked from any other pose it
+		// answers another question beside a calm verdict (spec 6.8).
 		double StandoffM = 0.0;
 		double PeakMss = 0.0;
 		if (!Holder->MeasureRelease(StandoffM, PeakMss))
@@ -3540,6 +3546,12 @@ FBox ASFKitStation::EnvelopeMetres(const FSFKitVolumeRecord& Record, const FTran
 			}
 			const FBox Wall = BoxInFrameMetres(*Collider, StationFrameCm);
 			const double Side = Source.bMaxSide ? Wall.Max[Axis] : Wall.Min[Axis];
+			if (!FMath::IsFinite(Side))
+			{
+				// FMath::Max and Min hold a NaN only until the next finite source, so one wall nobody could
+				// measure would vanish into its neighbours and leave the line calm (amendment P20's class).
+				return FBox(ForceInit);
+			}
 			Value = bMinFace ? FMath::Max(Value, Side) : FMath::Min(Value, Side);
 		}
 		(bMinFace ? Min : Max)[Axis] = Value;
@@ -3583,7 +3595,7 @@ git status --short
 git add Source/StarForge/Public/Ship/SFKitStation.h Source/StarForge/Private/Ship/SFKitStation.cpp
 git diff --cached --name-only
 git commit -F - <<'MSG'
-feat(station): a kit station says what its rules measure, in one line read back from the world
+feat(station): a kit station says what its rules measure, read back from the world, in one line
 
 Rules 1 and 2 of the station kit cannot be enforced by code: TryHandover asks
 only a relative speed, and the release asks only a box. They hold on geometry,
@@ -3593,8 +3605,9 @@ enclose it, and for each port what reaches past its plane, which volume does,
 and who holds it -- with the release it would make, read from the holder's own
 measurement and only while it is docked.
 
-Written for every station, well or not, at BeginPlay and at every port change,
-because a line that appears only in trouble is an instrument that did not run.
+Written for every kit station, well or not, at BeginPlay and at every port
+change after it, because a line that appears only in trouble is an instrument
+that did not run.
 MSG
 ```
 
@@ -6325,7 +6338,7 @@ a place but the record check's control: one sound record and seven that each fai
 `Place parked hull: … -- NOT SPAWNED.` lines and the red `Place rig:` line with `1 of 8 parked hulls,
 7 NOT SPAWNED` are correct on that asset and a finding on any other.
 
-**A kit station writes its own line, `Station rig:`, at `BeginPlay` and at every change of a port.**
+**A kit station writes its own line, `Station rig:`, at `BeginPlay` and at every change of a port after it.**
 Its box in its own frame, each interior volume against the walls meant to enclose it, and for each
 port what reaches past its plane, which volume does, who holds it and — only while that holder is
 docked — the release it would make. An upper-case word is a state that did not hold and the line goes
