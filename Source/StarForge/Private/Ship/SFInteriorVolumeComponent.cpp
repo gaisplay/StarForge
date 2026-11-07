@@ -5,6 +5,7 @@
 #include "Player/SFShipboardMovementComponent.h"
 #include "ShipFrameMath.h"
 #include "Ship/SFShipFrameComponent.h"
+#include "Ship/SFShipStationComponent.h"
 #include "StarForgeLog.h"
 #include "Units.h"
 
@@ -184,6 +185,34 @@ void USFInteriorVolumeComponent::TryHandover(ASFCharacter* Character)
 			}
 			return;
 		}
+	}
+
+	// An instrument, not a refusal (station-kit spec 6.7 item 3, owner's decision 11). A seated man
+	// handed to a carrier other than his seat's is finding F1 itself -- a station's volume reaching into
+	// a cabin -- and the Frame handover line his first carry after BindFrame writes says nothing of the
+	// seat. It goes through as before: refusing to hand over a seated man was one of the fixes the owner
+	// declined.
+	//
+	// Only when the carrier taking him is not the one whose seat he holds. Since the review's N2,
+	// leaving the volume of the frame he is bound to while another carrier's volume still holds him
+	// is entering that one (HandleEndOverlap), and that is how control N2 returns him: the grown
+	// volume goes back to its size and his own cabin takes him back. Handed BACK to his seat's
+	// carrier is the fix, not F1, and a Warning there would be a false alarm.
+	//
+	// The cabin is named after his seat's carrier, not after From: he is in that cabin while the frame
+	// he is bound to stays at rest with it -- docked, as in N2, when the two differ. Once they part, his
+	// frame carries him out of it, as F1 left its pilot's body behind, and the line names his post's
+	// cabin, not where he is.
+	const USFShipStationComponent* Seat = Character->IsSeated() ? Character->GetSeatedStation() : nullptr;
+	const AActor* SeatCarrier = Seat ? Seat->GetOwner() : nullptr;
+	if (From && From != To && Seat && SeatCarrier != To->GetOwner())
+	{
+		const FString FromName = From->GetOwner() ? From->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
+		const FString ToName = To->GetOwner() ? To->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
+		const FString SeatName = SeatCarrier ? SeatCarrier->GetActorNameOrLabel() : FString(TEXT("none"));
+		UE_LOG(LogStarForge, Warning,
+			TEXT("Frame handover: %s -> %s took a SEATED man (%s's %s post): a volume of %s reaches into %s's cabin."),
+			*FromName, *ToName, *SeatName, *Seat->StationName, *ToName, *SeatName);
 	}
 
 	ForgetRefusalOnEveryVolumeOfThisCarrier(Character);
