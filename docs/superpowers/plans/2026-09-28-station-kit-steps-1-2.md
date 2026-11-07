@@ -84,6 +84,7 @@
 - **П19. Подписи интерфейсов** «Потребляет из задачи N» в задачах 6, 9, 10 и 14 местами называют не ту задачу-источник (строки сверки F8); на код это не влияет, источник — тот, где интерфейс объявлен по тексту плана.
 - **П23. Задача 9 после ревью.** Фраза сообщения коммита теряла условие: строка пишется на `BeginPlay` и на каждой смене порта **после него**, а до `BeginPlay` — на стенде места это вся стартовая стыковка — не пишется ничего; то же исправлено в абзаце задачи 20 для `CLAUDE.md`. В той же фразе «every station» стало «every kit station» — `ASFTestStation` строки не пишет, — а заголовок коммита относит «read back from the world» к тому, что меряют правила, а не к каждому числу строки. `EnvelopeMetres` отказывает стороне стены, которую не прочесть (`!FMath::IsFinite`), и не отдаёт её `FMath::Max`/`Min`: те держат NaN только до следующего конечного источника, и одна неизмеренная стена растворилась бы в соседних, оставив строку спокойной (класс П20). Два комментария сказаны точнее: счёт блоков, портов и объёмов взят из списков сборщика, а не прочитан из мира; у остатка округления в `Shown` нет одного размера — «-1e-12» не измерялось и зависит от удаления станции от начала координат. Код задачи 9 исправлен на месте. Копия комментария `DescribeHolder` в плане приведена к коду: исполнитель по указанию контроллера согласовал его с описанием `MeasureRelease`, исправленным в задаче 6.
 - **П24. Задача 10 после ревью.** Отказ команды на неизвестный объём сказан точнее, `no kit station in this world …`: команда ищет только станции набора, и на стенде петли, где объём `Interior` есть у `ASFTestStation`, прежнее «no station» было ложным; ворота задачи 10 переписаны под новую строку. Условие, при котором `Error` строки `Station rig:` законен, названо целиком, как в §8.3: `sf.PortProtrusionM` не пуст и не 0 **или** объём, выращенный `sf.StationVolumeReach`, не возвращён к 0 — в комментарии переменной и в обеих строках таблицы задачи 20, которые до того называли каждая своё и спорили друг с другом. Причина порога П21 исправлена: принятый контроль печатается округлённым до миллиметра, а не «не меньше заказанного». Абзац задачи 20 для `CLAUDE.md` называет третий момент, когда пишется строка, — применение контроля. Задача 11 названа среди потребителей задачи 10 вместе со строкой `… returned Boom0 of 'Station' to its authored size.`, которую она ищет. Контроллер сделал в коде ещё семь правок. Команда без мира (`World` — `nullptr`) не останавливает программу на `check(CurrentWorld)` в `TActorIterator`, а отвечает своим `Warning`. Задержка, которая во `float` обращается в 0, — не задержка, и строка `scheduled …` больше не объявляет таймер, которого нет (`TimerManager.cpp:673`). Отрицательная цифра «сжала бы объём с наружной грани», а не «вырастила внутрь». Справка `sf.PortProtrusionM` и комментарий в `ApplyPortProtrusion` называют куб и его место, а не «грань причала», от которой он стоит не ближе чем в 8 м. Комментарий о включении коллайдера называет условие: так бывает, когда его включают из выключенного. Переменная — строка «как `sf.PlaceOffsetM`», а не «по его причине»: его причина — точность `float` на 4·10¹⁰ м, здесь же — мусор, сказанный вслух. Объём растёт от авторского размера, а не от прошлого, — так сказано в заголовке, в комментарии `ApplyVolumeReach`, в справке команды и в строке таблицы задачи 20. Те же две правки — мир и задержка — внесены в ещё не написанный код задачи 17 (`sf.UndockParked`): в нём был тот же шаблон. Копии кода в плане приведены к коду.
+- **П25. Задача 11 до запуска.** Комментарий кода ссылался на «the handover line below», а строка `Frame handover: … first carry moved him …` пишется не ниже в `TryHandover`, а в `SFShipboardMovementComponent.cpp` на первом переносе после `BindFrame`, и о кресле она не говорит ни в одной из двух своих форм. Сообщение коммита говорило, что строка передачи «теперь идёт как `Warning`»: она остаётся какой была, а `Warning` встаёт рядом отдельной строкой; в нём же названо условие — носитель, принявший человека, не владелец его кресла, — и возврат N2. «Отдаёт задачам 12 и 21»: задача 12 строку не читает, читает ранбук задачи 21.
 
 ---
 
@@ -4024,7 +4025,7 @@ Headless проверить нельзя: посадить человека в �
 
 **Interfaces:**
 - Потребляет: `ASFCharacter::IsSeated()`, `ASFCharacter::GetSeatedStation()`, `USFShipStationComponent::StationName`.
-- Отдаёт задачам 12 и 21: строка `Warning` `Frame handover: <From> -> <To> took a SEATED man (<Owner>'s <post> post): a volume of <To> reaches into <From>'s cabin.`
+- Отдаёт задаче 21 (ранбук точки 11: стоп-ворота N2 руками): строка `Warning` `Frame handover: <From> -> <To> took a SEATED man (<Owner>'s <post> post): a volume of <To> reaches into <From>'s cabin.`
 
 - [ ] **Step 1: Строка**
 
@@ -4033,8 +4034,8 @@ Headless проверить нельзя: посадить человека в �
 ```cpp
 	// An instrument, not a refusal (station-kit spec 6.7 item 3, owner's decision 11). A seated man
 	// handed to another carrier is finding F1 itself -- a station's volume reaching into a cabin -- and
-	// the handover line below would report it calmly. It goes through as before: refusing to hand over
-	// a seated man was one of the fixes the owner declined.
+	// the Frame handover line his first carry after BindFrame writes says nothing of the seat. It goes
+	// through as before: refusing to hand over a seated man was one of the fixes the owner declined.
 	//
 	// Only when the carrier taking him is not the one whose seat he holds. Since the review's N2,
 	// leaving the volume of the frame he is bound to while another carrier's volume still holds him
@@ -4079,10 +4080,12 @@ git diff --cached --name-only
 git commit -F - <<'MSG'
 feat(handover): say it out loud when a volume takes a seated man
 
-A seated man handed to another carrier is F1 itself: a station's volume reaching
-into a cabin. The handover line reported it at Display level, calmly. It now
-goes out as a Warning naming the post, the carrier that took him and the cabin
-it reached into.
+A seated man handed to a carrier other than the one whose seat he holds is F1
+itself: a station's volume reaching into a cabin. The handover line says
+nothing of the seat, and that has not changed; a Warning now goes out beside
+it, naming the post, the carrier that took him and the cabin it reached into.
+Handed back to his seat's carrier -- how control N2 returns him since the
+review's N2 -- is the fix, not F1, and no Warning is written for it.
 
 An instrument and not a refusal. The handover still goes through: refusing to
 hand over a seated man was one of the two fixes the owner declined after F1,
