@@ -5,12 +5,16 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DockingMath.h"
+#include "EngineUtils.h"
+#include "HAL/IConsoleManager.h"
+#include "NumberText.h"
 #include "Ship/SFDockingComponent.h"
 #include "Ship/SFDockingPortComponent.h"
 #include "Ship/SFInteriorVolumeComponent.h"
 #include "Ship/SFShipFrameComponent.h"
 #include "ShipFrameMath.h"
 #include "StarForgeLog.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Units.h"
 
@@ -115,6 +119,133 @@ namespace KitStation
 	{
 		return Count == 1 ? TEXT("") : TEXT("s");
 	}
+
+	/**
+	 * Control N1 and N1b of the station kit (spec 8.3): a 4 m collider at the far end of block 0's berth
+	 * face, its -Y face this many metres past the port plane. A string, as sf.PlaceOffsetM is,
+	 * read by StarForge::Parse::TryParseFiniteNumber (NumberText.h), which wants a digit in the mantissa
+	 * and in any exponent: Atod answers zero for a string with no number in it, and
+	 * FDefaultValueHelper::ParseDouble let ".", "-" and "e10" through as zero -- a control set with a
+	 * typo would have placed nothing and read calm. Empty or 0: no collider. Read at the station's
+	 * BeginPlay and again at every change of the value, through the variable's change delegate -- a kit
+	 * station does not tick.
+	 *
+	 * Not put back when a world ends, unlike sf.Dock, sf.BindFrame and sf.AimAt: those act on a change,
+	 * and a value left behind is a keypress in the next world; this is a level, as sf.PlaceOffsetM is,
+	 * and a value left from the last Play is a control still set, which the Station rig: line says in red.
+	 *
+	 * Declared here because this is the file that reads it. The Station rig: line's Error is legitimate
+	 * only while a control acts (spec 8.3): this is neither empty nor 0 (N1, N1b), or a volume grown by
+	 * sf.StationVolumeReach has not been returned to 0 (N2, N2b).
+	 */
+	TAutoConsoleVariable<FString> CVarPortProtrusionM(TEXT("sf.PortProtrusionM"), TEXT(""),
+		TEXT("Metres the -Y face of a 4 m control cube, X 26..30 and Z 0..4 of block 0, stands past the port plane (station kit, N1/N1b).\n")
+		TEXT("Empty or 0: none. Read at the kit station's BeginPlay and on every change."),
+		ECVF_Default);
+
+	/** Control N1's collider, spec 8.3: 4 m on a side, X 26..30 and Z 0..4 of block 0, far from the hull's path. */
+	constexpr double ControlSizeCm = 400.0;
+	constexpr double ControlXMinCm = 2600.0;
+	constexpr double ControlZMinCm = 0.0;
+
+	/**
+	 * The smallest control accepted: the line's printed resolution (spec 8.3). Below
+	 * StarForge::Docking::RedAtOrAboveMetres, half of it, the line would print 0.000 and stay calm; between
+	 * the two it would print 0.001 and go red. A control is refused under a whole millimetre so that every
+	 * accepted one is at least one printed unit: the line prints it rounded to the millimetre, never as
+	 * 0.000, and goes red (amendment P21).
+	 */
+	constexpr double MinimumControlMetres = 0.001;
+
+	/** Metres and seconds alike: a finite number written out, or false and OutMetres untouched. */
+	bool ParseFiniteMetres(const FString& Raw, double& OutMetres)
+	{
+		return StarForge::Parse::TryParseFiniteNumber(Raw, OutMetres);
+	}
+
+	void StationVolumeReachNow(UWorld* World, FName VolumeName, double Metres, const FString& Input)
+	{
+		int32 Applied = 0;
+		// TActorIterator checks for a world and would stop the program over a null one; with none, no
+		// station answers, and the Warning below says so.
+		if (World)
+		{
+			for (TActorIterator<ASFKitStation> It(World); It; ++It)
+			{
+				if (It->ApplyVolumeReach(VolumeName, Metres))
+				{
+					++Applied;
+				}
+			}
+		}
+		if (Applied == 0)
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("sf.StationVolumeReach '%s': no kit station in this world has an interior volume named %s; nothing was changed."),
+				*Input, *VolumeName.ToString());
+		}
+	}
+
+	void StationVolumeReachFromConsole(const TArray<FString>& Args, UWorld* World)
+	{
+		const FString Input = FString::Join(Args, TEXT(" "));
+
+		double Metres = 0.0;
+		double AfterSeconds = 0.0;
+		const bool bShape = (Args.Num() == 2 || Args.Num() == 3)
+			&& ParseFiniteMetres(Args[1], Metres)
+			&& (Args.Num() == 2 || ParseFiniteMetres(Args[2], AfterSeconds));
+
+		// A negative figure accepted in silence would shrink the volume from its outward face, read
+		// 0.000 and look like a control that found nothing; a positive one under a millimetre is under
+		// the line's printed resolution, and under half of one it would print 0.000.
+		if (!bShape || !(Metres == 0.0 || Metres >= MinimumControlMetres) || !(AfterSeconds >= 0.0))
+		{
+			UE_LOG(LogStarForge, Warning,
+				TEXT("sf.StationVolumeReach '%s': needs a volume name, 0 or a number of metres of at least 0.001, and optionally a ")
+				TEXT("non-negative delay in seconds; nothing was changed."),
+				*Input);
+			return;
+		}
+
+		const FName VolumeName(*Args[0]);
+		// The timer takes a float and sets nothing at or under zero (TimerManager.cpp 673). A delay too
+		// small to survive that conversion is no delay: scheduled, it would set no timer while the line
+		// below announced one.
+		const float DelaySeconds = static_cast<float>(AfterSeconds);
+		if (DelaySeconds <= 0.f || !World)
+		{
+			StationVolumeReachNow(World, VolumeName, Metres, Input);
+			return;
+		}
+
+		// Seconds of game time, not frames, and for the reason sf.KillThruster has one: -ExecCmds runs
+		// its whole list on the first frame, before the start-up handover has been carried, and a
+		// volume grown then would supersede it (spec 8.3).
+		FTimerHandle Handle;
+		World->GetTimerManager().SetTimer(Handle,
+			FTimerDelegate::CreateLambda([WeakWorld = TWeakObjectPtr<UWorld>(World), VolumeName, Metres, Input]()
+			{
+				if (UWorld* LiveWorld = WeakWorld.Get())
+				{
+					StationVolumeReachNow(LiveWorld, VolumeName, Metres, Input);
+				}
+			}),
+			DelaySeconds, false);
+
+		UE_LOG(LogStarForge, Display,
+			TEXT("sf.StationVolumeReach '%s': scheduled %.2f s of game time from now."), *Input, DelaySeconds);
+	}
+
+	/**
+	 * Controls N2 and N2b (spec 8.3). A COMMAND and not a variable, as sf.KillThruster is: a command runs
+	 * once per entry, and it takes a delay.
+	 */
+	FAutoConsoleCommandWithWorldAndArgs CmdStationVolumeReach(
+		TEXT("sf.StationVolumeReach"),
+		TEXT("sf.StationVolumeReach <Volume> <Metres> [Seconds]: grow a kit station's interior volume (Boom0, Hall1, ...) that\n")
+		TEXT("many metres past its authored size, outward along its block's port axis, now or after that many seconds of game time. 0 restores it."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StationVolumeReachFromConsole));
 }
 }
 
@@ -129,6 +260,21 @@ ASFKitStation::ASFKitStation()
 	Root->SetMobility(EComponentMobility::Movable);
 
 	Frame = CreateDefaultSubobject<USFShipFrameComponent>(TEXT("Frame"));
+
+	// Control N1's collider, built now and switched off: default subobjects exist only in the
+	// constructor, and it is placed at BeginPlay or at a change of sf.PortProtrusionM.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> ControlCube(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	ControlProtrusion = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ControlProtrusion"));
+	ControlProtrusion->SetupAttachment(Root);
+	ControlProtrusion->SetMobility(EComponentMobility::Movable);
+	ControlProtrusion->SetCollisionObjectType(ECC_WorldStatic);
+	ControlProtrusion->SetCollisionResponseToAllChannels(ECR_Block);
+	ControlProtrusion->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ControlProtrusion->SetHiddenInGame(true);
+	if (ControlCube.Succeeded())
+	{
+		ControlProtrusion->SetStaticMesh(ControlCube.Object);
+	}
 }
 
 void ASFKitStation::BuildBlock(const FVector& AssemblyOriginCm)
@@ -347,7 +493,126 @@ void ASFKitStation::GetDockingPorts(TArray<USFDockingPortComponent*>& Out) const
 void ASFKitStation::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Told of every change, not polled: this actor does not tick. The same pattern the world-bounds
+	// line uses for WorldBounds.DisableChecks (SFWorldBoundsSubsystem.cpp 44-48).
+	if (IConsoleVariable* Variable = KitStation::CVarPortProtrusionM.AsVariable())
+	{
+		PortProtrusionChangedHandle = Variable->OnChangedDelegate().AddUObject(this, &ASFKitStation::OnPortProtrusionChanged);
+	}
+
+	ApplyPortProtrusion(KitStation::CVarPortProtrusionM.GetValueOnGameThread());
 	ReportStationRig();
+}
+
+void ASFKitStation::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (IConsoleVariable* Variable = KitStation::CVarPortProtrusionM.AsVariable())
+	{
+		Variable->OnChangedDelegate().Remove(PortProtrusionChangedHandle);
+	}
+	PortProtrusionChangedHandle.Reset();
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ASFKitStation::OnPortProtrusionChanged(IConsoleVariable* Variable)
+{
+	// The delegate fires on a Set that leaves the value where it was, too; one line per real change.
+	const FString Raw = Variable ? Variable->GetString() : FString();
+	if (Raw == LastProtrusionRaw)
+	{
+		return;
+	}
+	ApplyPortProtrusion(Raw);
+	ReportStationRig();
+}
+
+void ASFKitStation::ApplyPortProtrusion(const FString& Raw)
+{
+	using namespace KitStation;
+
+	LastProtrusionRaw = Raw;
+
+	double Metres = 0.0;
+	bool bPlace = false;
+	if (!Raw.IsEmpty())
+	{
+		if (ParseFiniteMetres(Raw, Metres) && (Metres == 0.0 || Metres >= MinimumControlMetres))
+		{
+			bPlace = Metres > 0.0;
+		}
+		else
+		{
+			// A negative protrusion taken in silence would read p = 0 and a calm line under a set control.
+			UE_LOG(LogStarForge, Warning,
+				TEXT("Station rig: sf.PortProtrusionM='%s' is not 0 or a finite number of metres of at least 0.001; no control collider was placed."),
+				*Raw);
+		}
+	}
+
+	if (!ControlProtrusion)
+	{
+		return;
+	}
+
+	if (!bPlace || BlockOriginsCm.IsEmpty())
+	{
+		ControlProtrusion->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ControlProtrusion->SetHiddenInGame(true);
+		return;
+	}
+
+	// A 4 m cube at X 26..30 and Z 0..4 in block 0's frame B, its -Y face p past the port plane.
+	// Placed and sized before collision is switched on, so a collider switched on from off is seen by
+	// no step anywhere else; a change from one value to another moves a collider that is already on.
+	const FVector MinCm = BlockOriginsCm[0]
+		+ FVector(ControlXMinCm, PortPlaneYCm - StarForge::Units::MetresToCm(Metres), ControlZMinCm);
+	ControlProtrusion->SetRelativeLocation(MinCm + FVector(ControlSizeCm * 0.5));
+	// Qualified although KitStation is open here: SFTestShip.cpp has a constant of the same name in
+	// the module's one anonymous namespace, and under the directive the bare name would be ambiguous
+	// as soon as that file came first in the unity blob.
+	ControlProtrusion->SetRelativeScale3D(FVector(ControlSizeCm / KitStation::CubeEdgeCm));
+	ControlProtrusion->SetHiddenInGame(false);
+	ControlProtrusion->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+}
+
+bool ASFKitStation::ApplyVolumeReach(FName VolumeName, double Metres)
+{
+	using namespace KitStation;
+
+	for (const FSFKitVolumeRecord& Record : VolumeRecords)
+	{
+		USFInteriorVolumeComponent* Volume = Volumes[Record.Volume];
+		if (!Volume || Volume->GetFName() != VolumeName)
+		{
+			continue;
+		}
+
+		// Grown from its authored box, not from its last size, on its outward side only: the centre
+		// moves out by half, the extent grows by half along the axis. Moved first and resized with
+		// overlaps updated, so a man the grown box now covers is told in this frame (BoxComponent.cpp
+		// 28-47), without a tick.
+		const double GrowCm = StarForge::Units::MetresToCm(Metres);
+		Volume->SetRelativeLocation(Record.AuthoredCentreCm + Record.OutwardAxis * (GrowCm * 0.5));
+		Volume->SetBoxExtent(Record.AuthoredExtentCm + Record.OutwardAxis.GetAbs() * (GrowCm * 0.5), /*bUpdateOverlaps=*/ true);
+
+		if (Metres > 0.0)
+		{
+			UE_LOG(LogStarForge, Display,
+				TEXT("Station rig: sf.StationVolumeReach grew %s of '%s' %.3f m outward along %s."),
+				*Volume->GetName(), *GetName(), Metres, *AxisWord(Record.OutwardAxis));
+		}
+		else
+		{
+			UE_LOG(LogStarForge, Display,
+				TEXT("Station rig: sf.StationVolumeReach returned %s of '%s' to its authored size."),
+				*Volume->GetName(), *GetName());
+		}
+		ReportStationRig();
+		return true;
+	}
+	return false;
 }
 
 void ASFKitStation::OnDockingPortChanged(USFDockingPortComponent* Port)

@@ -5,6 +5,7 @@
 #include "Ship/SFDockingStation.h"
 #include "SFKitStation.generated.h"
 
+class IConsoleVariable;
 class UPointLightComponent;
 class UPrimitiveComponent;
 class USceneComponent;
@@ -63,6 +64,22 @@ public:
 
 	/** Says the Station rig: line once the station is in play (spec 6.8). */
 	virtual void BeginPlay() override;
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/**
+	 * sf.StationVolumeReach's work on this station: grows the named interior volume Metres past its
+	 * authored size -- from that size, not from the last one -- outward along its block's port axis,
+	 * or returns it to its authored size at 0, and says the Station rig: line again. False when this
+	 * station has no volume of that name.
+	 *
+	 * Returned to its size, a volume that had taken a man from a cabin it reached into lets go of
+	 * him, and the cabin's volume, which still holds him, takes him back: leaving the volume of the
+	 * frame he is bound to while another carrier's volume holds him is entering that one
+	 * (USFInteriorVolumeComponent::HandleEndOverlap, the review's N2). So 0 is control N2's whole
+	 * return, with its own Frame handover: Station -> Ship line.
+	 */
+	bool ApplyVolumeReach(FName VolumeName, double Metres);
 
 	/**
 	 * The Station rig: line: blocks, ports, volumes and physical colliders, the box they make in the
@@ -139,4 +156,19 @@ private:
 
 	bool bHasFirstBlock = false;
 	FVector FirstAssemblyOriginCm = FVector::ZeroVector;
+
+	/** Places, moves or withdraws control N1's collider for a raw sf.PortProtrusionM value. */
+	void ApplyPortProtrusion(const FString& Raw);
+
+	/** The change delegate's handler: a kit station does not tick, so it is told. */
+	void OnPortProtrusionChanged(IConsoleVariable* Variable);
+
+	/** Control N1's collider: created with no collision, switched on by sf.PortProtrusionM. */
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> ControlProtrusion;
+
+	FDelegateHandle PortProtrusionChangedHandle;
+
+	/** What sf.PortProtrusionM last read, so a Set to the same value is not a new application. */
+	FString LastProtrusionRaw;
 };
