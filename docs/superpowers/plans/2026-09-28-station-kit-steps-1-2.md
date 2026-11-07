@@ -79,10 +79,11 @@
 - **П17. Результаты «в бланк точки 11/12» до задачи 21.** Задачи 7, 12 и 14 велят записать таблицы мутантов и строки ворот в бланк ручной точки, а бланк создаёт только задача 21. До неё исполнитель пишет их в свой отчёт задачи под заголовком «Для бланка точки 11» (или 12), дословно, и задача 21 переносит их в бланк.
 - **П18. Ранбук задачи 21 ждёт окна.** Из PowerShell `& "…UnrealEditor.exe" --% …` возвращает управление сразу, и `Save-Log` скопировал бы журнал открытого окна. Строка запуска в ранбуке кончается на `| Out-Null` — конвейер прерывает действие `--%`, и PowerShell ждёт закрытия окна.
 - **П20. NaN в строке `Station rig:` (задача 9; найдено рецензентом интерфейсов задачи 7).** `BoxReachOutside` отвечает NaN за сломанный бокс с любой стороны, а строка говорила только «оболочку не прочесть» — теперь различает сломанный объём (`… itself could NOT BE MEASURED`). И максимум по объёмам за плоскостью порта (`!(M <= max)`) пускал NaN внутрь, а следующий конечный объём его затирал: строка вышла бы спокойной над объёмом, которого никто не измерил. Теперь NaN держится до конца цикла и печатается словами `… could NOT BE MEASURED`. Код задачи 9 исправлен на месте.
-- **П21. Порог контролей задачи 10 обоснован неверно.** Значение меньше 0.001 м печатается как `0.000`, только если оно меньше 0.0005 (`RedAtOrAboveMetres`); от 0.0005 до 0.001 строка печатает `0.001` и краснеет. Порог 0.001 оставлен — принятый контроль печатает не меньше того, что просили, — исправлены комментарии задачи 10 и фраза спеки §8.3.
+- **П21. Порог контролей задачи 10 обоснован неверно.** Значение меньше 0.001 м печатается как `0.000`, только если оно меньше 0.0005 (`RedAtOrAboveMetres`); от 0.0005 до 0.001 строка печатает `0.001` и краснеет. Порог 0.001 оставлен — принятый контроль не меньше одной единицы печати: строка печатает его округлённым до миллиметра, никогда не `0.000`, и краснеет (0.0014 — как `0.001`), — исправлены комментарии задачи 10 и фраза спеки §8.3.
 - **П22. Задача 7 после приёмки.** `BoundsPastPortPlane` отвечает NaN за не конечную ось и над пустым боксом (её комментарий это обещал, код — нет); три теста получили проверки защитных ветвей, а `BoundsPastPortPlaneReadsZeroAtThePrintedResolution` — закрепление порога 0.0005 через печать `%.3f` (без них мутант `RedAtOrAboveMetres = PrintedResolutionMetres` выживал). Счёт тестов прежний, 130. Комментарий о порогах в коде задачи выше исправлен: 0.071797 и 0.341797 — округлённые вверх и уже за пределом, точны 7 − 4√3 и 7.27 − 4√3 (спека §5).
 - **П19. Подписи интерфейсов** «Потребляет из задачи N» в задачах 6, 9, 10 и 14 местами называют не ту задачу-источник (строки сверки F8); на код это не влияет, источник — тот, где интерфейс объявлен по тексту плана.
 - **П23. Задача 9 после ревью.** Фраза сообщения коммита теряла условие: строка пишется на `BeginPlay` и на каждой смене порта **после него**, а до `BeginPlay` — на стенде места это вся стартовая стыковка — не пишется ничего; то же исправлено в абзаце задачи 20 для `CLAUDE.md`. В той же фразе «every station» стало «every kit station» — `ASFTestStation` строки не пишет, — а заголовок коммита относит «read back from the world» к тому, что меряют правила, а не к каждому числу строки. `EnvelopeMetres` отказывает стороне стены, которую не прочесть (`!FMath::IsFinite`), и не отдаёт её `FMath::Max`/`Min`: те держат NaN только до следующего конечного источника, и одна неизмеренная стена растворилась бы в соседних, оставив строку спокойной (класс П20). Два комментария сказаны точнее: счёт блоков, портов и объёмов взят из списков сборщика, а не прочитан из мира; у остатка округления в `Shown` нет одного размера — «-1e-12» не измерялось и зависит от удаления станции от начала координат. Код задачи 9 исправлен на месте. Копия комментария `DescribeHolder` в плане приведена к коду: исполнитель по указанию контроллера согласовал его с описанием `MeasureRelease`, исправленным в задаче 6.
+- **П24. Задача 10 после ревью.** Отказ команды на неизвестный объём сказан точнее, `no kit station in this world …`: команда ищет только станции набора, и на стенде петли, где объём `Interior` есть у `ASFTestStation`, прежнее «no station» было ложным; ворота задачи 10 переписаны под новую строку. Условие, при котором `Error` строки `Station rig:` законен, названо целиком, как в §8.3: `sf.PortProtrusionM` не пуст и не 0 **или** объём, выращенный `sf.StationVolumeReach`, не возвращён к 0 — в комментарии переменной и в обеих строках таблицы задачи 20, которые до того называли каждая своё и спорили друг с другом. Причина порога П21 исправлена: принятый контроль печатается округлённым до миллиметра, а не «не меньше заказанного». Абзац задачи 20 для `CLAUDE.md` называет третий момент, когда пишется строка, — применение контроля. Задача 11 названа среди потребителей задачи 10 вместе со строкой `… returned Boom0 of 'Station' to its authored size.`, которую она ищет. Контроллер сделал в коде ещё семь правок. Команда без мира (`World` — `nullptr`) не останавливает программу на `check(CurrentWorld)` в `TActorIterator`, а отвечает своим `Warning`. Задержка, которая во `float` обращается в 0, — не задержка, и строка `scheduled …` больше не объявляет таймер, которого нет (`TimerManager.cpp:673`). Отрицательная цифра «сжала бы объём с наружной грани», а не «вырастила внутрь». Справка `sf.PortProtrusionM` и комментарий в `ApplyPortProtrusion` называют куб и его место, а не «грань причала», от которой он стоит не ближе чем в 8 м. Комментарий о включении коллайдера называет условие: так бывает, когда его включают из выключенного. Переменная — строка «как `sf.PlaceOffsetM`», а не «по его причине»: его причина — точность `float` на 4·10¹⁰ м, здесь же — мусор, сказанный вслух. Объём растёт от авторского размера, а не от прошлого, — так сказано в заголовке, в комментарии `ApplyVolumeReach`, в справке команды и в строке таблицы задачи 20. Те же две правки — мир и задержка — внесены в ещё не написанный код задачи 17 (`sf.UndockParked`): в нём был тот же шаблон. Копии кода в плане приведены к коду.
 
 ---
 
@@ -3623,11 +3624,11 @@ MSG
 
 **Interfaces:**
 - Потребляет из задачи 9: `ReportStationRig`, `VolumeRecords`, `BlockOriginsCm`.
-- Отдаёт задачам 12, 20, 21:
+- Отдаёт задачам 11, 12, 20, 21:
   - строковая переменная `sf.PortProtrusionM` (пусто или 0 — нет коллайдера; иначе конечное ≥ 0.001 м)
   - команда `sf.StationVolumeReach <Volume> <Metres> [DelaySeconds]`
   - `bool ASFKitStation::ApplyVolumeReach(FName VolumeName, double Metres)`
-  - строки `Station rig: sf.PortProtrusionM='…' is not 0 or a finite number of metres of at least 0.001; no control collider was placed.` (`Warning`), `Station rig: sf.StationVolumeReach grew Boom0 of 'Station' 4.000 m outward along -Y.` (`Display`)
+  - строки `Station rig: sf.PortProtrusionM='…' is not 0 or a finite number of metres of at least 0.001; no control collider was placed.` (`Warning`), `Station rig: sf.StationVolumeReach grew Boom0 of 'Station' 4.000 m outward along -Y.` и `Station rig: sf.StationVolumeReach returned Boom0 of 'Station' to its authored size.` (обе `Display`; вторую ищет задача 11)
 
 - [ ] **Step 1: «Красный» шаг — контроль не ставится**
 
@@ -3646,9 +3647,10 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/**
-	 * sf.StationVolumeReach's work on this station: grows the named interior volume by Metres
-	 * outward along its block's port axis, or returns it to its authored size at 0, and says the
-	 * Station rig: line again. False when this station has no volume of that name.
+	 * sf.StationVolumeReach's work on this station: grows the named interior volume Metres past its
+	 * authored size -- from that size, not from the last one -- outward along its block's port axis,
+	 * or returns it to its authored size at 0, and says the Station rig: line again. False when this
+	 * station has no volume of that name.
 	 *
 	 * Returned to its size, a volume that had taken a man from a cabin it reached into lets go of
 	 * him, and the cabin's volume, which still holds him, takes him back: leaving the volume of the
@@ -3685,7 +3687,7 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 ```cpp
 	/**
 	 * Control N1 and N1b of the station kit (spec 8.3): a 4 m collider at the far end of block 0's berth
-	 * face, its -Y face this many metres past the port plane. A string, for sf.PlaceOffsetM's reason,
+	 * face, its -Y face this many metres past the port plane. A string, as sf.PlaceOffsetM is,
 	 * read by StarForge::Parse::TryParseFiniteNumber (NumberText.h), which wants a digit in the mantissa
 	 * and in any exponent: Atod answers zero for a string with no number in it, and
 	 * FDefaultValueHelper::ParseDouble let ".", "-" and "e10" through as zero -- a control set with a
@@ -3698,10 +3700,11 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 	 * and a value left from the last Play is a control still set, which the Station rig: line says in red.
 	 *
 	 * Declared here because this is the file that reads it. The Station rig: line's Error is legitimate
-	 * only while this is set.
+	 * only while a control acts (spec 8.3): this is neither empty nor 0 (N1, N1b), or a volume grown by
+	 * sf.StationVolumeReach has not been returned to 0 (N2, N2b).
 	 */
 	TAutoConsoleVariable<FString> CVarPortProtrusionM(TEXT("sf.PortProtrusionM"), TEXT(""),
-		TEXT("Metres a control collider on block 0's berth face reaches past the port plane (station kit, controls N1/N1b).\n")
+		TEXT("Metres the -Y face of a 4 m control cube, X 26..30 and Z 0..4 of block 0, stands past the port plane (station kit, N1/N1b).\n")
 		TEXT("Empty or 0: none. Read at the kit station's BeginPlay and on every change."),
 		ECVF_Default);
 
@@ -3714,7 +3717,8 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 	 * The smallest control accepted: the line's printed resolution (spec 8.3). Below
 	 * StarForge::Docking::RedAtOrAboveMetres, half of it, the line would print 0.000 and stay calm; between
 	 * the two it would print 0.001 and go red. A control is refused under a whole millimetre so that every
-	 * accepted one prints at least what it was asked for (amendment P21).
+	 * accepted one is at least one printed unit: the line prints it rounded to the millimetre, never as
+	 * 0.000, and goes red (amendment P21).
 	 */
 	constexpr double MinimumControlMetres = 0.001;
 
@@ -3727,17 +3731,22 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 	void StationVolumeReachNow(UWorld* World, FName VolumeName, double Metres, const FString& Input)
 	{
 		int32 Applied = 0;
-		for (TActorIterator<ASFKitStation> It(World); It; ++It)
+		// TActorIterator checks for a world and would stop the program over a null one; with none, no
+		// station answers, and the Warning below says so.
+		if (World)
 		{
-			if (It->ApplyVolumeReach(VolumeName, Metres))
+			for (TActorIterator<ASFKitStation> It(World); It; ++It)
 			{
-				++Applied;
+				if (It->ApplyVolumeReach(VolumeName, Metres))
+				{
+					++Applied;
+				}
 			}
 		}
 		if (Applied == 0)
 		{
 			UE_LOG(LogStarForge, Warning,
-				TEXT("sf.StationVolumeReach '%s': no station in this world has an interior volume named %s; nothing was changed."),
+				TEXT("sf.StationVolumeReach '%s': no kit station in this world has an interior volume named %s; nothing was changed."),
 				*Input, *VolumeName.ToString());
 		}
 	}
@@ -3752,9 +3761,9 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 			&& ParseFiniteMetres(Args[1], Metres)
 			&& (Args.Num() == 2 || ParseFiniteMetres(Args[2], AfterSeconds));
 
-		// A negative figure accepted in silence would grow the volume inward, read 0.000 and look
-		// like a control that found nothing; a positive one under a millimetre is under the line's
-		// printed resolution, and under half of one it would print 0.000.
+		// A negative figure accepted in silence would shrink the volume from its outward face, read
+		// 0.000 and look like a control that found nothing; a positive one under a millimetre is under
+		// the line's printed resolution, and under half of one it would print 0.000.
 		if (!bShape || !(Metres == 0.0 || Metres >= MinimumControlMetres) || !(AfterSeconds >= 0.0))
 		{
 			UE_LOG(LogStarForge, Warning,
@@ -3765,7 +3774,11 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 		}
 
 		const FName VolumeName(*Args[0]);
-		if (AfterSeconds == 0.0 || !World)
+		// The timer takes a float and sets nothing at or under zero (TimerManager.cpp 673). A delay too
+		// small to survive that conversion is no delay: scheduled, it would set no timer while the line
+		// below announced one.
+		const float DelaySeconds = static_cast<float>(AfterSeconds);
+		if (DelaySeconds <= 0.f || !World)
 		{
 			StationVolumeReachNow(World, VolumeName, Metres, Input);
 			return;
@@ -3783,10 +3796,10 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 					StationVolumeReachNow(LiveWorld, VolumeName, Metres, Input);
 				}
 			}),
-			static_cast<float>(AfterSeconds), false);
+			DelaySeconds, false);
 
 		UE_LOG(LogStarForge, Display,
-			TEXT("sf.StationVolumeReach '%s': scheduled %.2f s of game time from now."), *Input, AfterSeconds);
+			TEXT("sf.StationVolumeReach '%s': scheduled %.2f s of game time from now."), *Input, DelaySeconds);
 	}
 
 	/**
@@ -3795,8 +3808,8 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 	 */
 	FAutoConsoleCommandWithWorldAndArgs CmdStationVolumeReach(
 		TEXT("sf.StationVolumeReach"),
-		TEXT("sf.StationVolumeReach <Volume> <Metres> [Seconds]: grow a kit station's interior volume (Boom0, Hall1, ...) by that\n")
-		TEXT("many metres outward along its block's port axis, now or after that many seconds of game time. 0 restores it."),
+		TEXT("sf.StationVolumeReach <Volume> <Metres> [Seconds]: grow a kit station's interior volume (Boom0, Hall1, ...) that\n")
+		TEXT("many metres past its authored size, outward along its block's port axis, now or after that many seconds of game time. 0 restores it."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StationVolumeReachFromConsole));
 ```
 
@@ -3895,8 +3908,9 @@ void ASFKitStation::ApplyPortProtrusion(const FString& Raw)
 		return;
 	}
 
-	// Block 0's berth face, X 26..30 and Z 0..4 in its frame B, its -Y face p past the port plane.
-	// Placed and sized before it takes part in physics, so no step ever sees it anywhere else.
+	// A 4 m cube at X 26..30 and Z 0..4 in block 0's frame B, its -Y face p past the port plane.
+	// Placed and sized before collision is switched on, so a collider switched on from off is seen by
+	// no step anywhere else; a change from one value to another moves a collider that is already on.
 	const FVector MinCm = BlockOriginsCm[0]
 		+ FVector(ControlXMinCm, PortPlaneYCm - StarForge::Units::MetresToCm(Metres), ControlZMinCm);
 	ControlProtrusion->SetRelativeLocation(MinCm + FVector(ControlSizeCm * 0.5));
@@ -3920,9 +3934,10 @@ bool ASFKitStation::ApplyVolumeReach(FName VolumeName, double Metres)
 			continue;
 		}
 
-		// Grown on its outward side only: the centre moves out by half, the extent grows by half along
-		// the axis. Moved first and resized with overlaps updated, so a man the grown box now covers
-		// is told in this frame (BoxComponent.cpp 28-47), without a tick.
+		// Grown from its authored box, not from its last size, on its outward side only: the centre
+		// moves out by half, the extent grows by half along the axis. Moved first and resized with
+		// overlaps updated, so a man the grown box now covers is told in this frame (BoxComponent.cpp
+		// 28-47), without a tick.
 		const double GrowCm = StarForge::Units::MetresToCm(Metres);
 		Volume->SetRelativeLocation(Record.AuthoredCentreCm + Record.OutwardAxis * (GrowCm * 0.5));
 		Volume->SetBoxExtent(Record.AuthoredExtentCm + Record.OutwardAxis.GetAbs() * (GrowCm * 0.5), /*bUpdateOverlaps=*/ true);
@@ -3958,7 +3973,7 @@ grep -c "Boom0 REACHES 4.000 m OUT of its channel" $L    # >= 1
 grep -c "an interior VOLUME REACHES 4.000 m PAST it (Boom0)" $L   # >= 1
 kit DA_Place_Berth 60 10 "sf.FlightLog 1, sf.StationVolumeReach Nope 1.0, sf.StationVolumeReach Boom0 -1" task10-junk-60 "-ini:Engine:[ConsoleVariables]:sf.PortProtrusionM=-1"
 grep -c "sf.PortProtrusionM='-1' is not 0 or a finite number of metres of at least 0.001; no control collider was placed." $L   # 1
-grep -c "no station in this world has an interior volume named Nope" $L   # 1
+grep -c "no kit station in this world has an interior volume named Nope" $L   # 1
 grep -c "sf.StationVolumeReach 'Boom0 -1': needs a volume name" $L       # 1
 kit DA_Place_Berth 60 10 "sf.FlightLog 1, sf.StationVolumeReach Boom0 ., sf.StationVolumeReach Boom0 4.0 -" task10-junk2-60 "-ini:Engine:[ConsoleVariables]:sf.PortProtrusionM=."
 grep -c "sf.PortProtrusionM='.' is not 0 or a finite number of metres of at least 0.001; no control collider was placed." $L   # 1
@@ -5843,30 +5858,35 @@ namespace ParkedHullCommand
 
 	void UndockParkedNow(UWorld* World, const FString& Name)
 	{
-		for (TActorIterator<ASFTestShip> It(World); It; ++It)
+		// TActorIterator checks for a world and would stop the program over a null one; with none, no
+		// ship answers, and the Warning below says so.
+		if (World)
 		{
-			if (It->GetName() != Name)
+			for (TActorIterator<ASFTestShip> It(World); It; ++It)
 			{
-				continue;
-			}
-			if (It->GetCrewing() != ESFShipCrewing::Parked)
-			{
-				UE_LOG(LogStarForge, Warning,
-					TEXT("sf.UndockParked '%s': it is not parked (its crewing is %s); the player's ship is undocked with sf.Dock. Nothing was undocked."),
-					*Name, CrewingWord(It->GetCrewing()));
+				if (It->GetName() != Name)
+				{
+					continue;
+				}
+				if (It->GetCrewing() != ESFShipCrewing::Parked)
+				{
+					UE_LOG(LogStarForge, Warning,
+						TEXT("sf.UndockParked '%s': it is not parked (its crewing is %s); the player's ship is undocked with sf.Dock. Nothing was undocked."),
+						*Name, CrewingWord(It->GetCrewing()));
+					return;
+				}
+				USFDockingComponent* Docking = It->GetDocking();
+				if (!Docking || !Docking->IsDocked())
+				{
+					UE_LOG(LogStarForge, Warning, TEXT("sf.UndockParked '%s': it is not docked (it is %s); nothing was undocked."),
+						*Name, Docking ? USFDockingComponent::StateName(Docking->GetState()) : TEXT("without a docking component"));
+					return;
+				}
+				// The same RequestUndock as F, so sf.DockRelease acts here too, and control N8 frees the port
+				// by the very LetGo the player's ship frees its own with.
+				Docking->RequestUndock();
 				return;
 			}
-			USFDockingComponent* Docking = It->GetDocking();
-			if (!Docking || !Docking->IsDocked())
-			{
-				UE_LOG(LogStarForge, Warning, TEXT("sf.UndockParked '%s': it is not docked (it is %s); nothing was undocked."),
-					*Name, Docking ? USFDockingComponent::StateName(Docking->GetState()) : TEXT("without a docking component"));
-				return;
-			}
-			// The same RequestUndock as F, so sf.DockRelease acts here too, and control N8 frees the port
-			// by the very LetGo the player's ship frees its own with.
-			Docking->RequestUndock();
-			return;
 		}
 		UE_LOG(LogStarForge, Warning, TEXT("sf.UndockParked '%s': no ship of that name in this world; nothing was undocked."), *Name);
 	}
@@ -5888,7 +5908,11 @@ namespace ParkedHullCommand
 		}
 
 		const FString Name = Args[0];
-		if (AfterSeconds == 0.0 || !World)
+		// The timer takes a float and sets nothing at or under zero (TimerManager.cpp 673). A delay too
+		// small to survive that conversion is no delay: scheduled, it would set no timer while the line
+		// below announced one.
+		const float DelaySeconds = static_cast<float>(AfterSeconds);
+		if (DelaySeconds <= 0.f || !World)
 		{
 			UndockParkedNow(World, Name);
 			return;
@@ -5904,9 +5928,9 @@ namespace ParkedHullCommand
 					UndockParkedNow(LiveWorld, Name);
 				}
 			}),
-			static_cast<float>(AfterSeconds), false);
+			DelaySeconds, false);
 
-		UE_LOG(LogStarForge, Display, TEXT("sf.UndockParked '%s': scheduled %.2f s of game time from now."), *Name, AfterSeconds);
+		UE_LOG(LogStarForge, Display, TEXT("sf.UndockParked '%s': scheduled %.2f s of game time from now."), *Name, DelaySeconds);
 	}
 
 	/**
@@ -6338,7 +6362,7 @@ a place but the record check's control: one sound record and seven that each fai
 `Place parked hull: … -- NOT SPAWNED.` lines and the red `Place rig:` line with `1 of 8 parked hulls,
 7 NOT SPAWNED` are correct on that asset and a finding on any other.
 
-**A kit station writes its own line, `Station rig:`, at `BeginPlay` and at every change of a port after it.**
+**A kit station writes its own line, `Station rig:`, at `BeginPlay`, at every change of a port after it, and whenever a control is applied (`sf.PortProtrusionM`, `sf.StationVolumeReach`).**
 Its box in its own frame, each interior volume against the walls meant to enclose it, and for each
 port what reaches past its plane, which volume does, who holds it and — only while that holder is
 docked — the release it would make. An upper-case word is a state that did not hold and the line goes
@@ -6366,8 +6390,8 @@ told to each operator separately since then: the automation sits on the player's
 
 ```markdown
 | `sf.PlaceAsset` | *(empty)* | The place asset the place rig reads, by its bare name in `/Game/Places/` (`DA_Place_Berth`), not a path: MSYS rewrites an argument of the form `x=/path`. Empty keeps `DA_Place_OpenSpace`. **Read once in `InitGame`**, so `"-ini:Engine:[ConsoleVariables]:sf.PlaceAsset=DA_Place_Berth"`. A name with no asset behind it, or with a slash in it, refuses the place with two `Error` lines and assembles nothing; no fallback place is built in its stead |
-| `sf.PortProtrusionM` | *(empty)* | Station-kit controls N1/N1b: a 4 m control collider at the far end of block 0's berth face, its −Y face this many metres past the port plane. A string read by `StarForge::Parse::TryParseFiniteNumber`, never `FDefaultValueHelper::ParseDouble`, which passes `.` and `-` as zero; empty or 0 places nothing; any other value that is not a finite number of at least 0.001 is a `Warning` and places nothing. Read at the kit station's `BeginPlay` and on every change, through the variable's change delegate — the kit station does not tick. A level like `sf.PlaceOffsetM`, so it is not put back when a world ends: a value left from the last Play is a control still set, and the line says so in red. The `Station rig:` `Error` is legitimate only while this is set |
-| `sf.StationVolumeReach <Volume> <Metres> [DelaySeconds]` | *(a command)* | Station-kit controls N2/N2b: grows a kit station's interior volume (`Boom0`, `Hall1`, …) by that many metres outward along its block's port axis; 0 restores it. Both numbers read by `StarForge::Parse::TryParseFiniteNumber`. A command with a delay in game seconds, like `sf.KillThruster`, because `-ExecCmds` runs on the first frame, before the start-up handover is carried. The `Station rig:` `Error` is legitimate only while a volume is grown. **0 is control N2's whole return**: a volume going back to its size lets go of the man it took from a cabin, and the cabin's volume, which still holds him, takes him back (`HandleEndOverlap`, the review's N2) with `Frame handover: Station -> Ship, first carry moved him 0.000 cm`; wait for that line before the next `F`. `sf.BindFrame ship` is not needed there and warns that the control did not run |
+| `sf.PortProtrusionM` | *(empty)* | Station-kit controls N1/N1b: a 4 m control collider at the far end of block 0's berth face, its −Y face this many metres past the port plane. A string read by `StarForge::Parse::TryParseFiniteNumber`, never `FDefaultValueHelper::ParseDouble`, which passes `.` and `-` as zero; empty or 0 places nothing; any other value that is not a finite number of at least 0.001 is a `Warning` and places nothing. Read at the kit station's `BeginPlay` and on every change, through the variable's change delegate — the kit station does not tick. A level like `sf.PlaceOffsetM`, so it is not put back when a world ends: a value left from the last Play is a control still set, and the line says so in red. The `Station rig:` `Error` is legitimate only while a control acts: this is neither empty nor 0, or a volume grown by `sf.StationVolumeReach` has not been returned to 0 (station-kit spec §8.3) |
+| `sf.StationVolumeReach <Volume> <Metres> [DelaySeconds]` | *(a command)* | Station-kit controls N2/N2b: grows a kit station's interior volume (`Boom0`, `Hall1`, …) that many metres past its authored size, outward along its block's port axis; 0 restores it. Both numbers read by `StarForge::Parse::TryParseFiniteNumber`. A command with a delay in game seconds, like `sf.KillThruster`, because `-ExecCmds` runs on the first frame, before the start-up handover is carried. The `Station rig:` `Error` is legitimate only while a control acts: a volume grown and not returned to 0, or `sf.PortProtrusionM` neither empty nor 0 (§8.3). **0 is control N2's whole return**: a volume going back to its size lets go of the man it took from a cabin, and the cabin's volume, which still holds him, takes him back (`HandleEndOverlap`, the review's N2) with `Frame handover: Station -> Ship, first carry moved him 0.000 cm`; wait for that line before the next `F`. `sf.BindFrame ship` is not needed there and warns that the control did not run |
 | `sf.UndockParked <Name> [DelaySeconds]` | *(a command)* | Undocks the named `Parked` hull through the same `RequestUndock` as `F`, so `sf.DockRelease` acts on it too. Refuses with a `Warning` a name that is no ship, a hull that is not parked, a hull that is not docked, a bad delay — read by `StarForge::Parse::TryParseFiniteNumber`, so `.` and `-` are bad delays rather than zero |
 ```
 
