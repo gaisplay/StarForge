@@ -85,6 +85,7 @@
 - **П23. Задача 9 после ревью.** Фраза сообщения коммита теряла условие: строка пишется на `BeginPlay` и на каждой смене порта **после него**, а до `BeginPlay` — на стенде места это вся стартовая стыковка — не пишется ничего; то же исправлено в абзаце задачи 20 для `CLAUDE.md`. В той же фразе «every station» стало «every kit station» — `ASFTestStation` строки не пишет, — а заголовок коммита относит «read back from the world» к тому, что меряют правила, а не к каждому числу строки. `EnvelopeMetres` отказывает стороне стены, которую не прочесть (`!FMath::IsFinite`), и не отдаёт её `FMath::Max`/`Min`: те держат NaN только до следующего конечного источника, и одна неизмеренная стена растворилась бы в соседних, оставив строку спокойной (класс П20). Два комментария сказаны точнее: счёт блоков, портов и объёмов взят из списков сборщика, а не прочитан из мира; у остатка округления в `Shown` нет одного размера — «-1e-12» не измерялось и зависит от удаления станции от начала координат. Код задачи 9 исправлен на месте. Копия комментария `DescribeHolder` в плане приведена к коду: исполнитель по указанию контроллера согласовал его с описанием `MeasureRelease`, исправленным в задаче 6.
 - **П24. Задача 10 после ревью.** Отказ команды на неизвестный объём сказан точнее, `no kit station in this world …`: команда ищет только станции набора, и на стенде петли, где объём `Interior` есть у `ASFTestStation`, прежнее «no station» было ложным; ворота задачи 10 переписаны под новую строку. Условие, при котором `Error` строки `Station rig:` законен, названо целиком, как в §8.3: `sf.PortProtrusionM` не пуст и не 0 **или** объём, выращенный `sf.StationVolumeReach`, не возвращён к 0 — в комментарии переменной и в обеих строках таблицы задачи 20, которые до того называли каждая своё и спорили друг с другом. Причина порога П21 исправлена: принятый контроль печатается округлённым до миллиметра, а не «не меньше заказанного». Абзац задачи 20 для `CLAUDE.md` называет третий момент, когда пишется строка, — применение контроля. Задача 11 названа среди потребителей задачи 10 вместе со строкой `… returned Boom0 of 'Station' to its authored size.`, которую она ищет. Контроллер сделал в коде ещё семь правок. Команда без мира (`World` — `nullptr`) не останавливает программу на `check(CurrentWorld)` в `TActorIterator`, а отвечает своим `Warning`. Задержка, которая во `float` обращается в 0, — не задержка, и строка `scheduled …` больше не объявляет таймер, которого нет (`TimerManager.cpp:673`). Отрицательная цифра «сжала бы объём с наружной грани», а не «вырастила внутрь». Справка `sf.PortProtrusionM` и комментарий в `ApplyPortProtrusion` называют куб и его место, а не «грань причала», от которой он стоит не ближе чем в 8 м. Комментарий о включении коллайдера называет условие: так бывает, когда его включают из выключенного. Переменная — строка «как `sf.PlaceOffsetM`», а не «по его причине»: его причина — точность `float` на 4·10¹⁰ м, здесь же — мусор, сказанный вслух. Объём растёт от авторского размера, а не от прошлого, — так сказано в заголовке, в комментарии `ApplyVolumeReach`, в справке команды и в строке таблицы задачи 20. Те же две правки — мир и задержка — внесены в ещё не написанный код задачи 17 (`sf.UndockParked`): в нём был тот же шаблон. Копии кода в плане приведены к коду.
 - **П25. Задача 11 до запуска.** Комментарий кода ссылался на «the handover line below», а строка `Frame handover: … first carry moved him …` пишется не ниже в `TryHandover`, а в `SFShipboardMovementComponent.cpp` на первом переносе после `BindFrame`, и о кресле она не говорит ни в одной из двух своих форм. Сообщение коммита говорило, что строка передачи «теперь идёт как `Warning`»: она остаётся какой была, а `Warning` встаёт рядом отдельной строкой; в нём же названо условие — носитель, принявший человека, не владелец его кресла, — и возврат N2. «Отдаёт задачам 12 и 21»: задача 12 строку не читает, читает ранбук задачи 21.
+- **П26. Задача 11 после ревью.** Ранбук задачи 21 начинал N2 руками с `sf.ConsoleOperator 0`, `E`, а после стыковки N1b человек уже сидит — `F` стыкует только из кресла пилота, — и `E`, переключатель, поднял бы его: у стоящего строки `SEATED` нет, и стоп-ворота N2 не могли бы сработать. Теперь N2 начинается с состояния «сидя в кресле пилота» (линза интерфейсов, раунд 1). Каюта в строке `SEATED` названа по носителю кресла, а не по `From`: сидящий — в каюте своего кресла, пока его кадр стоит относительно носителя кресла (разные — пристыкованными, как в N2), и у человека в кресле пристыкованного корабля, уже отданного станции, строка про «Station's cabin» была бы ложью; разошлись — строка называет каюту его поста, а не место, где он; в случае F1 это один носитель, и строка та же. Фраза §6.7 п. 3 о «volume of Ship reaching into Station's cabin» описывает каюту по `From`; вывод тот же — на возврате строки нет. Мёртвые запасные ветви (`Seat ? … : TEXT("unknown")`, `: FromName`) убраны: внутри условия кресло есть всегда, а носитель кресла без владельца назван `none`, как `From` и `To`. Первое предложение комментария несёт условие «носитель — не владелец кресла». Задача 20 правит фразу `CLAUDE.md` об F1, где `TryHandover` «asks neither `IsSeated()`». Во втором абзаце комментария пример строки заменён на «a Warning there would be a false alarm»; условие проверяет `Seat` вместо второго `IsSeated()`. Сказанное о §6.7 п. 3 верно и для §15 п. 4. Копия кода и строка Interfaces задачи 11 приведены к коду.
 
 ---
 
@@ -4025,7 +4026,7 @@ Headless проверить нельзя: посадить человека в �
 
 **Interfaces:**
 - Потребляет: `ASFCharacter::IsSeated()`, `ASFCharacter::GetSeatedStation()`, `USFShipStationComponent::StationName`.
-- Отдаёт задаче 21 (ранбук точки 11: стоп-ворота N2 руками): строка `Warning` `Frame handover: <From> -> <To> took a SEATED man (<Owner>'s <post> post): a volume of <To> reaches into <From>'s cabin.`
+- Отдаёт задаче 21 (ранбук точки 11: стоп-ворота N2 руками): строка `Warning` `Frame handover: <From> -> <To> took a SEATED man (<Owner>'s <post> post): a volume of <To> reaches into <Owner>'s cabin.`
 
 - [ ] **Step 1: Строка**
 
@@ -4033,26 +4034,31 @@ Headless проверить нельзя: посадить человека в �
 
 ```cpp
 	// An instrument, not a refusal (station-kit spec 6.7 item 3, owner's decision 11). A seated man
-	// handed to another carrier is finding F1 itself -- a station's volume reaching into a cabin -- and
-	// the Frame handover line his first carry after BindFrame writes says nothing of the seat. It goes
-	// through as before: refusing to hand over a seated man was one of the fixes the owner declined.
+	// handed to a carrier other than his seat's is finding F1 itself -- a station's volume reaching into
+	// a cabin -- and the Frame handover line his first carry after BindFrame writes says nothing of the
+	// seat. It goes through as before: refusing to hand over a seated man was one of the fixes the owner
+	// declined.
 	//
 	// Only when the carrier taking him is not the one whose seat he holds. Since the review's N2,
 	// leaving the volume of the frame he is bound to while another carrier's volume still holds him
 	// is entering that one (HandleEndOverlap), and that is how control N2 returns him: the grown
 	// volume goes back to its size and his own cabin takes him back. Handed BACK to his seat's
-	// carrier is the fix, not F1, and a line saying "a volume of Ship reaches into Station's cabin"
-	// there would be false.
+	// carrier is the fix, not F1, and a Warning there would be a false alarm.
+	//
+	// The cabin is named after his seat's carrier, not after From: he is in that cabin while the frame
+	// he is bound to stays at rest with it -- docked, as in N2, when the two differ. Once they part, his
+	// frame carries him out of it, as F1 left its pilot's body behind, and the line names his post's
+	// cabin, not where he is.
 	const USFShipStationComponent* Seat = Character->IsSeated() ? Character->GetSeatedStation() : nullptr;
 	const AActor* SeatCarrier = Seat ? Seat->GetOwner() : nullptr;
-	if (From && From != To && Character->IsSeated() && SeatCarrier != To->GetOwner())
+	if (From && From != To && Seat && SeatCarrier != To->GetOwner())
 	{
 		const FString FromName = From->GetOwner() ? From->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
 		const FString ToName = To->GetOwner() ? To->GetOwner()->GetActorNameOrLabel() : FString(TEXT("none"));
-		const FString SeatOwner = (Seat && Seat->GetOwner()) ? Seat->GetOwner()->GetActorNameOrLabel() : FromName;
+		const FString SeatName = SeatCarrier ? SeatCarrier->GetActorNameOrLabel() : FString(TEXT("none"));
 		UE_LOG(LogStarForge, Warning,
 			TEXT("Frame handover: %s -> %s took a SEATED man (%s's %s post): a volume of %s reaches into %s's cabin."),
-			*FromName, *ToName, *SeatOwner, Seat ? *Seat->StationName : TEXT("unknown"), *ToName, *FromName);
+			*FromName, *ToName, *SeatName, *Seat->StationName, *ToName, *SeatName);
 	}
 ```
 
@@ -4083,7 +4089,7 @@ feat(handover): say it out loud when a volume takes a seated man
 A seated man handed to a carrier other than the one whose seat he holds is F1
 itself: a station's volume reaching into a cabin. The handover line says
 nothing of the seat, and that has not changed; a Warning now goes out beside
-it, naming the post, the carrier that took him and the cabin it reached into.
+it, naming the post, the carrier that took him and the cabin his post is in.
 Handed back to his seat's carrier -- how control N2 returns him since the
 review's N2 -- is the fix, not F1, and no Warning is written for it.
 
@@ -6430,6 +6436,8 @@ only automated hulls read it, because only they seat this operator. A third crew
 
 Ворота: `grep -c "Until 2026-09-28 the station had one box" CLAUDE.md` — `0`; `grep -c "since 2026-10-01 the station's interior is two volumes" CLAUDE.md` — `1`.
 
+В записи о каналах корпуса (`The hull box blocks …`, абзац F1) фраза о `TryHandover` с задачи 11 неверна в настоящем времени: он читает `IsSeated()`, хотя решает по-прежнему по одной скорости. В `CLAUDE.md` она разбита по строкам; по содержанию `` `TryHandover` -- which asks one question, relative speed against 1.0 m/s, and asks neither `IsSeated()` nor whose floor is under him -- `` → `` `TryHandover` -- which decides on one question, relative speed against 1.0 m/s, and then asked neither `IsSeated()` nor whose floor is under him (since the station kit's task 11 it reads `IsSeated()`, only to say `took a SEATED man` as a `Warning`) -- ``. Ворота: `grep -c "and asks neither" CLAUDE.md` — `0`; `grep -c "since the station kit's task 11 it reads" CLAUDE.md` — `1`.
+
 - [ ] **Step 5: «Current state»**
 
 Перед первым абзацем раздела «Current state» вставить абзац, заполнив числа **из журналов и бланка базы, а не из этого плана**:
@@ -6542,7 +6550,7 @@ Count 'Test Completed. Result=\{Fail\}'      # 0
 7. **Красные строки и законно красное** — таблица по прогонам из §8.2 и условия из §8.3, дословно. Отдельной строкой: строки `dock    free -- NO STATION` на панели с ревью 2026-10-01 нет вовсе. Без станции панель пишет белым `dock    free -- no station in this level`; станция есть, а порт не найден — красным `dock    free -- <станция> is in this level and the docking found NO STATION port`, и здесь это всегда находка. `dock    free -- NO FREE PORT` законна только в N4. Ещё красные строки панели, которых до ревью не было: `CARRY NOT RUNNING - bound to … never carried` и `footing  NONE …` (`SFFrameDriftHUD.cpp`) — находка в любом прогоне этого ранбука. В разделе 10 — оранжевая `PLACE REFUSED - sf.PlaceAsset '…': …; nothing was assembled …` (стык слияния, `42c90a6`): законна только в N7. Ещё одна строка про панель: припаркованный корпус она показывает блоком `combat` как другой корабль, белым, `flown by unoccupied` (§7.6). Это не красная строка, и красной она быть не должна.
 
 8. **Точка 11** — по запуску на раздел, каждый с командой, шагами, стоп-воротами дословно и `Save-Log`:
-   - **11-A** (`DA_Place_Berth`, имя журнала `checkpoint-11-A-berth-by-hand`): петля каюта → `sf.ConsoleOperator 0`, `E` → `F` (строка `Dock: [Ship] releasing, 2.93 m …`) → полёт → назад → `CAN DOCK` → `F` → `E` → хатч → канал 12 м → зал → обратно; ворота — `Count 'skipped carries [1-9]'` 0, `Count 'Carry NOT RUNNING'` 0, обе `Frame handover` с `0.000 cm`, норма `Station rig:`. Затем N1: `sf.PortProtrusionM 1.0`, `F` из кресла, стоп-ворота N1 дословно; `sf.PortProtrusionM 0`, подлёт в окно, `F`. N1b так же с `0.2`. N2b: `sf.StationVolumeReach Hall0 1.0`, ворота, возврат `sf.StationVolumeReach Hall0 0`. N2: `sf.ConsoleOperator 0`, `E`, `sf.StationVolumeReach Boom0 4.0`; стоп-ворота — строка `Station rig:` с `Boom0 REACHES 4.000 m OUT of its channel` и `VOLUME REACHES 4.000 m PAST it (Boom0)`, `Frame handover: Ship -> Station, first carry moved him 0.000 cm`, строка `Frame handover: Ship -> Station took a SEATED man (Ship's pilot post): a volume of Station reaches into Ship's cabin.`, строка `Standing on …`. Возврат (§8.3, поправка П4): `sf.StationVolumeReach Boom0 0`; ворота возврата — `Frame handover: Station -> Ship, first carry moved him 0.000 cm`, и строки `SEATED` на возврате **нет** (корабль — владелец его кресла); только после неё следующий `F`. `sf.BindFrame ship` не набирать.
+   - **11-A** (`DA_Place_Berth`, имя журнала `checkpoint-11-A-berth-by-hand`): петля каюта → `sf.ConsoleOperator 0`, `E` → `F` (строка `Dock: [Ship] releasing, 2.93 m …`) → полёт → назад → `CAN DOCK` → `F` → `E` → хатч → канал 12 м → зал → обратно; ворота — `Count 'skipped carries [1-9]'` 0, `Count 'Carry NOT RUNNING'` 0, обе `Frame handover` с `0.000 cm`, норма `Station rig:`. Затем N1: `sf.PortProtrusionM 1.0`, `F` из кресла, стоп-ворота N1 дословно; `sf.PortProtrusionM 0`, подлёт в окно, `F`. N1b так же с `0.2`. N2b: `sf.StationVolumeReach Hall0 1.0`, ворота, возврат `sf.StationVolumeReach Hall0 0`. N2 — сидя в кресле пилота. После стыковки N1b он уже сидит: `F` стыкует только из кресла пилота (последняя строка о кресле пилота в журнале — `Station 'pilot' on [Ship] taken by player.`). `E` здесь не нажимать: это переключатель, сидящего он поднимает, а строка `SEATED` пишется только у сидящего. Если он всё же встал — `sf.ConsoleOperator 0`, `E`. Затем `sf.StationVolumeReach Boom0 4.0`; стоп-ворота — строка `Station rig:` с `Boom0 REACHES 4.000 m OUT of its channel` и `VOLUME REACHES 4.000 m PAST it (Boom0)`, `Frame handover: Ship -> Station, first carry moved him 0.000 cm`, строка `Frame handover: Ship -> Station took a SEATED man (Ship's pilot post): a volume of Station reaches into Ship's cabin.`, строка `Standing on …`. Возврат (§8.3, поправка П4): `sf.StationVolumeReach Boom0 0`; ворота возврата — `Frame handover: Station -> Ship, first carry moved him 0.000 cm`, и строки `SEATED` на возврате **нет** (корабль — владелец его кресла); только после неё следующий `F`. `sf.BindFrame ship` не набирать.
    - **11-B** (`DA_Place_Berth`, `checkpoint-11-B-n5-standing`): N5 стоя — кресло держит консоль, в консоли `sf.DockRelease 0`, `sf.Dock 0`, `sf.Intent.X 1`; ворота — `Show 'Shipboard drift'` с `KNOCKED DOWN`.
    - **11-C** (петля, `checkpoint-11-C-latent-f1-by-hand`):
 ```powershell
