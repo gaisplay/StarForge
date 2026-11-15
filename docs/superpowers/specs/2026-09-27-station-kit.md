@@ -520,6 +520,15 @@ X ∈ [−30, 30], Y ∈ [−12, 12], Z ∈ [0, 32]. Грань причала �
   `DockImmediately` не зовётся.
 - **Смещение человека от точки появления** (`GetInteriorSpawnWorldLocation`, `SFTestShip.cpp:517-522`) в осях корабля,
   метры, по умолчанию ноль. Стенд ставит человека в эту точку так же, как сегодня в точку появления.
+- **Дрон-мишень стенда — поле `bTargetDrone`, по умолчанию `true`** (решение владельца 2026-11-16, §12, ответ 14).
+  С `false` корабль игрока дрон не порождает, при любом старте: автоматика стрелка начинает без цели, корабль
+  говорит `Ship [Ship] spawns no target drone; …`, а турель пишет `NO TARGET` — на панели жёлтым, это не красная
+  строка, — пока `sf.AimAt` не даст цель. **Места набора пишутся с `false`.** Дрон кружит в 30 м от корабля в
+  мировых осях, а центр корабля у причала стоит в 16 м от грани блока — 12 м стрелы и 4 м полуширины корпуса.
+  Центр дрона внутри причального блока при фазе орбиты от 34.6° до 127.8°, то есть 9.3 с из каждых 36: за гранью
+  причала он при 28.19·sin φ ≥ 16.00, а в пределах блока по X — при 30·cos φ ≥ −18.38. Измерено 2026-11-16: на
+  девятой секунде цель турели — `(-0 609 1016) cm`, и строка турели `ON TARGET`. `DA_Place_OpenSpace` и оба
+  ассета §6.9 поля не несут и читаются как раньше; три старых стенда `ShipStart` не читают.
 - **Зачем.** Воспроизведению дефекта `ASFTestStation` (N9, N9b, §6.9) нужен корабль, стоящий у стены станции, и
   человек у стены каюты. Безголовой ходьбы в проекте нет: среди `sf.*` нет ввода движения пешки (заметка о механиках,
   4.6.14), и поставить человека к стене иначе нечем. Контролю N4 (оба порта заняты, §8.3) нужен корабль, которому
@@ -1314,7 +1323,7 @@ index` печатается при каждом решении о стыковк
 
 | № | `-ExecCmds` (+ `-ini`) | Обязан прочитать |
 |---|---|---|
-| H1.1 | `sf.FlightLog 1` | `Place size: 'Berth' … fits.`; `Place carrier: 'Station' of class SFBerthStation … frame present -- motionless (open space).`; норма `Station rig:` из §6.8 **до первой строки `Flight:`**, то есть в первую секунду, с отходом `2.93 m`; `Place rig: … place 'Berth' read from DA_Place_Berth and assembled with 1 carrier; the ship spawns docked; the man stands in the cabin and is bound to its frame.`; `Frame handover: Station -> Ship, first carry moved him 0.000 cm`; увод `0.000 cm` |
+| H1.1 | `sf.FlightLog 1` | `Place size: 'Berth' … fits.`; `Place carrier: 'Station' of class SFBerthStation … frame present -- motionless (open space).`; норма `Station rig:` из §6.8 **до первой строки `Flight:`**, то есть в первую секунду, с отходом `2.93 m`; `Place rig: … place 'Berth' read from DA_Place_Berth and assembled with 1 carrier; the ship spawns docked; the man stands in the cabin and is bound to its frame.`; `Frame handover: Station -> Ship, first carry moved him 0.000 cm`; увод `0.000 cm`; `Ship [Ship] spawns no target drone; …` и ни одной строки `Target drone` (§6.6, решение 14) |
 | H1.2 | `sf.FlightLog 1, sf.Dock 2` | `Dock: [Ship] releasing, 2.93 m along the port axis over 1.0 s, peak 17.6 m/s2.` → `Dock: [Ship] undocked.` → `Dock: [Ship] capturing, 2.9 m, 0.0 m/s, fwd 0.0 deg, up 0.0 deg` (запятая после `capturing` — так печатает код, `SFDockingComponent.cpp:430-435`, и так записано на петле в `2026-09-25-f3fix-dockcycle-*.log` на обеих частотах) → `Dock: [Ship] docked.`; `Station rig:` пишется повторно четыре раза, по порядку: `…; releasing by Ship.`, `…; free.`, `…; capturing by Ship.`, `…; held by Ship, whose release would be 2.93 m in 1.0 s, peak 17.6 m/s2 -- inside …` (§6.8); строки `Frame [Ship]:` называют оба способа чтения угловой скорости |
 | H1.3 | `sf.FlightLog 1, sf.Dock 0, sf.Intent.X 1`; то же с `sf.Intent.Z 1` и с `sf.Intent.Y -1` | Отход вбок, вверх и прямо назад чистые: `footing intact`, `0.000 cm`, в строке `Dock:` `fwd 0.0 deg, up 0.0 deg` |
 | H1.4 | `sf.FlightLog 1, sf.Knockdown 0, sf.Dock 0, sf.Intent.Roll 1` | Крен выходит на `180.0` и держится, тангаж и рысканье `0.0`. `SleepFamily` пережил отход (§8 спеки среза); промежуточные числа — протокол |
@@ -1628,6 +1637,8 @@ while bound to Station's frame`. Записанный прогон это уже
 - `sf.PlaceAsset`, `sf.PortProtrusionM`, `sf.StationVolumeReach` и `sf.UndockParked` — в таблицу переменных; поле
   `ShipStart` и массив `ParkedHulls` — в описание стенда места;
 - значение экипажа `Parked` и его три названных исключения (§7.6) — туда, где описаны `Automated` и `sf.PirateAI`;
+- поле `ShipStart.bTargetDrone` и снятый на местах набора дрон (§6.6, решение 14) — в описание стенда места и в
+  строки `sf.TargetDrone` и `sf.AimAt` таблицы переменных;
 - два объёма `ASFTestStation` и эпизод отказа на носитель — в «Things in the code that look like mistakes and are
   not», с воспроизведением N9;
 - «six deliberate departures» (`CLAUDE.md:27`) — на «seven» (решение 9): седьмое — строительство станций игроком;
@@ -1709,6 +1720,12 @@ while bound to Station's frame`. Записанный прогон это уже
     припаркованные корпуса поэтому живут отдельным массивом, а не новым полем носителя (§7.6).
 13. **Воротник порта — (а), собственное сечение стрелы 2.4 × 2.9 м,** как арт взял временно; теперь это решение
     владельца. Что изменило: §6.5, §11 п. 6; запись о временном выборе агента снята.
+
+Позже, 2026-11-16, владелец решил вопрос, поднятый приёмкой шага 1:
+
+14. **Дрон-мишень на местах набора — снять,** а не сдвигать его орбиту и не оставлять с пометкой в ранбуке.
+    Журналы шага 1 становятся опорными, и строки турели в них должны быть теми, с которыми набор живёт дальше.
+    Что изменило: §6.6 (поле `bTargetDrone`), §8.2 (H1.1), §11 (правки `CLAUDE.md`).
 
 ---
 

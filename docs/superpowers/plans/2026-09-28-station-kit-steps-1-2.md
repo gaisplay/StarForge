@@ -86,6 +86,7 @@
 - **П24. Задача 10 после ревью.** Отказ команды на неизвестный объём сказан точнее, `no kit station in this world …`: команда ищет только станции набора, и на стенде петли, где объём `Interior` есть у `ASFTestStation`, прежнее «no station» было ложным; ворота задачи 10 переписаны под новую строку. Условие, при котором `Error` строки `Station rig:` законен, названо целиком, как в §8.3: `sf.PortProtrusionM` не пуст и не 0 **или** объём, выращенный `sf.StationVolumeReach`, не возвращён к 0 — в комментарии переменной и в обеих строках таблицы задачи 20, которые до того называли каждая своё и спорили друг с другом. Причина порога П21 исправлена: принятый контроль печатается округлённым до миллиметра, а не «не меньше заказанного». Абзац задачи 20 для `CLAUDE.md` называет третий момент, когда пишется строка, — применение контроля. Задача 11 названа среди потребителей задачи 10 вместе со строкой `… returned Boom0 of 'Station' to its authored size.`, которую она ищет. Контроллер сделал в коде ещё семь правок. Команда без мира (`World` — `nullptr`) не останавливает программу на `check(CurrentWorld)` в `TActorIterator`, а отвечает своим `Warning`. Задержка, которая во `float` обращается в 0, — не задержка, и строка `scheduled …` больше не объявляет таймер, которого нет (`TimerManager.cpp:673`). Отрицательная цифра «сжала бы объём с наружной грани», а не «вырастила внутрь». Справка `sf.PortProtrusionM` и комментарий в `ApplyPortProtrusion` называют куб и его место, а не «грань причала», от которой он стоит не ближе чем в 8 м. Комментарий о включении коллайдера называет условие: так бывает, когда его включают из выключенного. Переменная — строка «как `sf.PlaceOffsetM`», а не «по его причине»: его причина — точность `float` на 4·10¹⁰ м, здесь же — мусор, сказанный вслух. Объём растёт от авторского размера, а не от прошлого, — так сказано в заголовке, в комментарии `ApplyVolumeReach`, в справке команды и в строке таблицы задачи 20. Те же две правки — мир и задержка — внесены в ещё не написанный код задачи 17 (`sf.UndockParked`): в нём был тот же шаблон. Копии кода в плане приведены к коду.
 - **П25. Задача 11 до запуска.** Комментарий кода ссылался на «the handover line below», а строка `Frame handover: … first carry moved him …` пишется не ниже в `TryHandover`, а в `SFShipboardMovementComponent.cpp` на первом переносе после `BindFrame`, и о кресле она не говорит ни в одной из двух своих форм. Сообщение коммита говорило, что строка передачи «теперь идёт как `Warning`»: она остаётся какой была, а `Warning` встаёт рядом отдельной строкой; в нём же названо условие — носитель, принявший человека, не владелец его кресла, — и возврат N2. «Отдаёт задачам 12 и 21»: задача 12 строку не читает, читает ранбук задачи 21.
 - **П26. Задача 11 после ревью.** Ранбук задачи 21 начинал N2 руками с `sf.ConsoleOperator 0`, `E`, а после стыковки N1b человек уже сидит — `F` стыкует только из кресла пилота, — и `E`, переключатель, поднял бы его: у стоящего строки `SEATED` нет, и стоп-ворота N2 не могли бы сработать. Теперь N2 начинается с состояния «сидя в кресле пилота» (линза интерфейсов, раунд 1). Каюта в строке `SEATED` названа по носителю кресла, а не по `From`: сидящий — в каюте своего кресла, пока его кадр стоит относительно носителя кресла (разные — пристыкованными, как в N2), и у человека в кресле пристыкованного корабля, уже отданного станции, строка про «Station's cabin» была бы ложью; разошлись — строка называет каюту его поста, а не место, где он; в случае F1 это один носитель, и строка та же. Фраза §6.7 п. 3 о «volume of Ship reaching into Station's cabin» описывает каюту по `From`; вывод тот же — на возврате строки нет. Мёртвые запасные ветви (`Seat ? … : TEXT("unknown")`, `: FromName`) убраны: внутри условия кресло есть всегда, а носитель кресла без владельца назван `none`, как `From` и `To`. Первое предложение комментария несёт условие «носитель — не владелец кресла». Задача 20 правит фразу `CLAUDE.md` об F1, где `TryHandover` «asks neither `IsSeated()`». Во втором абзаце комментария пример строки заменён на «a Warning there would be a false alarm»; условие проверяет `Seat` вместо второго `IsSeated()`. Сказанное о §6.7 п. 3 верно и для §15 п. 4. Копия кода и строка Interfaces задачи 11 приведены к коду.
+- **П27. Места набора без дрона-мишени (задача 11b; решение владельца 2026-11-16).** Дрон стенда кружит в 30 м от корабля в мировых осях, а центр корабля у причала стоит в 16 м от грани блока — 12 м стрелы и 4 м полуширины корпуса: около девяти секунд каждого 36-секундного оборота центр дрона внутри причального блока (приёмка задачи 8, evidence-2; измерено 2026-11-16 на `DA_Place_Berth`). Владелец выбрал снять дрон на местах набора, а не сдвигать орбиту и не оставлять его с пометкой в ранбуке. `FSFShipStart` получает поле `bTargetDrone`, по умолчанию `true` — прежнее поведение, так что `DA_Place_OpenSpace` и оба ассета §6.9 читаются как раньше; стенд места передаёт его кораблю до начала игры; скрипт пишет `false` во все места со станцией набора; `DA_Place_Berth` пересоздан. На месте набора корабль говорит `Ship [Ship] spawns no target drone; …`, а турель пишет `NO TARGET` (на панели — жёлтым), пока `sf.AimAt` не даст цель; ни та, ни другая строка не красная. Задача стоит перед задачей 12, потому что журналы задачи 12 становятся опорными. Строка `KIT-ASSET read` получила поле `target drone yes|no` после `occupant (…)`: ожидания задач 3 и 8 и копия скрипта в задаче 3 записаны до него. Дополнены ворота H1.1 задачи 12, абзац и две строки таблицы `CLAUDE.md` в задаче 20 и пункт 7 ранбука задачи 21; в спеке — §6.6, §8.2, §11 и §12 (ответ 14).
 
 ---
 
@@ -201,19 +202,19 @@ Source/StarForge/
   Public/Ship/SFPilotStationComponent.h       правится: IsConsoleControlled (16)
   Public/Ship/SFWeaponComponent.h             правится: IsConsoleControlled (16)
   Public/Ship/SFThrusterArrayComponent.h      правится: комментарий к SetLocked (16, поправка П7)
-  Public/Ship/SFTestShip.h, Private/...       правится: Parked (16), sf.UndockParked (17),
+  Public/Ship/SFTestShip.h, Private/...       правится: комментарий о дроне (11b), Parked (16), sf.UndockParked (17),
                                               строка полёта NO FREE PORT (18)
   Private/Debug/SFFrameDriftHUD.cpp           правится: панель NO FREE PORT (18)
-  Public/World/SFPlaceDataAsset.h, Private/...правится: ShipStart (2), ParkedHulls (17)
-  Public/SFPlaceGameMode.h, Private/...       правится: sf.PlaceAsset и ShipStart (2),
+  Public/World/SFPlaceDataAsset.h, Private/...правится: ShipStart (2), bTargetDrone (11b), ParkedHulls (17)
+  Public/SFPlaceGameMode.h, Private/...       правится: sf.PlaceAsset и ShipStart (2), дрон места (11b),
                                               ParkedHulls и строка Place parked hull: (17)
 
 scripts/compare_regress.py                    создаётся: сравнение двух проходов (задача 1)
-scripts/station_kit_places.py                 создаётся: ассеты мест набора (задача 3)
+scripts/station_kit_places.py                 создаётся: ассеты мест набора (задача 3); no_drone (11b)
 
 Content/Places/DA_Place_LatentF1Side.uasset   создаётся (3)
 Content/Places/DA_Place_LatentF1Roof.uasset   создаётся (3)
-Content/Places/DA_Place_Berth.uasset          создаётся (8)
+Content/Places/DA_Place_Berth.uasset          создаётся (8), пересоздаётся без дрона (11b)
 Content/Places/DA_Place_PierCore.uasset       создаётся (13)
 Content/Places/DA_Place_PierCoreTie.uasset    создаётся (15)
 Content/Places/DA_Place_PierCoreParked0.uasset создаётся (17)
@@ -4101,6 +4102,243 @@ MSG
 
 ---
 
+### Task 11b: Места набора без дрона-мишени
+
+Дрон стенда кружит в 30 м от корабля игрока в мировых осях. Центр корабля, пристыкованного к причалу, стоит в 16 м от грани блока — 12 м стрелы и 4 м полуширины корпуса, — и около девяти секунд каждого 36-секундного оборота, с 3.5-й по 12.8-ю, центр дрона находится внутри причального блока, а турель почти всё это время пишет `ON TARGET` (приёмка задачи 8, evidence-2; измерено 2026-11-16: на девятой секунде цель `(-0 609 1016) cm` — в 12.2 м за гранью причала, внутри блока). Владелец решил снять дрон на местах набора (2026-11-16; спека §6.6 и §12, ответ 14; поправка П27). Задача стоит перед задачей 12: журналы той становятся опорными, и строки `Turret:` в них должны быть уже без дрона.
+
+Механизм — данные места, а не класс станции: поле `bTargetDrone` в `FSFShipStart`, по умолчанию `true`. Ассет, сохранённый до появления поля, читается как раньше, поэтому `DA_Place_OpenSpace`, оба ассета §6.9 и три старых стенда не меняются ни строкой. Строка `Place rig:` не меняется тоже: о дроне говорят сам корабль и турель.
+
+**Files:**
+- Modify: `Source/StarForge/Public/World/SFPlaceDataAsset.h` (`FSFShipStart::bTargetDrone`)
+- Modify: `Source/StarForge/Private/SFPlaceGameMode.cpp` (`StartPlay`, сразу после появления корабля)
+- Modify: `Source/StarForge/Public/Ship/SFTestShip.h` (комментарий к `bSpawnTargetDrone`)
+- Modify: `scripts/station_kit_places.py` (`no_drone`; шесть групп мест со станцией набора; строка чтения)
+- Modify: `Content/Places/DA_Place_Berth.uasset` (пересоздаётся скриптом)
+
+**Interfaces:**
+- Потребляет: `FSFShipStart` и `PlaceShipStart` (задача 2), `ASFTestShip::bSpawnTargetDrone`, скрипт мест (задача 3), `DA_Place_Berth` (задача 8).
+- Отдаёт задачам 12–19 и 21:
+  - `bool FSFShipStart::bTargetDrone = true` (в Python редактора — `target_drone`);
+  - на месте набора вместо `Target drone spawned: …` — строка `Display` `Ship [Ship] spawns no target drone; its gunner's automation will track whatever it is given.`, и под `sf.FlightLog 1` каждая строка турели корабля — `Turret: [Ship] gunned by automation | target none firing 0 | bearing none | aim yaw 0.0 pitch 0.0 deg | NO TARGET`, пока `sf.AimAt` не даст цель; обе — не `Warning`;
+  - `no_drone(start=None)` в скрипте мест и поле `, target drone yes|no` в строке `KIT-ASSET read` после `occupant (…)`.
+
+- [ ] **Step 1: «Красный» шаг — на причале дрон есть**
+
+На сборке BASE, до правок:
+
+```bash
+mkdir -p Saved/Task11bLogs
+kit DA_Place_Berth 60 70 "sf.FlightLog 1" task11b-before-60
+grep -cF "Target drone spawned: orbit 30.0 m radius at 10.0 deg/s, tilted 20.0 deg, anchored to Ship, present." $L   # 1
+grep -c "spawns no target drone" $L                  # 0
+grep "Turret: \[Ship\]" $L | grep -c "| ON TARGET"   # 44, и среди них секунды 4-11, когда цель внутри блока
+cp $L Saved/Task11bLogs/task11b-before-60.log
+rm docs/superpowers/notes/evidence/$(date +%F)-task11b-before-60.log
+```
+
+- [ ] **Step 2: Поле места, стенд и комментарий корабля**
+
+`Source/StarForge/Public/World/SFPlaceDataAsset.h`, в `FSFShipStart`, после поля `OccupantOffsetShipMetres`:
+
+```cpp
+	/**
+	 * Whether the player's ship spawns the rig's target drone, in either mode. True by default: the
+	 * old behaviour, so an asset saved before this field existed reads as it did. The station kit's
+	 * places are written with it false (scripts/station_kit_places.py; owner's decision of
+	 * 2026-11-16, station-kit spec 6.6). The drone orbits the ship at 30 m in world axes, and a ship
+	 * docked at a berth has its centre 16 m from the block's face -- 12 m of boom and 4 m of its own
+	 * half-width -- so that orbit runs through the block. Without the drone the gunner's automation
+	 * starts with no target, and the turret says NO TARGET until sf.AimAt gives it one.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Ship start")
+	bool bTargetDrone = true;
+```
+
+`Source/StarForge/Private/SFPlaceGameMode.cpp`, в `StartPlay`, между строкой появления корабля и комментарием `// Before Super::StartPlay, exactly as on the loop rig: …`:
+
+```cpp
+		Ship = World->SpawnActor<ASFTestShip>(ASFTestShip::StaticClass(), ShipSpawn, ShipParams);
+
+		// The place says whether the rig's target drone flies (FSFShipStart::bTargetDrone). A plain
+		// assignment after SpawnActor is early enough here, as it would not be in a running world: the
+		// ship spawns its drone in BeginPlay, and this world does not begin play until Super::StartPlay
+		// below.
+		if (Ship)
+		{
+			Ship->bSpawnTargetDrone = PlaceShipStart.bTargetDrone;
+		}
+```
+
+`Source/StarForge/Public/Ship/SFTestShip.h`, комментарий к `bSpawnTargetDrone` — целиком на:
+
+```cpp
+	/**
+	 * Whether this hull spawns the orbiting drone its gunner's automation tracks.
+	 *
+	 * True on the spike and loop rigs, where the drone is the only thing to aim at. False on the
+	 * combat rig, where the thing to aim at is the other ship: two hulls each spawning their
+	 * own drone would give the combat rig two targets nobody asked for, and each automation
+	 * would track its own rather than the enemy. On the place rig the place decides
+	 * (FSFShipStart::bTargetDrone): true by default, false on the station kit's places, where the
+	 * drone's 30 m orbit runs through the station.
+	 */
+	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
+	bool bSpawnTargetDrone = true;
+```
+
+- [ ] **Step 3: Скрипт мест**
+
+`scripts/station_kit_places.py`. Первая строка описания — `tasks 3, 8, 13, 15, 17, 18` заменить на `tasks 3, 8, 11b, 13, 15, 17, 18`:
+
+```python
+"""Create, update and read back the station kit's place assets (station-kit plan, tasks 3, 8, 11b, 13, 15, 17, 18),
+```
+
+После функции `free_start`:
+
+```python
+def no_drone(start=None):
+    """A kit place's ship start with the rig's target drone withdrawn (plan task 11b): the start given,
+    or the docked default. The drone orbits the ship at 30 m, and at a berth that runs through the block."""
+    s = start if start is not None else unreal.SFShipStart()
+    s.set_editor_property("target_drone", False)
+    return s
+```
+
+В `read` — третья строка в скобках:
+
+```python
+    text += (f", ship start {s.get_editor_property('mode')} at {fmt(s.get_editor_property('location_in_place_metres'))}"
+             f", occupant {fmt(s.get_editor_property('occupant_offset_ship_metres'))}"
+             f", target drone {'yes' if s.get_editor_property('target_drone') else 'no'}")
+```
+
+В `GROUPS` группы `berth`, `piercore`, `tie`, `parked0` и `parkedboth` — на:
+
+```python
+    # A place with a kit station withdraws the rig's target drone (plan task 11b): no_drone().
+    "berth": lambda: make("DA_Place_Berth", "Berth", [carrier("SFBerthStation", "Station")],
+                          ship_start=no_drone()),
+    "piercore": lambda: make("DA_Place_PierCore", "PierCore", [carrier("SFPierCoreStation", "Station")],
+                             ship_start=no_drone()),
+    # Spec 7.5: the mid-plane between Port0 and Port1 through the place's origin -- one number in the data.
+    "tie": lambda: make("DA_Place_PierCoreTie", "PierCoreTie",
+                        [carrier("SFPierCoreStation", "Station", (-30.0, 0.0, 0.0))],
+                        ship_start=no_drone()),
+    "parked0": lambda: make("DA_Place_PierCoreParked0", "PierCoreParked0",
+                            [carrier("SFPierCoreStation", "Station")],
+                            ship_start=no_drone(),
+                            parked_hulls=[parked("Parked", "Station", 0)]),
+    # Spec 8.3, N4: both ports held, and the ship free at (0, -40, 0) m, 9.9 m clear of Parked0's hull.
+    "parkedboth": lambda: make("DA_Place_PierCoreParkedBoth", "PierCoreParkedBoth",
+                               [carrier("SFPierCoreStation", "Station")],
+                               ship_start=no_drone(free_start((0.0, -40.0, 0.0))),
+                               parked_hulls=[parked("Parked0", "Station", 0), parked("Parked1", "Station", 1)]),
+```
+
+И в группе `badrecords` — строка `ship_start=no_drone(),` после строки носителей:
+
+```python
+    "badrecords": lambda: make("DA_Place_PierCoreBadRecords", "PierCoreBadRecords",
+                               [carrier("SFPierCoreStation", "Station")],
+                               ship_start=no_drone(),
+```
+
+Группу `latent` не трогать: её места — со станцией рига, дрон там остаётся, и их журналы улик уже записаны с ним.
+
+- [ ] **Step 4: Собрать и пересоздать ассет причала**
+
+Сначала сборка: без неё коммандлет не увидит поля. Затем только группа `berth` — остальных классов мест ещё нет.
+
+```bash
+"C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge-station/StarForge.uproject" -WaitMutex
+KIT_PLACES_GROUP=berth "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "F:/UEProject/StarForge-station/StarForge.uproject" -run=pythonscript -script="F:/UEProject/StarForge-station/scripts/station_kit_places.py" -unattended -nopause -nosplash -nullrhi -log < /dev/null
+grep "KIT-ASSET read /Game/Places/DA_Place_Berth:" $L | grep -c "DOCKED at (0.00 0.00 0.00), occupant (0.00 0.00 0.00), target drone no, parked"   # 1
+grep -c "Python script executed successfully" $L     # 1
+cp $L Saved/Task11bLogs/task11b-asset.log
+git status --short Content/                           #  M Content/Places/DA_Place_Berth.uasset -- и только он
+```
+
+- [ ] **Step 5: Прогоны**
+
+```bash
+kit DA_Place_Berth 60 70 "sf.FlightLog 1" task11b-after-60
+kit DA_Place_Berth 400 70 "sf.FlightLog 1" task11b-after-400
+```
+
+На каждом из двух, `F=docs/superpowers/notes/evidence/$(date +%F)-task11b-after-<fps>.log`, сверх общих ворот раздела «Как проверяется»:
+
+```bash
+grep -c "Target drone" "$F"                           # 0
+grep -cF "Ship [Ship] spawns no target drone; its gunner's automation will track whatever it is given." "$F"   # 1
+grep -c "Turret: \[Ship\]" "$F"                      # больше нуля; на 60 fps -- 70
+grep "Turret: \[Ship\]" "$F" | grep -vcF "Turret: [Ship] gunned by automation | target none firing 0 | bearing none | aim yaw 0.0 pitch 0.0 deg | NO TARGET"   # 0
+grep -o "Shipboard drift:.*" "$F" | tail -1          # 60.0 s settled, drift now 0.000 cm, peak drift 0.000 cm ... -- footing intact
+grep -c "LogStarForge: Warning" "$F"; grep -c "LogStarForge: Error" "$F"   # 0 и 0
+cp "$F" Saved/Task11bLogs/
+```
+
+Кроме дрона и турели на 60 fps не изменилась ни одна строка — журнал шага 1 против журнала этого шага:
+
+```bash
+python -I - Saved/Task11bLogs/task11b-before-60.log Saved/Task11bLogs/$(date +%F)-task11b-after-60.log <<'EOF'
+import re, sys
+def rest(path):
+    out = []
+    for line in open(path, encoding='utf-8', errors='replace'):
+        if 'LogStarForge' in line and not re.search(r'Turret: \[Ship\]|Target drone spawned|spawns no target drone', line):
+            out.append(re.sub(r'^\[[^\]]*\]\[\s*\d+\]', '', line.rstrip('\r\n')))
+    return out
+a, b = rest(sys.argv[1]), rest(sys.argv[2])
+print('rest identical:' if a == b else 'REST DIFFERS:', len(a), 'and', len(b), 'lines')
+EOF
+```
+
+Ожидается `rest identical:` с двумя равными числами. Затем два контроля: у мест без поля дрон остался.
+
+```bash
+kit DA_Place_OpenSpace 60 10 "sf.FlightLog 1" task11b-openspace-60
+grep -cF "Target drone spawned: orbit 30.0 m radius at 10.0 deg/s, tilted 20.0 deg, anchored to Ship, present." $L   # 1
+grep -c "spawns no target drone" $L                  # 0
+cp $L Saved/Task11bLogs/task11b-openspace-60.log
+kit DA_Place_LatentF1Side 60 12 "sf.FlightLog 1, sf.Intent.Y 0.004" task11b-latent-60
+grep -cF "Target drone spawned: orbit 30.0 m radius at 10.0 deg/s, tilted 20.0 deg, anchored to Ship, present." $L   # 1
+grep -c "spawns no target drone" $L                  # 0
+cp $L Saved/Task11bLogs/task11b-latent-60.log
+rm docs/superpowers/notes/evidence/$(date +%F)-task11b-*.log
+```
+
+Головные тесты — `130`, `0`, `EXIT CODE: 0`: `StarForgeCore` не тронут, и счёт обязан остаться прежним.
+
+- [ ] **Step 6: Коммит**
+
+```bash
+git status --short
+git add Source/StarForge/Public/World/SFPlaceDataAsset.h Source/StarForge/Private/SFPlaceGameMode.cpp Source/StarForge/Public/Ship/SFTestShip.h scripts/station_kit_places.py Content/Places/DA_Place_Berth.uasset
+git diff --cached --name-only
+git commit -F - <<'MSG'
+feat(place): a place can withdraw the rig's target drone, and the kit's places do
+
+The rig's drone orbits the player's ship at 30 m in world axes. A ship docked
+at a berth has its centre 16 m from the block's face -- 12 m of boom and 4 m of
+its own half-width -- so for about nine seconds of every 36-second turn the
+drone was inside the station's block, and for most of that the turret read ON
+TARGET on a point within its walls. The owner chose to withdraw the drone on
+the kit's places rather than move its orbit or leave it with a note in the
+runbook (2026-11-16).
+
+ShipStart carries the choice, true by default, so DA_Place_OpenSpace and the
+two latent-F1 places read as they did and no other rig is touched. On a kit
+place the ship says it spawns no drone and the turret says NO TARGET until
+sf.AimAt gives it a target; neither line is red.
+
+Done before task 12 because that task's logs become the baselines every later
+replay is compared with, and their turret lines must be the ones the kit keeps.
+MSG
+```
+
+---
+
 ### Task 12: Прогоны шага 1 на обеих частотах и регрессия `kit-1.10`
 
 Все ворота шага 1 из §8.2 и §8.3, headless, на 60 и 400 fps, каждый журнал — в улики. Затем регрессия: этот проход впервые повторяет и журналы набора.
@@ -4171,6 +4409,9 @@ grep -o "LogStarForge: Display: Station rig:.*" "$F" | head -1 | sed 's/^LogStar
 awk '/Station rig:/{if(!s)s=NR} /Flight: \[Ship\]/{if(!f)f=NR} END{print (s && f && s<f) ? "before Flight" : "NOT before Flight"}' "$F"
 grep -cF "Place rig: scripted profile off; place 'Berth' read from DA_Place_Berth and assembled with 1 carrier; the ship spawns docked; the man stands in the cabin and is bound to its frame." "$F"   # 1
 grep -cF "Frame handover: Station -> Ship, first carry moved him 0.000 cm" "$F"   # 1
+grep -c "Target drone" "$F"   # 0: на месте набора дрона нет (задача 11b)
+grep -cF "Ship [Ship] spawns no target drone; its gunner's automation will track whatever it is given." "$F"   # 1
+grep "Turret: \[Ship\]" "$F" | grep -vcF "Turret: [Ship] gunned by automation | target none firing 0 | bearing none | aim yaw 0.0 pitch 0.0 deg | NO TARGET"   # 0
 grep -o "Shipboard drift:.*" "$F" | tail -1   # peak drift 0.000 cm ... -- footing intact
 ```
 **H1.2:**
@@ -6358,7 +6599,12 @@ The seventh, recorded on 2026-09-28 by the station-kit spec (its decision 9), is
 or park hulls at its ports.** `sf.PlaceAsset` names the asset by its bare name (`DA_Place_Berth`),
 read once in `InitGame`; empty keeps `DA_Place_OpenSpace`, so the rig's default has not moved.
 `ShipStart` on the asset starts the player's ship docked (the default) or free at a pose in the
-place's frame, and stands the man at an offset in the ship's axes. `ParkedHulls` asks for hulls
+place's frame, and stands the man at an offset in the ship's axes. It also says whether the rig's
+target drone flies (`bTargetDrone`, on by default). The station kit's places withdraw it: the drone
+orbits the ship at 30 m, a ship docked at a berth has its centre 16 m from the block's face, and for
+about nine seconds of every 36-second turn the drone would be inside the block. There the ship says
+`spawns no target drone` and the turret reads `NO TARGET`, yellow on the panel and not a red line,
+until `sf.AimAt` gives it a target. `ParkedHulls` asks for hulls
 docked at named ports — hull name, station carrier name, port index in `GetDockingPorts` order —
 checked, spawned before the player's ship with crewing `Parked`, and read back once play has begun:
 `Place parked hull: 'Parked' (crewing parked) docked at Station.Port0 -- pilot's and gunner's
@@ -6410,7 +6656,9 @@ told to each operator separately since then: the automation sits on the player's
 `station` is the first docking station by name (`ISFDockingStation`), whatever its class. Docked, it is a legitimate handover and nothing is carried wrongly, but it is not quiet: the floor-and-frame cross-check asks nothing about motion and warns `Standing on Ship's floor while bound to Station's frame` after 1/6 s whenever the floor under him is not the carrier he is bound to (checkpoint 6's form: 25 such lines at both rates; station-kit spec §11) — quiet only when he is bound to the carrier whose floor he stands on;
 ```
 
-В строке `sf.AimAt` после `` `ship` means another ship, never its own. `` дописать `` `station` is the first docking station by name, whatever its class; a miss says `no docking station in this level`. ``
+В строке `sf.AimAt` после `` `ship` means another ship, never its own. `` дописать `` `station` is the first docking station by name, whatever its class; a miss says `no docking station in this level`. `` Там же `the pirate on the combat rig.` заменить на `the pirate on the combat rig, and none on a place that withdraws the drone (the station kit's places).`
+
+В строке `sf.TargetDrone` после `rather than aim at the origin` дописать `` . On a place whose `ShipStart` withdraws the drone (`bTargetDrone` off: the station kit's places) none is spawned at all, and the variable does nothing there ``
 
 В строке `sf.PirateAI` — там, где описаны `Automated` и его исключение, как велит §11, — заменить `only automated hulls read it, because only they seat this operator |` на:
 
@@ -6547,7 +6795,7 @@ Count 'Test Completed. Result=\{Fail\}'      # 0
 
 6. **Управление** — таблица клавиш из ранбука точки 8 без изменений (`E`, `F` только из кресла пилота, `F1` или `~` — консоль, `sf.ConsoleOperator 0` перед `E`).
 
-7. **Красные строки и законно красное** — таблица по прогонам из §8.2 и условия из §8.3, дословно. Отдельной строкой: строки `dock    free -- NO STATION` на панели с ревью 2026-10-01 нет вовсе. Без станции панель пишет белым `dock    free -- no station in this level`; станция есть, а порт не найден — красным `dock    free -- <станция> is in this level and the docking found NO STATION port`, и здесь это всегда находка. `dock    free -- NO FREE PORT` законна только в N4. Ещё красные строки панели, которых до ревью не было: `CARRY NOT RUNNING - bound to … never carried` и `footing  NONE …` (`SFFrameDriftHUD.cpp`) — находка в любом прогоне этого ранбука. В разделе 10 — оранжевая `PLACE REFUSED - sf.PlaceAsset '…': …; nothing was assembled …` (стык слияния, `42c90a6`): законна только в N7. Ещё одна строка про панель: припаркованный корпус она показывает блоком `combat` как другой корабль, белым, `flown by unoccupied` (§7.6). Это не красная строка, и красной она быть не должна.
+7. **Красные строки и законно красное** — таблица по прогонам из §8.2 и условия из §8.3, дословно. Отдельной строкой: строки `dock    free -- NO STATION` на панели с ревью 2026-10-01 нет вовсе. Без станции панель пишет белым `dock    free -- no station in this level`; станция есть, а порт не найден — красным `dock    free -- <станция> is in this level and the docking found NO STATION port`, и здесь это всегда находка. `dock    free -- NO FREE PORT` законна только в N4. Ещё красные строки панели, которых до ревью не было: `CARRY NOT RUNNING - bound to … never carried` и `footing  NONE …` (`SFFrameDriftHUD.cpp`) — находка в любом прогоне этого ранбука. В разделе 10 — оранжевая `PLACE REFUSED - sf.PlaceAsset '…': …; nothing was assembled …` (стык слияния, `42c90a6`): законна только в N7. Ещё одна строка про панель: припаркованный корпус она показывает блоком `combat` как другой корабль, белым, `flown by unoccupied` (§7.6). Это не красная строка, и красной она быть не должна. И о турели: на местах набора её строка на панели жёлтая — `turret  aim yaw 0.0 pitch 0.0 deg   bearing none   NO TARGET   firing off`. Дрона там нет (поправка П27, задача 11b), цель даёт `sf.AimAt station`; жёлтая — не красная и находкой не является.
 
 8. **Точка 11** — по запуску на раздел, каждый с командой, шагами, стоп-воротами дословно и `Save-Log`:
    - **11-A** (`DA_Place_Berth`, имя журнала `checkpoint-11-A-berth-by-hand`): петля каюта → `sf.ConsoleOperator 0`, `E` → `F` (строка `Dock: [Ship] releasing, 2.93 m …`) → полёт → назад → `CAN DOCK` → `F` → `E` → хатч → канал 12 м → зал → обратно; ворота — `Count 'skipped carries [1-9]'` 0, `Count 'Carry NOT RUNNING'` 0, обе `Frame handover` с `0.000 cm`, норма `Station rig:`. Затем N1: `sf.PortProtrusionM 1.0`, `F` из кресла, стоп-ворота N1 дословно; `sf.PortProtrusionM 0`, подлёт в окно, `F`. N1b так же с `0.2`. N2b: `sf.StationVolumeReach Hall0 1.0`, ворота, возврат `sf.StationVolumeReach Hall0 0`. N2 — сидя в кресле пилота. После стыковки N1b он уже сидит: `F` стыкует только из кресла пилота (последняя строка о кресле пилота в журнале — `Station 'pilot' on [Ship] taken by player.`). `E` здесь не нажимать: это переключатель, сидящего он поднимает, а строка `SEATED` пишется только у сидящего. Если он всё же встал — `sf.ConsoleOperator 0`, `E`. Затем `sf.StationVolumeReach Boom0 4.0`; стоп-ворота — строка `Station rig:` с `Boom0 REACHES 4.000 m OUT of its channel` и `VOLUME REACHES 4.000 m PAST it (Boom0)`, `Frame handover: Ship -> Station, first carry moved him 0.000 cm`, строка `Frame handover: Ship -> Station took a SEATED man (Ship's pilot post): a volume of Station reaches into Ship's cabin.`, строка `Standing on …`. Возврат (§8.3, поправка П4): `sf.StationVolumeReach Boom0 0`; ворота возврата — `Frame handover: Station -> Ship, first carry moved him 0.000 cm`, и строки `SEATED` на возврате **нет** (корабль — владелец его кресла); только после неё следующий `F`. `sf.BindFrame ship` не набирать.
