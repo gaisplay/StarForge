@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Create, update and read back the station kit's place assets (station-kit plan, tasks 3, 8, 13, 15, 17, 18),
+"""Create, update and read back the station kit's place assets (station-kit plan, tasks 3, 8, 11b, 13, 15, 17, 18),
 and the one control asset of the ParkedHulls record check (task 17).
 
 Run by the editor's own Python through the commandlet, never by a system Python:
@@ -52,6 +52,15 @@ def free_start(loc, occupant=(0.0, 0.0, 0.0)):
     return s
 
 
+def no_drone(start=None):
+    """The ship start of a place with a kit station: the rig's target drone withdrawn (plan task 11b), on
+    the start given or on the docked default. The drone orbits the ship at 30 m, and with the ship docked
+    at a berth that runs through the block."""
+    s = start if start is not None else unreal.SFShipStart()
+    s.set_editor_property("target_drone", False)
+    return s
+
+
 def parked(hull, station, port):
     p = unreal.SFParkedHull()
     p.set_editor_property("hull_name", hull)
@@ -101,7 +110,8 @@ def read(asset_name):
     text = f"KIT-ASSET read {path}: place '{asset.get_editor_property('place_name')}', carriers [{'; '.join(carriers)}]"
     s = asset.get_editor_property("ship_start")
     text += (f", ship start {s.get_editor_property('mode')} at {fmt(s.get_editor_property('location_in_place_metres'))}"
-             f", occupant {fmt(s.get_editor_property('occupant_offset_ship_metres'))}")
+             f", occupant {fmt(s.get_editor_property('occupant_offset_ship_metres'))}"
+             f", target drone {'yes' if s.get_editor_property('target_drone') else 'no'}")
     try:
         hulls = asset.get_editor_property("parked_hulls")
         text += ", parked [" + "; ".join(
@@ -131,18 +141,23 @@ GROUPS = {
              ship_start=free_start((5.40, -11.10, 0.00), LATENT_OCCUPANT)),
         make("DA_Place_LatentF1Roof", "LatentF1Roof", [carrier("SFTestStation", "Station")],
              ship_start=free_start((0.00, -11.10, 3.00), LATENT_OCCUPANT))),
-    "berth": lambda: make("DA_Place_Berth", "Berth", [carrier("SFBerthStation", "Station")]),
-    "piercore": lambda: make("DA_Place_PierCore", "PierCore", [carrier("SFPierCoreStation", "Station")]),
+    # A place with a kit station withdraws the rig's target drone (plan task 11b): no_drone().
+    "berth": lambda: make("DA_Place_Berth", "Berth", [carrier("SFBerthStation", "Station")],
+                          ship_start=no_drone()),
+    "piercore": lambda: make("DA_Place_PierCore", "PierCore", [carrier("SFPierCoreStation", "Station")],
+                             ship_start=no_drone()),
     # Spec 7.5: the mid-plane between Port0 and Port1 through the place's origin -- one number in the data.
     "tie": lambda: make("DA_Place_PierCoreTie", "PierCoreTie",
-                        [carrier("SFPierCoreStation", "Station", (-30.0, 0.0, 0.0))]),
+                        [carrier("SFPierCoreStation", "Station", (-30.0, 0.0, 0.0))],
+                        ship_start=no_drone()),
     "parked0": lambda: make("DA_Place_PierCoreParked0", "PierCoreParked0",
                             [carrier("SFPierCoreStation", "Station")],
+                            ship_start=no_drone(),
                             parked_hulls=[parked("Parked", "Station", 0)]),
     # Spec 8.3, N4: both ports held, and the ship free at (0, -40, 0) m, 9.9 m clear of Parked0's hull.
     "parkedboth": lambda: make("DA_Place_PierCoreParkedBoth", "PierCoreParkedBoth",
                                [carrier("SFPierCoreStation", "Station")],
-                               ship_start=free_start((0.0, -40.0, 0.0)),
+                               ship_start=no_drone(free_start((0.0, -40.0, 0.0))),
                                parked_hulls=[parked("Parked0", "Station", 0), parked("Parked1", "Station", 1)]),
     # Plan task 17: the check of a ParkedHulls record, run rather than trusted. Record 0 is sound and must
     # be the only hull that spawns; each record after it fails exactly one check, in the order the rig
@@ -150,6 +165,7 @@ GROUPS = {
     # port, a port already held. A control, not a place of the kit: its run never goes into evidence.
     "badrecords": lambda: make("DA_Place_PierCoreBadRecords", "PierCoreBadRecords",
                                [carrier("SFPierCoreStation", "Station")],
+                               ship_start=no_drone(),
                                parked_hulls=[parked("Parked0", "Station", 0),
                                              parked("", "Station", 1),
                                              parked("Ship", "Station", 1),

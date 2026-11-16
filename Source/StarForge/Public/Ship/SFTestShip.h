@@ -111,10 +111,13 @@ public:
 	/**
 	 * Whether this hull spawns the orbiting drone its gunner's automation tracks.
 	 *
-	 * True on both existing rigs, where the drone is the only thing to aim at. False on the
-	 * combat rig, where the thing to aim at is the other ship: two hulls each spawning their
-	 * own drone would give the combat rig two targets nobody asked for, and each automation
-	 * would track its own rather than the enemy.
+	 * True on the spike and loop rigs, where the drone is the only target the rig gives the
+	 * automation. False on the combat rig, where the thing to aim at is the other ship: two hulls
+	 * each spawning their own drone would give the combat rig two targets nobody asked for, and
+	 * each automation would track its own rather than the enemy. On the place rig the place decides
+	 * for the player's ship (FSFShipStart::bTargetDrone): true by default, false on the places with
+	 * a kit station, where, with the ship docked at a berth, the drone's 30 m orbit runs through the
+	 * station.
 	 */
 	UPROPERTY(EditAnywhere, Category = "StarForge|Crewing")
 	bool bSpawnTargetDrone = true;

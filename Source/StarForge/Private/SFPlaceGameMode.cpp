@@ -499,6 +499,15 @@ void ASFPlaceGameMode::StartPlay()
 
 		Ship = World->SpawnActor<ASFTestShip>(ASFTestShip::StaticClass(), ShipSpawn, ShipParams);
 
+		// The place says whether the rig's target drone flies (FSFShipStart::bTargetDrone). A plain
+		// assignment after SpawnActor is early enough here, as it would not be in a running world: the
+		// ship spawns its drone in BeginPlay, and this world does not begin play until Super::StartPlay
+		// below.
+		if (Ship)
+		{
+			Ship->bSpawnTargetDrone = PlaceShipStart.bTargetDrone;
+		}
+
 		// Before Super::StartPlay, exactly as on the loop rig: Super is what begins play on the
 		// world and spawns the pawn, and docking afterwards would put the pawn in the world while
 		// the ship still sat at the place's origin inside the station's interior volume, with

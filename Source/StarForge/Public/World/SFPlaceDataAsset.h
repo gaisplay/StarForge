@@ -109,6 +109,18 @@ struct STARFORGE_API FSFShipStart
 	 */
 	UPROPERTY(EditAnywhere, Category = "Ship start")
 	FVector OccupantOffsetShipMetres = FVector::ZeroVector;
+
+	/**
+	 * Whether the player's ship spawns the rig's target drone, in either mode. True by default: the
+	 * old behaviour, so an asset saved before this field existed reads as it did. The places with a
+	 * kit station are written with it false (scripts/station_kit_places.py; owner's decision of
+	 * 2026-11-16, station-kit spec 6.6). The drone orbits the ship at 30 m in world axes, and a ship
+	 * docked at a berth has its centre 16 m from the block's face -- 12 m of boom and 4 m of its own
+	 * half-width -- so that orbit runs through the block. Without the drone the gunner's automation
+	 * starts with no target, and the turret says NO TARGET until sf.AimAt gives it one.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Ship start")
+	bool bTargetDrone = true;
 };
 
 /**
