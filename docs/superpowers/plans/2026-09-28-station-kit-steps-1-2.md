@@ -90,6 +90,7 @@
 - **П28. Задача 11b после ревью.** Комментарий корабля говорил, что орбита дрона проходит сквозь станцию «на местах набора», без условия: так — когда корабль пристыкован к причалу, а на месте N4, где он свободен в 40 м, орбита блока не касается (раунд 1). Задача 20 сама относит к местам набора оба места воспроизведения §6.9, а они стоят со станцией рига и дрон сохраняют. Поэтому в словах о дроне «места набора» стали «местами со станцией набора» в тексте задачи 20 для `CLAUDE.md` (раунд 1), в обоих комментариях кода, в описании `no_drone`, в сообщении коммита, в воротах H1.1 задачи 12, в пункте 7 ранбука задачи 21 и в §6.6 спеки; где слова остались — во вступлении задачи 11b и в ответе 14 §12 спеки, — добавлено определение: места набора — места со станцией набора; так читается и П27. Комментарий корабля говорит «the place decides for the player's ship»: припаркованным корпусам задача 17 дрон не даёт, что бы ни сказало место; и «the only target the rig gives the automation» вместо «the only thing to aim at»: на петле рядом стоит станция, и `sf.AimAt station` её сопровождает. Ворот на отсутствие дрона у мест шага 2 не было, а журналы задачи 19 тоже становятся опорными: после каждой строки чтения ассета места шага 2 (задачи 13, 15, 17, 18) добавлены ворота `target drone no`, а в H2.1 задачи 19 — две строки о дроне. Копии кода задачи 11b в плане приведены к коду.
 - **П29. Задача 12 до запуска.** Контроллер прогнал все команды шага 1 на 60 и 400 fps и оба прогона с переменным шагом на коде `0fb19f5` (журналы в `Saved/Task12Pre`, не в уликах): все ворота шага 2 сходятся, стартовая передача читает 5.762 / 3.822 см, 7.729 / 5.128 у N1, 6.155 / 4.083 у N1b и 2.042 / 1.206 у N5 — числа поправки П11, — а прогоны с переменным шагом не сбивают стоящего. Добавлено два: ворота `Shipboard drift` не меньше 1 у каждого прогона с человеком — счётчик `skipped carries` живёт в этой строке, и 10-секундные прогоны задачи 10 читали `0`, ничего не доказав (приёмка задачи 10, evidence-1; у прогонов задачи 12 строка есть: они не короче 20 с); и контроль N10 — один прогон, в котором оба контроля получают мусор, включая положительное значение меньше 0.001 м и отрицательную задержку, чьи отказы до сих пор не проверял ни один прогон (там же, spec-8). Прогонов с ровным шагом стало тридцать, журналов — тридцать два; в спеке — §8.2 и §8.3.
 - **П30. Задача 12 после ревью.** Сообщение коммита задачи 12 говорило, что проход сверен «with the base taken before any code change». Но `kit-0-before` с П1 снята заново на `42c90a6`, на слиянии ревью, — после кода задач 2, 4 и 5 и после слияний F4 и ревью. Теперь там «against kit-0-before, the base taken again on the review merge before the next code change»; та же фраза исправлена в сообщении задачи 19. В том же сообщении «both searches» стало «sf.BindFrame and sf.AimAt both»: поисков спека считает три, и третий — поиск порта стыковкой. Вступление задачи 12 и строка `kit-1.10` бланка базы говорили, что проход впервые повторяет «журналы набора», но журналы N9 и N9b (`latent-f1`) повторяются с `kit-1.4`: впервые повторяются журналы станции набора. Отчёта исполнителя не было — среда отказала ему в записи файла, — и строки ворот для бланка точки 11 (П17) жили только в `Saved/Task12/`; отчёт собран раундом исправлений из файлов исполнителя. Контролем называли любое непустое и ненулевое значение `sf.PortProtrusionM` — в первом пункте списка §8.3 спеки, в §15 п. 11, в двух строках таблицы `CLAUDE.md` задачи 20, в П8 и П24, в комментарии переменной. Но отвергнутое значение (`-1`, `.`, `0.0005`) даёт `Warning`, коллайдера не ставит, и строка `Station rig:` при нём спокойна: это показал N10. Контроль действует, пока значение — конечное число не меньше 0.001 (ноль принят без `Warning`, но контролем не является); `Warning` отвергнутого значения законен только в N10; П8 и П24 читаются с этой оговоркой. По той же причине неполным было «whenever a control is applied» о том, когда пишется строка: она пишется при каждой смене значения `sf.PortProtrusionM`, включая отвергнутое, и при каждом `sf.StationVolumeReach`, вырастившем или вернувшем объём, — так теперь в §6.8, в абзаце задачи 20 и в комментарии `ReportStationRig`. Два комментария в коде (`CVarPortProtrusionM` и `ReportStationRig`) исправлены отдельным коммитом сразу после задачи 12, вместе с их копиями в задачах 9 и 10: проход `kit-1.10` шёл до него, на коде `f2a99dd`, правка только в комментариях, и следующий проход (задача 15) её покроет. N10 вписан в п. 10 шага 1 в §9 спеки и в строку самопроверки плана; в той же строке самопроверки `DA_Place_Berth` теперь «пересоздан без дрона в 11b».
+- **П31. Задача 13 до запуска.** Контроллер выполнил задачу на пробу на коде `cab8c1d` (журналы в `Saved/Task13Pre`, не в уликах), затем убрал оба файла и ассет и пересобрал: красный шаг снова красный. Красный шаг даёт `no class /Script/StarForge.SFPierCoreStation` и `executed with errors`, ассет не создаётся. С классом, записанным по тексту задачи буква в букву — до правки двух комментариев ниже, код тот же, — сборка проходит без предупреждений, строка чтения ассета — `… carriers [SFPierCoreStation 'Station' at (0.00 0.00 0.00)], ship start <SFShipStartMode.DOCKED: 0> at (0.00 0.00 0.00), occupant (0.00 0.00 0.00), target drone no, parked (no such field yet)`, строка `Station rig:` совпадает с нормой на 60 и на 400 fps, общие ворота чисты на обеих частотах, стартовая передача `0.000 cm`, последняя строка дрейфа `20.0 s settled … footing intact`. Сверх задачи снят цикл `sf.Dock 2` на 60 fps, на 400 fps и с переменным шагом: `docked` → `releasing, 2.93 m …, peak 17.6 m/s2` → `undocked` → `capturing` → `docked`; стартовая передача 5.762 / 3.822 см (числа П11) и 6.571 см при переменном шаге; `Footing LOST` 0, `footing intact`; пять строк `Station rig:` читают у `Port0` `held … 2.93 m`, `releasing`, `free`, `capturing`, `held`, а у `Port1` — `free` во всех пяти. И три контроля, которых план не требует, на 60 fps — два на объёмах второго блока и выступ на блоке 0: `sf.StationVolumeReach Boom1 4.0 1.0` — `Boom1 REACHES 4.000 m OUT of its channel` и у обоих портов `an interior VOLUME REACHES 4.000 m PAST it (Boom1)`; `sf.StationVolumeReach Hall1 1.0 1.0` — `Hall1 REACHES 1.000 m OUT of its hall`, порты спокойны; `sf.PortProtrusionM=1.0` — 31 коллайдер, бокс `Y -19.10..17.90`, у обоих портов `1.000 m of something physical PAST its plane (ControlProtrusion)`, отход у `Port0` — `3.93 m … peak 23.6 m/s2 -- OUTSIDE its 3.0 m window, OVER the 19.62 m/s2 limit`. Строка краснеет и на втором блоке, а выступ на блоке 0 стоит p обоим портам (правило 1). В тексте задачи исправлено пять мест. (1) Комментарий класса говорил «a berth on each face»: у блока хребта причал на гранях ±Y (`A16-K3-pier.svg:384`, §1 спеки), а не на каждой из шести. (2) Комментарий конструктора выводил точную ничью N6 из одних целых сантиметров; §7.5 называет их условием необходимым, рядом с нулевым поворотом станции: теперь «can be exact to the bit only if it is». (3) Пояснение к воротам говорило «оба отхода `2.93`», а отход в строке один, у `Port0`: `Port1` свободен, и мерить его некому. Что стрелы кончаются в одной плоскости, читается по `nothing physical past its plane (0.000 m)` у обоих портов; второй отход читает N3 задачи 19. Сообщение коммита теперь называет то, что строка читает дословно, — ничего физического за плоскостью обоих портов, — и условие, при котором из этого следует общая плоскость стрел: бокс у станции один. (4) Сообщение коммита говорило «the first port by name»: по имени берётся станция, а порт — первый в порядке сборки (`ResolvePorts`). (5) Ворота шага 3. Прежняя команда чтения ассета печатала строку и не называла ожидаемой — счётной была только её часть о дроне; теперь она счётная целиком, как в задаче 11b. Добавлены прогон на 400 fps (Global Constraints), строки `Place carrier:` и `Port0`, `Dock: [Ship] docked.`, стартовая передача, ворота `Shipboard drift` не меньше 1 (П29), головные тесты 130/0 и копия журналов в `Saved/Task13Logs` до `rm`; в красном шаге — счёт `executed successfully` 0 и отсутствие ассета.
 
 ---
 
@@ -4597,6 +4598,8 @@ MSG
 ```bash
 KIT_PLACES_GROUP=piercore "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "F:/UEProject/StarForge-station/StarForge.uproject" -run=pythonscript -script="F:/UEProject/StarForge-station/scripts/station_kit_places.py" -unattended -nopause -nosplash -nullrhi -log < /dev/null
 grep "no class /Script/StarForge.SFPierCoreStation\|Python script executed" $L   # no class ...; executed with errors
+grep -c "Python script executed successfully" $L     # 0
+ls Content/Places/ | grep -c "PierCore"              # 0: сценарий падает на классе раньше, чем создаёт ассет
 ```
 
 - [ ] **Step 2: Класс**
@@ -4613,7 +4616,8 @@ grep "no class /Script/StarForge.SFPierCoreStation\|Python script executed" $L  
 /**
  * Step 2 of the station kit: the pier core, spec.py's B_K3core -- two M01 blocks side by side, both
  * berths on -Y, two ports on one carrier (station-kit spec 7.1). Not sheet A16's full K3 pier, which
- * is built of spine blocks with a berth on each face (the mechanics note, contradiction 3).
+ * is built of spine blocks with a berth on each of their +Y and -Y faces (the mechanics note,
+ * contradiction 3).
  *
  * The two halls are not connected (owner's decision 5): no corridor, no back door, no walking joint.
  * Nothing in the port mechanism depends on them.
@@ -4636,7 +4640,8 @@ public:
 ASFPierCoreStation::ASFPierCoreStation()
 {
 	// spec.py B_K3core: berth blocks at (-30, 0, 0) and (30, 0, 0) m, yaw 0. In centimetres, whole, so
-	// Port1 is Port0 plus exactly (6000, 0, 0) cm and control N6's tie is exact to the bit (spec 7.5).
+	// Port1 is Port0 plus exactly (6000, 0, 0) cm: control N6's tie can be exact to the bit only if it
+	// is (spec 7.5).
 	BuildBlock(FVector(-3000.0, 0.0, 0.0));
 	BuildBlock(FVector(3000.0, 0.0, 0.0));
 }
@@ -4644,21 +4649,48 @@ ASFPierCoreStation::ASFPierCoreStation()
 
 - [ ] **Step 3: Собрать, создать ассет, прочитать строку станции**
 
+Сначала сборка: без неё коммандлет не увидит класса. Ворота чтения ассета читают слово `DOCKED` и числа, как в задаче 11b; код выхода коммандлета воротами не является — он 1 и до этой задачи.
+
 ```bash
-"C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge-station/StarForge.uproject" -WaitMutex
+"C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge-station/StarForge.uproject" -WaitMutex   # Result: Succeeded, без предупреждений
 KIT_PLACES_GROUP=piercore "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "F:/UEProject/StarForge-station/StarForge.uproject" -run=pythonscript -script="F:/UEProject/StarForge-station/scripts/station_kit_places.py" -unattended -nopause -nosplash -nullrhi -log < /dev/null
-grep "KIT-ASSET read /Game/Places/DA_Place_PierCore:\|Python script executed" $L
-grep "KIT-ASSET read /Game/Places/DA_Place_PierCore:" $L | grep -c "target drone no"   # 1: место со станцией набора -- без дрона (задача 11b)
+grep "KIT-ASSET read /Game/Places/DA_Place_PierCore:" $L | grep -F "place 'PierCore', carriers [SFPierCoreStation 'Station' at (0.00 0.00 0.00)], ship start" | grep "DOCKED" | grep -cF "at (0.00 0.00 0.00), occupant (0.00 0.00 0.00), target drone no, parked"   # 1: место со станцией набора -- без дрона (задача 11b)
+grep -c "Python script executed successfully" $L     # 1
+git status --short Content/                           # ?? Content/Places/DA_Place_PierCore.uasset -- и только он
+mkdir -p Saved/Task13Logs && cp $L Saved/Task13Logs/task13-asset.log
+```
+
+Прогон места — на обеих частотах (Global Constraints); норма строки `Station rig:` — одним файлом:
+
+```bash
 kit DA_Place_PierCore 60 25 "sf.FlightLog 1" task13-piercore-60
+kit DA_Place_PierCore 400 25 "sf.FlightLog 1" task13-piercore-400
 cat > /tmp/kit-piercore-expected.txt <<'TXT'
 Station rig: 'Station' (SFPierCoreStation), frame present, no simulating body -- 2 blocks, 2 ports, 4 interior volumes, 30 physical colliders boxed in its own frame at X -18.38..101.62 Y -18.10..17.90 Z -16.00..16.00 m; Hall0 within its hall (0.000 m out), Boom0 within its channel (0.000 m out), Hall1 within its hall (0.000 m out), Boom1 within its channel (0.000 m out). Port0 at (0.00 -18.10 -2.75) m facing -Y: nothing physical past its plane (0.000 m), no interior volume past it (0.000 m); held by Ship, whose release would be 2.93 m in 1.0 s, peak 17.6 m/s2 -- inside its 3.0 m window, under the 19.62 m/s2 limit. Port1 at (60.00 -18.10 -2.75) m facing -Y: nothing physical past its plane (0.000 m), no interior volume past it (0.000 m); free.
 TXT
-grep -o "LogStarForge: Display: Station rig:.*" $L | head -1 | sed 's/^LogStarForge: Display: //' | tr -d '\r' | diff - /tmp/kit-piercore-expected.txt && echo "piercore: identical"
-grep -cF "Docking port on Station at hull-local (6000 -1810 -275) cm, out along (0.00 -1.00 0.00), deck up (0.00 0.00 1.00)." $L   # 1
-rm docs/superpowers/notes/evidence/$(date +%F)-task13-*.log
 ```
 
-Плюс общие ворота. Ворота задачи — `piercore: identical`: оба отхода `2.93` значат, что обе стрелы кончаются в одной плоскости (правило 1), а четыре `0.000 m out` — что оболочки второго блока собраны от его же стен.
+На каждом из двух журналов, `F=docs/superpowers/notes/evidence/$(date +%F)-task13-piercore-<fps>.log`, — общие ворота раздела «Как проверяется» и сверх них:
+
+```bash
+grep -o "LogStarForge: Display: Station rig:.*" "$F" | head -1 | sed 's/^LogStarForge: Display: //' | tr -d '\r' | diff - /tmp/kit-piercore-expected.txt && echo "piercore: identical"
+grep -c "Station rig:" "$F"                           # 1: строка BeginPlay и больше ни одной -- порты после него не менялись
+grep -cF "Place carrier: 'Station' of class SFPierCoreStation in place 'PierCore' at place-local (0.0 0.0 0.0) m" "$F"   # 1
+grep -cF "Docking port on Station at hull-local (0 -1810 -275) cm, out along (0.00 -1.00 0.00), deck up (0.00 0.00 1.00)." "$F"   # 1: Port0
+grep -cF "Docking port on Station at hull-local (6000 -1810 -275) cm, out along (0.00 -1.00 0.00), deck up (0.00 0.00 1.00)." "$F"   # 1: Port1
+grep -c "belongs to neither a docking station" "$F"   # 0
+grep -cF "Dock: [Ship] docked." "$F"                  # 1
+grep -cF "Frame handover: Station -> Ship, first carry moved him 0.000 cm" "$F"   # 1
+grep -c "Shipboard drift" "$F"                        # не меньше 1 (поправка П29): счётчик skipped carries стоит в этой строке
+grep -o "Shipboard drift:.*" "$F" | tail -1           # 20.0 s settled, drift now 0.000 cm, peak drift 0.000 cm, ... skipped carries 0, knocked down 0.0 s -- footing intact
+cp "$F" Saved/Task13Logs/
+```
+
+Головные тесты — командой раздела «Как проверяется»: 130 `Result={Success}`, 0 `Result={Fail}`, `TEST COMPLETE. EXIT CODE: 0`. Задача тестов не добавляет, и счёт прежний.
+
+Журналы задачи — проверка, не улики: `rm docs/superpowers/notes/evidence/$(date +%F)-task13-*.log`; после этого `git status --short docs/` пуст.
+
+Ворота задачи — `piercore: identical` на обеих частотах. Оба `nothing physical past its plane (0.000 m)` значат, что обе стрелы кончаются в одной плоскости (правило 1): бокс отхода у станции один, и стрела, вышедшая за плоскость чужого порта, стоила бы тому порту своего p. Отход в этой строке один — `2.93` у `Port0`, который держит корабль; у свободного `Port1` мерить его некому, и второй отход читает N3 задачи 19, где у `Port1` стоит корабль. Четыре `0.000 m out` значат, что оболочки второго блока собраны от его же стен.
 
 - [ ] **Step 4: Коммит**
 
@@ -4675,9 +4707,12 @@ B_K3core: two M01 blocks side by side, both berths on -Y, in whole centimetres,
 so the second port is the first moved by exactly 60 m and a tie between them can
 be exact to the bit.
 
-Its Station rig line reads both booms ending on one plane and every volume
-inside its own walls. Until the rule exists the ship takes the first port by
-name, which is Port0 -- the port the rule will choose from the hall's centre.
+Its Station rig line reads nothing physical past either port's plane, which
+the station's one box allows only if both booms end on one plane, and every
+volume inside its own walls. Until the rule exists the ship takes the first
+port, in build order, of the first station by name, which is Port0 -- the
+port the rule will choose for a ship set at the place's origin, the centre of
+Hall0.
 MSG
 ```
 
