@@ -1318,6 +1318,7 @@ index` печатается при каждом решении о стыковк
 | N8 | `footing intact` | ничего |
 | N9, N9b до исправления | улика, не ворота | передача и всё, что из неё следует (§6.9) |
 | N9, N9b после исправления | протокол: удар о стену на 0.8 м/с, класс O2 | ничего |
+| N10 | `footing intact` | девять `Warning` отказа: три `Station rig: sf.PortProtrusionM='…' is not 0 or …` и шесть `sf.StationVolumeReach '…': …` |
 
 **Шаг 1** (`DA_Place_Berth`)
 
@@ -1354,6 +1355,7 @@ index` печатается при каждом решении о стыковк
 - загружен `DA_Place_PierCoreParkedBoth` (N4) — для строки `refused -- no free port` и для красной строки панели
   `dock    free -- NO FREE PORT`;
 - `sf.PlaceAsset` нарочно называет несуществующий ассет (N7);
+- `sf.PortProtrusionM` или `sf.StationVolumeReach` нарочно получают мусор (N10) — для девяти строк отказа;
 - загружен ассет `DA_Place_PierCoreTie` (N6) — для строки `bound by search`;
 - задан `sf.BindFrame station` (H1.6) — для строк `Standing on` и `superseded`;
 - исправление объёма `ASFTestStation` ещё не внесено (N9, N9b до него).
@@ -1373,11 +1375,13 @@ index` печатается при каждом решении о стыковк
 | N7 | выбор места (§6.6) | Запуск с `-ini` `sf.PlaceAsset=DA_Place_Nope` | `-ini` `sf.PlaceAsset=DA_Place_Nope`; `sf.FlightLog 1` | Обе строки отказа из §6.6 дословно. В журнале нет ни одной строки `Place size:`, `Place carrier:`, `Dock:`, `Shipboard drift`, `Frame [` | Запасное место собралось, строка отказа говорит `none` или `OpenSpace`, или в пустом мире стоит пешка |
 | N8 | узел: отход освобождает порт | Запуск с `DA_Place_PierCoreParked0`; `sf.ConsoleOperator 0`, `E`, `F` (отход от `Port1`); в консоли `sf.UndockParked Parked` | `-ini` `sf.PlaceAsset=DA_Place_PierCoreParked0`; `sf.FlightLog 1, sf.Dock 0, sf.UndockParked Parked 2.0` | После `Dock: [Ship] undocked.`: `Dock: [Ship] nearest free port is now Station.Port1 at 2.93 m; next free none; held Station.Port0 by Parked at 60.07 m.`; `Dock: [Parked] releasing, 2.93 m along the port axis over 1.0 s, peak 17.6 m/s2.` → `Dock: [Parked] undocked …` со словами о запертых двигателях; `Station rig:` с `Port0 …; free.`; `Dock: [Ship] nearest free port is now Station.Port1 at 2.93 m; next free Station.Port0 at 60.07 m.` | Занятость не снята в `LetGo` припаркованного — `Port0` остаётся `held by Parked`. Запомненный выбор — последней строки нет |
 | N9, N9b | 2 (F1) у `ASFTestStation` | После исправления — §6.9, на петле `L_Loop` | §6.9, до и после исправления | До: `Frame handover: Ship -> Station` между первой и третьей строками `Flight: [Ship]`. После: ни одной `Frame handover: Ship -> Station`, ни одной `while bound to` | До: нет передачи или она вне окна — воспроизведение не состоялось или доказало другой механизм, и исправлению нечего доказывать. После: передача осталась — исправление не то |
+| N10 | ввод контролей (ниже, «Как устроены контроли») | Не нужен: ввод с клавиатуры тот же, что headless | `sf.FlightLog 1, sf.PortProtrusionM -1, sf.PortProtrusionM ., sf.PortProtrusionM 0.0005, sf.PortProtrusionM 0, sf.StationVolumeReach Nope 1.0, sf.StationVolumeReach Boom0 -1, sf.StationVolumeReach Boom0 ., sf.StationVolumeReach Boom0 4.0 -, sf.StationVolumeReach Boom0 0.0005, sf.StationVolumeReach Boom0 4.0 -1` | Девять `Warning` и ни одного `Error`: три `Station rig: sf.PortProtrusionM='…' is not 0 or a finite number of metres of at least 0.001; no control collider was placed.`, одна `… no kit station in this world has an interior volume named Nope; nothing was changed.` и пять `… needs a volume name, 0 or a number of metres of at least 0.001, and optionally a non-negative delay in seconds; nothing was changed.`; ни одной строки `grew` и `scheduled`; строка `Station rig:` все пять раз `Display` | Мусор принят нулём или контролем: меньше девяти `Warning`, строка `grew` или красная `Station rig:`. Контроль, набранный с опечаткой, выглядел бы как контроль, ничего не нашедший |
 
 Откуда числа контролей:
 
 - **N1:** 2.928 + 1.0 = 3.928 → `3.93`; 6 × 3.928 = 23.57 → `23.6`.
 - **N1b:** 2.928 + 0.2 = 3.128 → `3.13`; 6 × 3.128 = 18.77 → `18.8`, ниже 19.62.
+- **N10:** три отказа переменной (`-1`, `.`, `0.0005`) и шесть отказов команды (неизвестный объём, `-1`, `.`, голый `-` на месте задержки, `0.0005`, задержка `-1`) — девять `Warning`. Строк `Station rig:` пять: `BeginPlay` и по одной на каждую из четырёх смен значения переменной, последняя — возврат к `0`. Добавлен 2026-11-16: отказ на значение меньше 0.001 м и на отрицательную задержку до него не проверял ни один прогон.
 - **N2:** 4.0 м — расстояние по оси порта от порта корабля до кресла пилота. Порт стоит в (0, 4.0, −2.65) м в осях
   корабля (`SFTestShip.cpp:353`), кресло — в (0, 0, −3.0) (`:263-264`). Касание капсулы начинается уже с 3.66 м.
   Канал кончается на плоскости порта, поэтому объём, выросший на 4.0 м вдоль оси, выходит на 4.000 и из канала, и
