@@ -89,6 +89,7 @@
 - **П27. Места набора без дрона-мишени (задача 11b; решение владельца 2026-11-16).** Дрон стенда кружит в 30 м от корабля в мировых осях, а центр корабля у причала стоит в 16 м от грани блока — 12 м стрелы и 4 м полуширины корпуса: около девяти секунд каждого 36-секундного оборота центр дрона внутри причального блока (приёмка задачи 8, evidence-2; измерено 2026-11-16 на `DA_Place_Berth`). Владелец выбрал снять дрон на местах набора, а не сдвигать орбиту и не оставлять его с пометкой в ранбуке. `FSFShipStart` получает поле `bTargetDrone`, по умолчанию `true` — прежнее поведение, так что `DA_Place_OpenSpace` и оба ассета §6.9 читаются как раньше; стенд места передаёт его кораблю до начала игры; скрипт пишет `false` во все места со станцией набора; `DA_Place_Berth` пересоздан. На месте набора корабль говорит `Ship [Ship] spawns no target drone; …`, а турель пишет `NO TARGET` (на панели — жёлтым), пока `sf.AimAt` не даст цель; ни та, ни другая строка не красная. Задача стоит перед задачей 12, потому что журналы задачи 12 становятся опорными. Строка `KIT-ASSET read` получила поле `target drone yes|no` после `occupant (…)`: ожидания задач 3 и 8 и копия скрипта в задаче 3 записаны до него. Дополнены ворота H1.1 задачи 12, абзац и две строки таблицы `CLAUDE.md` в задаче 20 и пункт 7 ранбука задачи 21; в спеке — §6.6, §8.2, §11 и §12 (ответ 14). Первый запуск задачи остановился на её же воротах шага 4: они ждали `DOCKED at`, а привязка Python печатает перечисление как `<SFShipStartMode.DOCKED: 0>` — о чём задача 3 предупреждала; ворота исправлены на слово и числа, код и ассет от этого не менялись.
 - **П28. Задача 11b после ревью.** Комментарий корабля говорил, что орбита дрона проходит сквозь станцию «на местах набора», без условия: так — когда корабль пристыкован к причалу, а на месте N4, где он свободен в 40 м, орбита блока не касается (раунд 1). Задача 20 сама относит к местам набора оба места воспроизведения §6.9, а они стоят со станцией рига и дрон сохраняют. Поэтому в словах о дроне «места набора» стали «местами со станцией набора» в тексте задачи 20 для `CLAUDE.md` (раунд 1), в обоих комментариях кода, в описании `no_drone`, в сообщении коммита, в воротах H1.1 задачи 12, в пункте 7 ранбука задачи 21 и в §6.6 спеки; где слова остались — во вступлении задачи 11b и в ответе 14 §12 спеки, — добавлено определение: места набора — места со станцией набора; так читается и П27. Комментарий корабля говорит «the place decides for the player's ship»: припаркованным корпусам задача 17 дрон не даёт, что бы ни сказало место; и «the only target the rig gives the automation» вместо «the only thing to aim at»: на петле рядом стоит станция, и `sf.AimAt station` её сопровождает. Ворот на отсутствие дрона у мест шага 2 не было, а журналы задачи 19 тоже становятся опорными: после каждой строки чтения ассета места шага 2 (задачи 13, 15, 17, 18) добавлены ворота `target drone no`, а в H2.1 задачи 19 — две строки о дроне. Копии кода задачи 11b в плане приведены к коду.
 - **П29. Задача 12 до запуска.** Контроллер прогнал все команды шага 1 на 60 и 400 fps и оба прогона с переменным шагом на коде `0fb19f5` (журналы в `Saved/Task12Pre`, не в уликах): все ворота шага 2 сходятся, стартовая передача читает 5.762 / 3.822 см, 7.729 / 5.128 у N1, 6.155 / 4.083 у N1b и 2.042 / 1.206 у N5 — числа поправки П11, — а прогоны с переменным шагом не сбивают стоящего. Добавлено два: ворота `Shipboard drift` не меньше 1 у каждого прогона с человеком — счётчик `skipped carries` живёт в этой строке, и 10-секундные прогоны задачи 10 читали `0`, ничего не доказав (приёмка задачи 10, evidence-1; у прогонов задачи 12 строка есть: они не короче 20 с); и контроль N10 — один прогон, в котором оба контроля получают мусор, включая положительное значение меньше 0.001 м и отрицательную задержку, чьи отказы до сих пор не проверял ни один прогон (там же, spec-8). Прогонов с ровным шагом стало тридцать, журналов — тридцать два; в спеке — §8.2 и §8.3.
+- **П30. Задача 12 после ревью.** Сообщение коммита задачи 12 говорило, что проход сверен «with the base taken before any code change». Но `kit-0-before` с П1 снята заново на `42c90a6`, на слиянии ревью, — после кода задач 2, 4 и 5 и после слияний F4 и ревью. Теперь там «against kit-0-before, the base taken again on the review merge before the next code change»; та же фраза исправлена в сообщении задачи 19. В том же сообщении «both searches» стало «sf.BindFrame and sf.AimAt both»: поисков спека считает три, и третий — поиск порта стыковкой. Вступление задачи 12 и строка `kit-1.10` бланка базы говорили, что проход впервые повторяет «журналы набора», но журналы N9 и N9b (`latent-f1`) повторяются с `kit-1.4`: впервые повторяются журналы станции набора. Отчёта исполнителя не было — среда отказала ему в записи файла, — и строки ворот для бланка точки 11 (П17) жили только в `Saved/Task12/`; отчёт собран раундом исправлений из файлов исполнителя. Контролем называли любое непустое и ненулевое значение `sf.PortProtrusionM` — в первом пункте списка §8.3 спеки, в §15 п. 11, в двух строках таблицы `CLAUDE.md` задачи 20, в П8 и П24, в комментарии переменной. Но отвергнутое значение (`-1`, `.`, `0.0005`) даёт `Warning`, коллайдера не ставит, и строка `Station rig:` при нём спокойна: это показал N10. Контроль действует, пока значение — конечное число не меньше 0.001 (ноль принят без `Warning`, но контролем не является); `Warning` отвергнутого значения законен только в N10; П8 и П24 читаются с этой оговоркой. По той же причине неполным было «whenever a control is applied» о том, когда пишется строка: она пишется при каждой смене значения `sf.PortProtrusionM`, включая отвергнутое, и при каждом `sf.StationVolumeReach`, вырастившем или вернувшем объём, — так теперь в §6.8, в абзаце задачи 20 и в комментарии `ReportStationRig`. Два комментария в коде (`CVarPortProtrusionM` и `ReportStationRig`) исправлены отдельным коммитом сразу после задачи 12, вместе с их копиями в задачах 9 и 10: проход `kit-1.10` шёл до него, на коде `f2a99dd`, правка только в комментариях, и следующий проход (задача 15) её покроет. N10 вписан в п. 10 шага 1 в §9 спеки и в строку самопроверки плана; в той же строке самопроверки `DA_Place_Berth` теперь «пересоздан без дрона в 11b».
 
 ---
 
@@ -3206,9 +3207,10 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task9-red-60.log
 	 * station's own frame, each volume against its envelope, and each port -- what reaches past its
 	 * plane, which volume does, and who holds it. Boxes, positions, the collider count and what each
 	 * holder reports are read back from the world; the counts of blocks, ports and volumes are the
-	 * builder's own. Written at BeginPlay, on every port change after it, and whenever a control is
-	 * applied. An upper-case word is a state that did not hold, and the whole line then goes out as an
-	 * Error.
+	 * builder's own. Written at BeginPlay, on every port change after it, on every change of
+	 * sf.PortProtrusionM -- a refused value included -- and whenever sf.StationVolumeReach grows or
+	 * restores a volume. An upper-case word is a state that did not hold, and the whole line then goes
+	 * out as an Error.
 	 */
 	void ReportStationRig();
 ```
@@ -3702,11 +3704,13 @@ rm docs/superpowers/notes/evidence/$(date +%F)-task10-red-60.log
 	 *
 	 * Not put back when a world ends, unlike sf.Dock, sf.BindFrame and sf.AimAt: those act on a change,
 	 * and a value left behind is a keypress in the next world; this is a level, as sf.PlaceOffsetM is,
-	 * and a value left from the last Play is a control still set, which the Station rig: line says in red.
+	 * and a value of at least 0.001 left from the last Play is a control still set, which the Station
+	 * rig: line says in red. A refused one is refused again, out loud, at the next BeginPlay.
 	 *
 	 * Declared here because this is the file that reads it. The Station rig: line's Error is legitimate
-	 * only while a control acts (spec 8.3): this is neither empty nor 0 (N1, N1b), or a volume grown by
-	 * sf.StationVolumeReach has not been returned to 0 (N2, N2b).
+	 * only while a control acts (spec 8.3): this holds a finite number of at least 0.001 (N1, N1b), or a
+	 * volume grown by sf.StationVolumeReach has not been returned to 0 (N2, N2b). A refused value places
+	 * nothing and turns nothing red; its Warning is legitimate only in control N10.
 	 */
 	TAutoConsoleVariable<FString> CVarPortProtrusionM(TEXT("sf.PortProtrusionM"), TEXT(""),
 		TEXT("Metres the -Y face of a 4 m control cube, X 26..30 and Z 0..4 of block 0, stands past the port plane (station kit, N1/N1b).\n")
@@ -4348,7 +4352,7 @@ MSG
 
 ### Task 12: Прогоны шага 1 на обеих частотах и регрессия `kit-1.10`
 
-Все ворота шага 1 из §8.2 и §8.3, headless, на 60 и 400 fps, каждый журнал — в улики. Затем регрессия: этот проход впервые повторяет и журналы набора.
+Все ворота шага 1 из §8.2 и §8.3, headless, на 60 и 400 fps, каждый журнал — в улики. Затем регрессия: этот проход впервые повторяет и журналы станции набора.
 
 **Files:**
 - Create: `docs/superpowers/notes/evidence/<дата>-kit-*.log` (32 журнала: 30 с ровным шагом и 2 с переменным)
@@ -4561,13 +4565,13 @@ test(station): step 1 of the station kit at 60 and 400 fps, and the evidence rep
 Every headless gate spec 8.2 and 8.3 set for the berth: the norm of the Station
 rig line before the first flight line, the four reprints of a docking cycle in
 order, clean releases along, across and up, roll after undocking, the bump into
-the boom's end faces, both searches finding the kit station, the controls N1,
-N1b, N2, N2b, N5 and N7 each producing its stop-gate line, and N10, where
-every mistyped control is refused out loud and none takes effect.
+the boom's end faces, sf.BindFrame and sf.AimAt both finding the kit station,
+the controls N1, N1b, N2, N2b, N5 and N7 each producing its stop-gate line, and
+N10, where every mistyped control is refused out loud and none takes effect.
 
 The logs go into evidence, so the replay after this commit repeats them as
-baselines of their own, and the pass against the base taken before any code
-change still finds nothing.
+baselines of their own, and the pass against kit-0-before, the base taken
+again on the review merge before the next code change, still finds nothing.
 MSG
 ```
 
@@ -6586,7 +6590,8 @@ turret and flight line of it unoccupied for the whole run; both ports held and
 refused in words; an exact tie taken by the lower index and said; and a port
 freed by a parked hull's release, heard by the ship that did not choose it.
 
-The replay against the pass taken before any code change still finds nothing.
+The replay against kit-0-before, the base taken again on the review merge
+before the next code change, still finds nothing.
 MSG
 ```
 
@@ -6648,7 +6653,7 @@ a place but the record check's control: one sound record and seven that each fai
 `Place parked hull: … -- NOT SPAWNED.` lines and the red `Place rig:` line with `1 of 8 parked hulls,
 7 NOT SPAWNED` are correct on that asset and a finding on any other.
 
-**A kit station writes its own line, `Station rig:`, at `BeginPlay`, at every change of a port after it, and whenever a control is applied (`sf.PortProtrusionM`, `sf.StationVolumeReach`).**
+**A kit station writes its own line, `Station rig:`, at `BeginPlay`, at every change of a port after it, at every change of `sf.PortProtrusionM` — a refused value included — and whenever `sf.StationVolumeReach` grows or restores a volume.**
 Its box in its own frame, each interior volume against the walls meant to enclose it, and for each
 port what reaches past its plane, which volume does, who holds it and — only while that holder is
 docked — the release it would make. An upper-case word is a state that did not hold and the line goes
@@ -6676,8 +6681,8 @@ told to each operator separately since then: the automation sits on the player's
 
 ```markdown
 | `sf.PlaceAsset` | *(empty)* | The place asset the place rig reads, by its bare name in `/Game/Places/` (`DA_Place_Berth`), not a path: MSYS rewrites an argument of the form `x=/path`. Empty keeps `DA_Place_OpenSpace`. **Read once in `InitGame`**, so `"-ini:Engine:[ConsoleVariables]:sf.PlaceAsset=DA_Place_Berth"`. A name with no asset behind it, or with a slash in it, refuses the place with two `Error` lines and assembles nothing; no fallback place is built in its stead |
-| `sf.PortProtrusionM` | *(empty)* | Station-kit controls N1/N1b: a 4 m control collider at the far end of block 0's berth face, its −Y face this many metres past the port plane. A string read by `StarForge::Parse::TryParseFiniteNumber`, never `FDefaultValueHelper::ParseDouble`, which passes `.` and `-` as zero; empty or 0 places nothing; any other value that is not a finite number of at least 0.001 is a `Warning` and places nothing. Read at the kit station's `BeginPlay` and on every change, through the variable's change delegate — the kit station does not tick. A level like `sf.PlaceOffsetM`, so it is not put back when a world ends: a value left from the last Play is a control still set, and the line says so in red. The `Station rig:` `Error` is legitimate only while a control acts: this is neither empty nor 0, or a volume grown by `sf.StationVolumeReach` has not been returned to 0 (station-kit spec §8.3) |
-| `sf.StationVolumeReach <Volume> <Metres> [DelaySeconds]` | *(a command)* | Station-kit controls N2/N2b: grows a kit station's interior volume (`Boom0`, `Hall1`, …) that many metres past its authored size, outward along its block's port axis; 0 restores it. Both numbers read by `StarForge::Parse::TryParseFiniteNumber`. A command with a delay in game seconds, like `sf.KillThruster`, because `-ExecCmds` runs on the first frame, before the start-up handover is carried. The `Station rig:` `Error` is legitimate only while a control acts: a volume grown and not returned to 0, or `sf.PortProtrusionM` neither empty nor 0 (§8.3). **0 is control N2's whole return**: a volume going back to its size lets go of the man it took from a cabin, and the cabin's volume, which still holds him, takes him back (`HandleEndOverlap`, the review's N2) with `Frame handover: Station -> Ship, first carry moved him 0.000 cm`; wait for that line before the next `F`. `sf.BindFrame ship` is not needed there and warns that the control did not run |
+| `sf.PortProtrusionM` | *(empty)* | Station-kit controls N1/N1b: a 4 m control collider at the far end of block 0's berth face, its −Y face this many metres past the port plane. A string read by `StarForge::Parse::TryParseFiniteNumber`, never `FDefaultValueHelper::ParseDouble`, which passes `.` and `-` as zero; empty or 0 places nothing; any other value that is not a finite number of at least 0.001 is a `Warning` and places nothing. Read at the kit station's `BeginPlay` and on every change, through the variable's change delegate — the kit station does not tick. A level like `sf.PlaceOffsetM`, so it is not put back when a world ends: a value of at least 0.001 left from the last Play is a control still set, and the line says so in red; a refused one is refused again, with its `Warning`, at the kit station's next `BeginPlay`. The `Station rig:` `Error` is legitimate only while a control acts: this holds a finite number of at least 0.001, or a volume grown by `sf.StationVolumeReach` has not been returned to 0 (station-kit spec §8.3). A refused value (`-1`, `.`, `0.0005`) places nothing and turns nothing red; its `Warning` is legitimate only in control N10 |
+| `sf.StationVolumeReach <Volume> <Metres> [DelaySeconds]` | *(a command)* | Station-kit controls N2/N2b: grows a kit station's interior volume (`Boom0`, `Hall1`, …) that many metres past its authored size, outward along its block's port axis; 0 restores it. Both numbers read by `StarForge::Parse::TryParseFiniteNumber`. A command with a delay in game seconds, like `sf.KillThruster`, because `-ExecCmds` runs on the first frame, before the start-up handover is carried. The `Station rig:` `Error` is legitimate only while a control acts: a volume grown and not returned to 0, or `sf.PortProtrusionM` holding a finite number of at least 0.001 (§8.3). **0 is control N2's whole return**: a volume going back to its size lets go of the man it took from a cabin, and the cabin's volume, which still holds him, takes him back (`HandleEndOverlap`, the review's N2) with `Frame handover: Station -> Ship, first carry moved him 0.000 cm`; wait for that line before the next `F`. `sf.BindFrame ship` is not needed there and warns that the control did not run |
 | `sf.UndockParked <Name> [DelaySeconds]` | *(a command)* | Undocks the named `Parked` hull through the same `RequestUndock` as `F`, so `sf.DockRelease` acts on it too. Refuses with a `Warning` a name that is no ship, a hull that is not parked, a hull that is not docked, a bad delay — read by `StarForge::Parse::TryParseFiniteNumber`, so `.` and `-` are bad delays rather than zero |
 ```
 
@@ -6889,7 +6894,7 @@ MSG
 | п. 7 — `BoundsPastPortPlane`, порог, `BoxReachOutside`, 8 тестов и мутанты | 7 |
 | п. 8 — `ASFKitStation`, `ASFBerthStation`; §6.3–§6.5 | 8 |
 | п. 9 — строка `Station rig:`, контроли, `SEATED` | 9, 10, 11 |
-| п. 10 — `DA_Place_Berth` (сделан в 8), H1.1–H1.6, N1, N1b, N2, N2b, N5, N7; `kit-1.10` | 12 |
+| п. 10 — `DA_Place_Berth` (сделан в 8, пересоздан без дрона в 11b), H1.1–H1.6, N1, N1b, N2, N2b, N5, N7, N10; `kit-1.10` | 12 |
 | п. 11 — точка 11 | 21 (ранбук) |
 | §9 шаг 2, п. 1 — `SelectNearestFreePort`, 8 тестов и мутанты | 14 |
 | п. 2 — выбор каждый кадр, «ещё не выбирал», `ResolvePorts` вне `Free`, порядок кандидатов; `kit-2.2` | 15 |

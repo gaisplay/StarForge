@@ -132,11 +132,13 @@ namespace KitStation
 	 *
 	 * Not put back when a world ends, unlike sf.Dock, sf.BindFrame and sf.AimAt: those act on a change,
 	 * and a value left behind is a keypress in the next world; this is a level, as sf.PlaceOffsetM is,
-	 * and a value left from the last Play is a control still set, which the Station rig: line says in red.
+	 * and a value of at least 0.001 left from the last Play is a control still set, which the Station
+	 * rig: line says in red. A refused one is refused again, out loud, at the next BeginPlay.
 	 *
 	 * Declared here because this is the file that reads it. The Station rig: line's Error is legitimate
-	 * only while a control acts (spec 8.3): this is neither empty nor 0 (N1, N1b), or a volume grown by
-	 * sf.StationVolumeReach has not been returned to 0 (N2, N2b).
+	 * only while a control acts (spec 8.3): this holds a finite number of at least 0.001 (N1, N1b), or a
+	 * volume grown by sf.StationVolumeReach has not been returned to 0 (N2, N2b). A refused value places
+	 * nothing and turns nothing red; its Warning is legitimate only in control N10.
 	 */
 	TAutoConsoleVariable<FString> CVarPortProtrusionM(TEXT("sf.PortProtrusionM"), TEXT(""),
 		TEXT("Metres the -Y face of a 4 m control cube, X 26..30 and Z 0..4 of block 0, stands past the port plane (station kit, N1/N1b).\n")

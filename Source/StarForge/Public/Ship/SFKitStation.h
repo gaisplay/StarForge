@@ -86,9 +86,10 @@ public:
 	 * station's own frame, each volume against its envelope, and each port -- what reaches past its
 	 * plane, which volume does, and who holds it. Boxes, positions, the collider count and what each
 	 * holder reports are read back from the world; the counts of blocks, ports and volumes are the
-	 * builder's own. Written at BeginPlay, on every port change after it, and whenever a control is
-	 * applied. An upper-case word is a state that did not hold, and the whole line then goes out as an
-	 * Error.
+	 * builder's own. Written at BeginPlay, on every port change after it, on every change of
+	 * sf.PortProtrusionM -- a refused value included -- and whenever sf.StationVolumeReach grows or
+	 * restores a volume. An upper-case word is a state that did not hold, and the whole line then goes
+	 * out as an Error.
 	 */
 	void ReportStationRig();
 
