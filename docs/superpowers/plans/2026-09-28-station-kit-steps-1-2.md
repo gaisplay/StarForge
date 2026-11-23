@@ -92,6 +92,7 @@
 - **П30. Задача 12 после ревью.** Сообщение коммита задачи 12 говорило, что проход сверен «with the base taken before any code change». Но `kit-0-before` с П1 снята заново на `42c90a6`, на слиянии ревью, — после кода задач 2, 4 и 5 и после слияний F4 и ревью. Теперь там «against kit-0-before, the base taken again on the review merge before the next code change»; та же фраза исправлена в сообщении задачи 19. В том же сообщении «both searches» стало «sf.BindFrame and sf.AimAt both»: поисков спека считает три, и третий — поиск порта стыковкой. Вступление задачи 12 и строка `kit-1.10` бланка базы говорили, что проход впервые повторяет «журналы набора», но журналы N9 и N9b (`latent-f1`) повторяются с `kit-1.4`: впервые повторяются журналы станции набора. Отчёта исполнителя не было — среда отказала ему в записи файла, — и строки ворот для бланка точки 11 (П17) жили только в `Saved/Task12/`; отчёт собран раундом исправлений из файлов исполнителя. Контролем называли любое непустое и ненулевое значение `sf.PortProtrusionM` — в первом пункте списка §8.3 спеки, в §15 п. 11, в двух строках таблицы `CLAUDE.md` задачи 20, в П8 и П24, в комментарии переменной. Но отвергнутое значение (`-1`, `.`, `0.0005`) даёт `Warning`, коллайдера не ставит, и строка `Station rig:` при нём спокойна: это показал N10. Контроль действует, пока значение — конечное число не меньше 0.001 (ноль принят без `Warning`, но контролем не является); `Warning` отвергнутого значения законен только в N10; П8 и П24 читаются с этой оговоркой. По той же причине неполным было «whenever a control is applied» о том, когда пишется строка: она пишется при каждой смене значения `sf.PortProtrusionM`, включая отвергнутое, и при каждом `sf.StationVolumeReach`, вырастившем или вернувшем объём, — так теперь в §6.8, в абзаце задачи 20 и в комментарии `ReportStationRig`. Два комментария в коде (`CVarPortProtrusionM` и `ReportStationRig`) исправлены отдельным коммитом сразу после задачи 12, вместе с их копиями в задачах 9 и 10: проход `kit-1.10` шёл до него, на коде `f2a99dd`, правка только в комментариях, и следующий проход (задача 15) её покроет. N10 вписан в п. 10 шага 1 в §9 спеки и в строку самопроверки плана; в той же строке самопроверки `DA_Place_Berth` теперь «пересоздан без дрона в 11b».
 - **П31. Задача 13 до запуска.** Контроллер выполнил задачу на пробу на коде `cab8c1d` (журналы в `Saved/Task13Pre`, не в уликах), затем убрал оба файла и ассет и пересобрал: красный шаг снова красный. Красный шаг даёт `no class /Script/StarForge.SFPierCoreStation` и `executed with errors`, ассет не создаётся. С классом, записанным по тексту задачи буква в букву — до правки двух комментариев ниже, код тот же, — сборка проходит без предупреждений, строка чтения ассета — `… carriers [SFPierCoreStation 'Station' at (0.00 0.00 0.00)], ship start <SFShipStartMode.DOCKED: 0> at (0.00 0.00 0.00), occupant (0.00 0.00 0.00), target drone no, parked (no such field yet)`, строка `Station rig:` совпадает с нормой на 60 и на 400 fps, общие ворота чисты на обеих частотах, стартовая передача `0.000 cm`, последняя строка дрейфа `20.0 s settled … footing intact`. Сверх задачи снят цикл `sf.Dock 2` на 60 fps, на 400 fps и с переменным шагом: `docked` → `releasing, 2.93 m …, peak 17.6 m/s2` → `undocked` → `capturing` → `docked`; стартовая передача 5.762 / 3.822 см (числа П11) и 6.571 см при переменном шаге; `Footing LOST` 0, `footing intact`; пять строк `Station rig:` читают у `Port0` `held … 2.93 m`, `releasing`, `free`, `capturing`, `held`, а у `Port1` — `free` во всех пяти. И три контроля, которых план не требует, на 60 fps — два на объёмах второго блока и выступ на блоке 0: `sf.StationVolumeReach Boom1 4.0 1.0` — `Boom1 REACHES 4.000 m OUT of its channel` и у обоих портов `an interior VOLUME REACHES 4.000 m PAST it (Boom1)`; `sf.StationVolumeReach Hall1 1.0 1.0` — `Hall1 REACHES 1.000 m OUT of its hall`, порты спокойны; `sf.PortProtrusionM=1.0` — 31 коллайдер, бокс `Y -19.10..17.90`, у обоих портов `1.000 m of something physical PAST its plane (ControlProtrusion)`, отход у `Port0` — `3.93 m … peak 23.6 m/s2 -- OUTSIDE its 3.0 m window, OVER the 19.62 m/s2 limit`. Строка краснеет и на втором блоке, а выступ на блоке 0 стоит p обоим портам (правило 1). В тексте задачи исправлено пять мест. (1) Комментарий класса говорил «a berth on each face»: у блока хребта причал на гранях ±Y (`A16-K3-pier.svg:384`, §1 спеки), а не на каждой из шести. (2) Комментарий конструктора выводил точную ничью N6 из одних целых сантиметров; §7.5 называет их условием необходимым, рядом с нулевым поворотом станции: теперь «can be exact to the bit only if it is». (3) Пояснение к воротам говорило «оба отхода `2.93`», а отход в строке один, у `Port0`: `Port1` свободен, и мерить его некому. Что стрелы кончаются в одной плоскости, читается по `nothing physical past its plane (0.000 m)` у обоих портов; второй отход читает N3 задачи 19. Сообщение коммита теперь называет то, что строка читает дословно, — ничего физического за плоскостью обоих портов, — и условие, при котором из этого следует общая плоскость стрел: бокс у станции один. (4) Сообщение коммита говорило «the first port by name»: по имени берётся станция, а порт — первый в порядке сборки (`ResolvePorts`). (5) Ворота шага 3. Прежняя команда чтения ассета печатала строку и не называла ожидаемой — счётной была только её часть о дроне; теперь она счётная целиком, как в задаче 11b. Добавлены прогон на 400 fps (Global Constraints), строки `Place carrier:` и `Port0`, `Dock: [Ship] docked.`, стартовая передача, ворота `Shipboard drift` не меньше 1 (П29), головные тесты 130/0 и копия журналов в `Saved/Task13Logs` до `rm`; в красном шаге — счёт `executed successfully` 0 и отсутствие ассета.
 - **П32. Задача 13 после ревью.** Сообщение коммита задачи 13 и пояснение к её воротам выводили общую плоскость стрел из одного показания — `nothing physical past its plane (0.000 m)` у обоих портов — при одном боксе на станцию; так же сказано в П31 (3) и в сообщении коммита `83f86ba`, которое уже отправлено и не правится. Но прибор p смотрит в одну сторону, а бокс у станции один, и стрелы короче своего порта он не видит (§5, правило 1; §6.8; §13 п. 6 спеки): у двух портов на Y −18.10 стрела, кончающаяся на −17.10, оставляет оба p нулевыми. Такую стрелу исключает второе показание, `BoomN within its channel (0.000 m out)`: объём стрелы построен от плоскости её порта, а оболочка кончается на торцах коллайдеров канала. Общая плоскость следует из двух показаний вместе и ни из одного по отдельности. Так теперь сказано в сообщении коммита и в пояснении к воротам, а П31 (3) и сообщение `83f86ba` читаются с этой оговоркой. Ворота N8 задачи 19, `grep -c "Port0 at .*; free\."`, не могли провалиться на том, ради чего стоят: `.*` дотягивалось до `; free.` у `Port1`, свободного с отхода корабля. На цикле `sf.Dock 2` пробы (`Saved/Task13Pre/piercore-cycle-*.log`) они засчитывали все пять строк `Station rig:`, хотя `Port0` свободен в одной. Теперь ворота — `"Port0 at [^;]*; free\."`: в предложении порта точка с запятой одна, перед держателем, и засчитывается только свободный `Port0`, как и требует строка N8 в §8.3 спеки; на тех же журналах — одна строка из пяти. Эту слабость называли рецензенты задач 6 и 9 (interfaces-1 и interfaces-3 в журнале задач `progress.md`), и тогда её отложили до подготовки задачи 19. Ворота N3 и N6 той же задачи ставят текст `Port0` перед `Port1 at` и держателей не путают: они не тронуты. Блок Interfaces задачи 13 называл не всё. Задача отдаёт ещё ассет `DA_Place_PierCore` (задачам 15, 18, 19 и 21) и текст нормы `/tmp/kit-piercore-expected.txt` (задаче 19), а потребляет, кроме `BuildBlock`, строку `Station rig:` задачи 9, `ISFDockingStation::FindAll`, `GetDockingPorts` и строку о порте-сироте задачи 5 и группу `piercore` сценария задач 3 и 11b. Это сродни П19 — там названа не та задача-источник, здесь пропуски, — и блок дописан. Ещё три уточнения в тексте задачи. Вступление говорило «из центра зала», а залов у станции теперь два: корабль, поставленный в центр `Hall1`, выбрал бы `Port1` — те же 22.10 м против 63.94 м, зеркально; теперь «из начала места — центра `Hall0`», как с `83f86ba` сказано в сообщении коммита задачи. Последняя фраза пояснения относила ко второму блоку все четыре `0.000 m out`, а о нём говорят два — у `Hall1` и у `Boom1`. Комментарий ворот чтения ассета называл один дрон, хотя ворота читают место, носитель, слово `DOCKED`, оба нулевых вектора и дрон. П31 (5) читается так: «счётная целиком» значит место, носитель, слово `DOCKED`, оба нулевых вектора и дрон, но не значение поля `parked`, и это шире ворот задачи 11b, которые не читают ни места, ни носителей; а к добавленным воротам шага 3 относятся ещё ожидание сборки `Result: Succeeded, без предупреждений`, счёт строк `Station rig:` (1), `belongs to neither a docking station` (0), `Python script executed successfully` (1), `git status --short Content/`, последняя строка `Shipboard drift` (`… footing intact`) и пустой `git status --short docs/` после `rm`. Исполнитель записал в отчёт коды выхода запускателя, как их читает Git Bash, — 127 на красном шаге и 1 на зелёном; их не записал ни один журнал. Собственный код коммандлета на красном шаге в журнале есть: `Commandlet->Main return this error code: -1` (`Saved/Task13Logs/task13-red.log`). Воротами коды не являются, и на них ничего не стоит.
+- **П33. Задача 14 до запуска.** Контроллер выполнил задачу на пробу на коде `e9cc45c` (журналы и копии в `Saved/Task14Pre`, не в уликах; каталог `Saved/Mutants/task14`, который задача создаёт `mkdir` без `-p`, проба не трогала), затем вернул оба файла к байтам `HEAD`, убрал файл тестов, пересобрал и прогнал тесты: 130 и 0. С тремя блоками кода, записанными по тексту задачи, красная сборка падает: `Result: Failed`, 107 строк `error C`, все в `PortSelectionTest.cpp`, среди них `error C2039` на `FPortCandidate` 2 раза, на `FPortChoice` и на `SelectNearestFreePort` по 6. Зелёная — `Result: Succeeded` без предупреждений, тесты 138 и 0, `EXIT CODE: 0`, все восемь `NearestFreePort…` — `Success`. Девять мутантов собрались, и каждый уронил тесты своей строки таблицы; сверх них упали: у P1 — `NearestFreePortReportsTheRunnerUp`, у P2 — `NearestFreePortNeverChoosesTheUnmeasurable` и `NearestFreePortReportsTheRunnerUp`, у P6 — `NearestFreePortTieGoesToTheLowerIndex`. В каждом прогоне мутанта подветка `StarForge.Core.Docking` дала 34 результата. После мутантов — 138 и 0. В тексте задачи исправлено пять мест. (1) Три комментария `FPortChoice` не называли условий, при которых верны: «второе число» и ничья берут только свободных кандидатов с конечными положением и поворотом, а при запросе, который нельзя поставить, расстояния не меряются вовсе и все остаются NaN; «Never silent: the game prints it» говорил в настоящем времени о том, что сделает задача 15. (2) Подпись проверки в тесте ничьей была «37.26 m» при сравнении в сантиметрах; теперь «sqrt(13 884 200) cm, that is 37.26 m». (3) Сообщение коммита говорило «every candidate's distance» без условия; теперь «once the request can be placed». (4) Ворота. Красный шаг из слов («сборка — ошибка») стал командами: вывод сборки в файл, `Result: Failed`, `error C2039` на каждое из трёх имён и ни одной ошибки вне файла тестов; кавычку ворота принимают любую, потому что компилятор пишет на языке системы — здесь по-русски с двойными кавычками, на английской системе с одинарными. Зелёный шаг получил `EXIT CODE: 0` и счёт восьми тестов задачи по имени, шаг мутантов — счёт 34 результатов подветки на каждом прогоне и копии журналов в `Saved/Task14Logs`; таблица «ожидалось / упало» идёт в отчёт под заголовком «Для бланка точки 12» (П17). (5) Блок Interfaces получил строку «Потребляет»: `IsFiniteVector` задачи 7 и `#include <limits>` ревью 2026-10-01. Для задачи 15, здесь не исправлено: строка отказа в её коде говорит `a port position is not finite`, а отказ `Unmeasurable` выходит и тогда, когда положение конечно, а поворот нет.
 
 ---
 
@@ -4731,6 +4732,7 @@ MSG
 - Create: `Source/StarForgeCore/Private/Tests/PortSelectionTest.cpp`
 
 **Interfaces:**
+- Потребляет из задачи 7: `IsFiniteVector` в безымянном пространстве `DockingMath.cpp`; `#include <limits>` стоит там с ревью 2026-10-01 (`fd8010f`, поправка П2).
 - Отдаёт задаче 15, в `namespace StarForge::Docking`:
   - `struct STARFORGECORE_API FPortCandidate { FTransform PortWorld; bool bOccupied; };`
   - `enum class EPortRefusal : uint8 { None, NoCandidates, AllOccupied, Unmeasurable };`
@@ -4847,7 +4849,7 @@ bool FDockingNearestFreePortTieGoesToTheLowerIndexTest::RunTest(const FString& P
 	TestTrue(TEXT("a tie, said"), Choice.bTie);
 	TestEqual(TEXT("the other is the runner-up"), Choice.RunnerUpIndex, 1);
 	TestTrue(TEXT("and its distance equals the chosen one exactly"), Choice.RunnerUpDistance == Choice.ChosenDistance);
-	TestTrue(TEXT("37.26 m"), FMath::IsNearlyEqual(Choice.ChosenDistance, FMath::Sqrt(13884200.0), 1e-9));
+	TestTrue(TEXT("sqrt(13 884 200) cm, that is 37.26 m"), FMath::IsNearlyEqual(Choice.ChosenDistance, FMath::Sqrt(13884200.0), 1e-9));
 	return true;
 }
 
@@ -4933,7 +4935,15 @@ bool FDockingNearestFreePortRefusesAnUnmeasurableRequestTest::RunTest(const FStr
 
 - [ ] **Step 2: Увидеть, что не собирается**
 
-Сборка — ошибка: `FPortCandidate`, `FPortChoice`, `SelectNearestFreePort` не объявлены.
+Сборка — ошибка: `FPortCandidate`, `FPortChoice`, `SelectNearestFreePort` не объявлены. Компилятор пишет на языке системы — на этой машине по-русски и с двойными кавычками, на английской системе с одинарными, — поэтому ворота читают код ошибки и имя, а кавычку принимают любую (`.`); `-a` — потому что вывод на кириллице не в UTF-8.
+
+```bash
+mkdir -p Saved/Task14Logs
+"C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge-station/StarForge.uproject" -WaitMutex > Saved/Task14Logs/build-red.txt 2>&1; echo "exit $?"   # не 0
+grep -ao "Result: [A-Za-z]*" Saved/Task14Logs/build-red.txt | tail -1   # Result: Failed
+for n in FPortCandidate FPortChoice SelectNearestFreePort; do echo "$n $(grep -ac "error C2039: .$n." Saved/Task14Logs/build-red.txt)"; done   # у каждого не меньше 1
+grep -a "error C" Saved/Task14Logs/build-red.txt | grep -vc "PortSelectionTest.cpp"   # 0: ошибки только в новом файле тестов
+```
 
 - [ ] **Step 3: Заголовок**
 
@@ -4963,14 +4973,24 @@ bool FDockingNearestFreePortRefusesAnUnmeasurableRequestTest::RunTest(const FStr
 		int32 ChosenIndex = INDEX_NONE;
 		double ChosenDistance = 0.0;
 
-		/** The next FREE candidate by distance, or INDEX_NONE. On a tie, the one tied with the chosen. */
+		/**
+		 * The next free candidate by distance that could also be chosen, or INDEX_NONE: never a held one,
+		 * and never one whose origin or rotation is not finite. On a tie, the one tied with the chosen.
+		 */
 		int32 RunnerUpIndex = INDEX_NONE;
 		double RunnerUpDistance = 0.0;
 
-		/** Another free candidate at exactly the chosen distance. Never silent: the game prints it. */
+		/**
+		 * Another free candidate with a finite origin and rotation, at exactly the chosen distance. Never
+		 * silent: spec 7.5 has the game print every docking decision taken on a tie.
+		 */
 		bool bTie = false;
 
-		/** To every candidate, held ones too, so the line can say why the near one was passed over; NaN where an origin is not finite. */
+		/**
+		 * To every candidate, held ones too, so the line can say why the near one was passed over. NaN
+		 * where a candidate's origin is not finite, and NaN for every one when the request itself cannot be
+		 * placed: that is refused before anything is measured.
+		 */
 		TArray<double> Distances;
 	};
 
@@ -5092,10 +5112,13 @@ bool FDockingNearestFreePortRefusesAnUnmeasurableRequestTest::RunTest(const FStr
 - [ ] **Step 5: Собрать и прогнать — должно пройти**
 
 ```bash
-"C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge-station/StarForge.uproject" -WaitMutex
+"C:/Program Files/Epic Games/UE_5.8/Engine/Build/BatchFiles/Build.bat" StarForgeEditor Win64 Development -Project="F:/UEProject/StarForge-station/StarForge.uproject" -WaitMutex   # Result: Succeeded, без предупреждений
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "F:/UEProject/StarForge-station/StarForge.uproject" -ExecCmds="Automation RunTests StarForge.Core;Quit" -unattended -nopause -nullrhi -nosplash -log < /dev/null
 grep -c "Test Completed. Result={Success}" $L   # N₀ + 16 (138 при N₀ = 122, база после ревью)
 grep -c "Test Completed. Result={Fail}" $L      # 0
+grep "TEST COMPLETE. EXIT CODE:" $L            # … EXIT CODE: 0 …
+grep -c "Result={Success} Name={NearestFreePort" $L   # 8: все восемь тестов задачи
+cp $L Saved/Task14Logs/tests-green.log
 ```
 
 Эталон для мутантов снимается так же, как в задаче 7: сразу после зелёного прогона и до первого мутанта. Второй `mkdir` без `-p` — чтобы не снять копию поверх прежней.
@@ -5120,12 +5143,13 @@ Spec 9 of the second phase asks for the nearest free node, computed from pose
 and occupancy, as a pure function under tests. The station kit brings it forward
 from stage 7: on stations that do not move, the rule can be tried on its own.
 
-It returns the choice and everything the log needs: every candidate's distance,
-held ones included, so a line can say why the nearest was passed over; the next
-free port, not merely the next; and a tie flag. Exact ties go to the lower index
-of a deterministic order, and there is no tolerance for almost-equal, because
-nothing exists to derive one from. A port nobody can place is never chosen, and
-a ship that cannot be placed is told so before it is told the ports are full.
+It returns the choice and everything the log needs: the distance to every
+candidate, held ones included, once the request can be placed, so a line can
+say why the nearest was passed over; the next free port, not merely the next;
+and a tie flag. Exact ties go to the lower index of a deterministic order, and
+there is no tolerance for almost-equal, because nothing exists to derive one
+from. A port nobody can place is never chosen, and a ship that cannot be placed
+is told so before it is told the ports are full.
 MSG
 ```
 
@@ -5151,7 +5175,17 @@ cmp Saved/Mutants/task14/DockingMath.cpp Source/StarForgeCore/Private/DockingMat
 | P8 | снята конечность просящего | удалить блок `if (!IsPlaceable(RequestingPortWorld)) { … }` | `NearestFreePortRefusesAnUnmeasurableRequest` |
 | P9 | поворот не проверяется (добавлен 2026-10-14, поправка П6) | тело `IsPlaceable` — `return IsFiniteVector(Port.GetLocation());` | `NearestFreePortNeverChoosesTheUnmeasurable`, `NearestFreePortRefusesAnUnmeasurableRequest` |
 
-После всех — откат той же тройкой команд (`restored`), `grep -c "SelectNearestFreePort" Source/StarForgeCore/Private/DockingMath.cpp` ≥ 1 (функция задачи на месте), сборка, полный прогон `StarForge.Core`: **N₀ + 16 / 0**. Затем `rm -rf Saved/Mutants/task14`. Таблица «ожидалось / упало» — в бланк точки 12.
+На каждом прогоне мутанта, кроме записи упавших:
+
+```bash
+grep -c "Test Completed. Result=" $L                     # 34: вся подветка StarForge.Core.Docking -- 26 тестов до задачи и 8 её
+grep -o "Result={Fail} Name={[A-Za-z]*}" $L | sort -u    # среди них -- тесты строки таблицы
+cp $L Saved/Task14Logs/tests-<мутант>.log
+```
+
+Сверх тестов своей строки мутант может уронить и другие. На пробе контроллера (поправка П33) упали ещё: у P1 — `NearestFreePortReportsTheRunnerUp`, у P2 — `NearestFreePortNeverChoosesTheUnmeasurable` и `NearestFreePortReportsTheRunnerUp`, у P6 — `NearestFreePortTieGoesToTheLowerIndex`.
+
+После всех — откат той же тройкой команд (`restored`), `grep -c "SelectNearestFreePort" Source/StarForgeCore/Private/DockingMath.cpp` ≥ 1 (функция задачи на месте), сборка, полный прогон `StarForge.Core`: **N₀ + 16 / 0**. Затем `rm -rf Saved/Mutants/task14`. Таблица «ожидалось / упало», и с нею всё, что упало сверх ожидавшегося, — в отчёт задачи под заголовком «Для бланка точки 12» (поправка П17).
 
 ---
 
